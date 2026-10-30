@@ -113,11 +113,6 @@ def main(page: ft.Page):
 
     progresso = ft.ProgressBar(color="#3b82f6", bgcolor="transparent", visible=False)
 
-    def fechar_busca_se_aberta(e=None):
-        if container_sugestoes.visible:
-            container_sugestoes.visible = False
-            page.update()
-
     def abrir_dialogo(modal):
         modal.open = True
         if modal not in page.overlay:
@@ -357,7 +352,6 @@ def main(page: ft.Page):
     btn_salvar.on_click = salvar_filme_ativo
 
     def abrir_detalhes(mid, mtype, titulo_prev, ano_prev, poster_prev):
-        fechar_busca_se_aberta()
         dt_img.src = poster_prev if poster_prev else "https://via.placeholder.com/130x195?text=Sem+Poster"
         dt_titulo.value = f"{titulo_prev} ({ano_prev})"
         dt_meta.value = "Obtendo dados..."
@@ -608,11 +602,14 @@ def main(page: ft.Page):
             grade_populares.controls.clear()
             grade_populares.controls.append(
                 ft.Container(
-                    content=ft.Text("⚠️ Chave do TMDb ausente. Adicione TMDB_KEY no Render.", color="#f87171", size=13, text_align=ft.TextAlign.CENTER),
+                    content=ft.Text("⚠️ Chave do TMDb ausente.", color="#f87171", size=13, text_align=ft.TextAlign.CENTER),
                     padding=20
                 )
             )
             page.update()
+            return
+
+        if paginacao["carregando"] or paginacao["fim"]:
             return
 
         paginacao["carregando"] = True
@@ -658,13 +655,18 @@ def main(page: ft.Page):
 
         threading.Thread(target=_fetch, daemon=True).start()
 
-    # OTIMIZAÇÃO: Margem gigante (2000px) para disparar bem antes de o scroll bater no fim
     def ao_rolar_inicio(e: ft.OnScrollEvent):
         try:
+            # Ocultar menu se estiver rolando a tela
+            if container_sugestoes.visible:
+                container_sugestoes.visible = False
+                page.update()
+
             pixels = float(e.pixels)
             max_scroll = float(e.max_scroll_extent)
             
-            if max_scroll > 0 and pixels >= (max_scroll - 2000):
+            # Margem larga para gatilhar o carregamento a tempo (800px antes do fim)
+            if max_scroll > 0 and pixels >= (max_scroll - 800):
                 if not paginacao["carregando"] and not paginacao["fim"]:
                     carregar_populares(incrementar=True)
         except Exception:
@@ -797,7 +799,7 @@ def main(page: ft.Page):
         page.update()
 
     # -------------------------------------------------------------
-    # BUSCA (CAIXA SUSPENSA COM FECHO NO CLIQUE FORA)
+    # BUSCA COM ON_BLUR PARA FECHAR AO CLICAR FORA SEM BLOQUEAR SCROLL
     # -------------------------------------------------------------
     coluna_sugestoes = ft.Column(spacing=4)
     container_sugestoes = ft.Container(
@@ -892,6 +894,14 @@ def main(page: ft.Page):
         t = threading.Timer(0.25, buscar_sugestoes_api, args=[termo])
         timer_busca["timer"] = t
         t.start()
+        
+    def ao_perder_foco(e):
+        # Dispara com ligeiro atraso para permitir que o clique na sugestão seja registado antes de fechar
+        def ocultar():
+            if container_sugestoes.visible:
+                container_sugestoes.visible = False
+                page.update()
+        threading.Timer(0.25, ocultar).start()
 
     campo_busca = ft.TextField(
         hint_text="Buscar filmes ou séries...",
@@ -902,7 +912,8 @@ def main(page: ft.Page):
         focused_border_color="#3b82f6",
         expand=True,
         on_change=ao_digitar_busca,
-        on_submit=disparar_busca_manual
+        on_submit=disparar_busca_manual,
+        on_blur=ao_perder_foco  # Fecha automaticamente a caixa ao clicar fora do campo de pesquisa
     )
 
     btn_lupa = ft.IconButton(
@@ -961,7 +972,7 @@ def main(page: ft.Page):
     )
 
     # -------------------------------------------------------------
-    # VIEWS ROLÁVEIS E GESTÃO DO CLIQUE FORA (EXPAND=TRUE)
+    # VIEWS ROLÁVEIS NATIVAS (SEM ON_CLICK EXTERNO A BLOQUEAR O SCROLL)
     # -------------------------------------------------------------
     coluna_scroll_inicio = ft.Column(
         expand=True,
@@ -982,8 +993,7 @@ def main(page: ft.Page):
 
     view_inicio = ft.Container(
         expand=True,
-        content=coluna_scroll_inicio,
-        on_click=fechar_busca_se_aberta
+        content=coluna_scroll_inicio
     )
 
     view_biblioteca = ft.Container(
@@ -995,13 +1005,13 @@ def main(page: ft.Page):
             spacing=14,
             scroll=ft.ScrollMode.AUTO,
             horizontal_alignment=ft.CrossAxisAlignment.START
-        ),
-        on_click=fechar_busca_se_aberta
+        )
     )
 
     def alternar_tela(indice):
         fechar_dialogo(modal_detalhes)
-        fechar_busca_se_aberta()
+        if container_sugestoes.visible:
+            container_sugestoes.visible = False
 
         if indice == 0:
             view_inicio.visible = True
