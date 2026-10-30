@@ -96,7 +96,6 @@ def main(page: ft.Page):
     page.bgcolor = "#0b0c0f"
     page.padding = ft.Padding(12, 10, 12, 10)
     page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
-    # Desativa scroll na página raiz para garantir cabeçalho estático
     page.scroll = None
 
     init_db()
@@ -113,10 +112,19 @@ def main(page: ft.Page):
 
     progresso = ft.ProgressBar(color="#3b82f6", bgcolor="transparent", visible=False)
 
-    def fechar_busca_se_aberta(e=None):
+    # Camada transparente invisível para capturar clique fora e fechar a busca
+    def fechar_busca(e=None):
         if container_sugestoes.visible:
             container_sugestoes.visible = False
+            camada_clique_fora.visible = False
             page.update()
+
+    camada_clique_fora = ft.Container(
+        expand=True,
+        bgcolor="transparent",
+        visible=False,
+        on_click=fechar_busca
+    )
 
     def abrir_dialogo(modal):
         modal.open = True
@@ -234,7 +242,7 @@ def main(page: ft.Page):
         abrir_dialogo(modal_avaliacao)
 
     # -------------------------------------------------------------
-    # JANELA DE DETALHES (BOTÃO TRAILER NATIVO VIA URL)
+    # JANELA DE DETALHES
     # -------------------------------------------------------------
     dt_img = ft.Image(
         src="https://via.placeholder.com/130x195?text=Sem+Poster",
@@ -260,7 +268,6 @@ def main(page: ft.Page):
     dt_rt = ft.Container(content=ft.Text("🍅 --", color="white", size=11, weight="bold"), bgcolor="#ef4444", padding=ft.Padding(5, 2, 5, 2), border_radius=5)
     dt_user = ft.Container(content=ft.Text("★ --", color="white", size=11, weight="bold"), bgcolor="#8b5cf6", padding=ft.Padding(5, 2, 5, 2), border_radius=5)
 
-    # Utilização da propriedade nativa url do botão para burlar bloqueadores de pop-up
     btn_trailer = ft.Button(
         content=ft.Text("▶ Trailer", color="white", size=12, weight="bold"),
         bgcolor="#dc2626",
@@ -358,7 +365,7 @@ def main(page: ft.Page):
     btn_salvar.on_click = salvar_filme_ativo
 
     def abrir_detalhes(mid, mtype, titulo_prev, ano_prev, poster_prev):
-        fechar_busca_se_aberta()
+        fechar_busca()
         dt_img.src = poster_prev if poster_prev else "https://via.placeholder.com/130x195?text=Sem+Poster"
         dt_titulo.value = f"{titulo_prev} ({ano_prev})"
         dt_meta.value = "Obtendo dados..."
@@ -373,7 +380,6 @@ def main(page: ft.Page):
         btn_salvar.disabled = True
         btn_ir_lista.visible = False
 
-        # Link de fallback inicial direto para pesquisa no YouTube
         fallback_trailer = f"https://www.youtube.com/results?search_query={quote_plus('trailer oficial ' + titulo_prev + ' ' + ano_prev)}"
         btn_trailer.url = fallback_trailer
 
@@ -489,7 +495,6 @@ def main(page: ft.Page):
                 dt_stream.value = f"📺 {streamings}"
                 dt_sinopse.value = sinopse
 
-                # Define a URL final garantida do trailer
                 btn_trailer.url = trailer_url if trailer_url else fallback_trailer
 
                 if tem_digital:
@@ -598,15 +603,10 @@ def main(page: ft.Page):
     grade_populares = ft.Row(wrap=True, spacing=10, run_spacing=12, alignment=ft.MainAxisAlignment.CENTER)
     coluna_biblioteca_itens = ft.Column(spacing=16, horizontal_alignment=ft.CrossAxisAlignment.START)
 
-    spinner_carregamento = ft.ProgressRing(width=26, height=26, stroke_width=3, color="#3b82f6", visible=False)
-    btn_carregar_mais = ft.Button(
-        content=ft.Text("Carregar Mais Filmes", color="white", size=12),
-        bgcolor="#1e293b",
-        on_click=lambda e: carregar_populares(incrementar=True)
-    )
+    spinner_carregamento = ft.ProgressRing(width=28, height=28, stroke_width=3, color="#3b82f6", visible=False)
 
     # -------------------------------------------------------------
-    # POPULARES
+    # POPULARES (CARREGAMENTO AUTOMÁTICO VIA SCROLL)
     # -------------------------------------------------------------
     def carregar_populares(incrementar=False):
         c = carregar_config()
@@ -642,7 +642,9 @@ def main(page: ft.Page):
                 if resp.status_code == 200:
                     dados = resp.json()
                     itens = dados.get("results", [])
-                    if not itens:
+                    total_p = dados.get("total_pages", 1000)
+
+                    if not itens or p >= total_p:
                         paginacao["fim"] = True
 
                     if not incrementar:
@@ -666,6 +668,15 @@ def main(page: ft.Page):
                 page.update()
 
         threading.Thread(target=_fetch, daemon=True).start()
+
+    def ao_rolar_inicio(e: ft.OnScrollEvent):
+        # Fecha busca caso o usuário role a tela
+        fechar_busca()
+
+        # Gatilho automático ao aproximar-se do final (400px antes)
+        if e.max_scroll_extent > 0 and e.pixels >= (e.max_scroll_extent - 400):
+            if not paginacao["carregando"]:
+                carregar_populares(incrementar=True)
 
     def remover_filme_direto(fid):
         try:
@@ -807,6 +818,7 @@ def main(page: ft.Page):
 
     def selecionar_sugestao(mid, mtype, tit, ano, p_url):
         container_sugestoes.visible = False
+        camada_clique_fora.visible = False
         campo_busca.value = ""
         page.update()
         abrir_detalhes(mid, mtype, tit, ano, p_url)
@@ -817,6 +829,7 @@ def main(page: ft.Page):
         termo_limpo = termo.strip()
         if not tmdb_key or len(termo_limpo) < 2:
             container_sugestoes.visible = False
+            camada_clique_fora.visible = False
             page.update()
             return
 
@@ -866,7 +879,9 @@ def main(page: ft.Page):
                 )
                 coluna_sugestoes.controls.append(linha_item)
 
-            container_sugestoes.visible = len(coluna_sugestoes.controls) > 0
+            tem_resultados = len(coluna_sugestoes.controls) > 0
+            container_sugestoes.visible = tem_resultados
+            camada_clique_fora.visible = tem_resultados
             page.update()
         except Exception:
             pass
@@ -883,6 +898,7 @@ def main(page: ft.Page):
 
         if not termo or len(termo.strip()) < 2:
             container_sugestoes.visible = False
+            camada_clique_fora.visible = False
             page.update()
             return
 
@@ -958,25 +974,27 @@ def main(page: ft.Page):
     )
 
     # -------------------------------------------------------------
-    # VIEWS ROLÁVEIS (ROLAM SEM MOVER O CABEÇALHO)
+    # VIEWS ROLÁVEIS (COM ROLAGEM INFINITA AUTOMÁTICA)
     # -------------------------------------------------------------
+    coluna_scroll_inicio = ft.Column(
+        controls=[
+            ft.Container(content=ft.Text("Filmes em Alta (TMDb Trends)", size=17, weight="bold"), width=420),
+            grade_populares,
+            ft.Container(
+                content=spinner_carregamento,
+                alignment=ft.Alignment(0, 0),
+                padding=ft.Padding(0, 15, 0, 35)
+            )
+        ],
+        spacing=14,
+        scroll=ft.ScrollMode.AUTO,
+        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+        on_scroll=ao_rolar_inicio
+    )
+
     view_inicio = ft.Container(
         expand=True,
-        content=ft.Column(
-            controls=[
-                ft.Container(content=ft.Text("Filmes em Alta (TMDb Trends)", size=17, weight="bold"), width=420),
-                grade_populares,
-                ft.Container(
-                    content=ft.Column([spinner_carregamento, btn_carregar_mais], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-                    alignment=ft.Alignment(0, 0),
-                    padding=ft.Padding(0, 10, 0, 40)
-                )
-            ],
-            spacing=14,
-            scroll=ft.ScrollMode.AUTO,
-            horizontal_alignment=ft.CrossAxisAlignment.CENTER
-        ),
-        on_click=fechar_busca_se_aberta
+        content=coluna_scroll_inicio
     )
 
     view_biblioteca = ft.Container(
@@ -987,13 +1005,12 @@ def main(page: ft.Page):
             spacing=14,
             scroll=ft.ScrollMode.AUTO,
             horizontal_alignment=ft.CrossAxisAlignment.START
-        ),
-        on_click=fechar_busca_se_aberta
+        )
     )
 
     def alternar_tela(indice):
         fechar_dialogo(modal_detalhes)
-        fechar_busca_se_aberta()
+        fechar_busca()
 
         if indice == 0:
             view_inicio.visible = True
@@ -1013,8 +1030,8 @@ def main(page: ft.Page):
 
         page.update()
 
-    # Monta a tela com cabeçalho rígido no topo e área rolável preenchendo o restante
-    layout_geral = ft.Column(
+    # Camada empilhada (Stack) para que o clique fora intercepte qualquer toque na tela
+    conteudo_telas = ft.Column(
         controls=[
             cabecalho_fixo,
             view_inicio,
@@ -1025,7 +1042,20 @@ def main(page: ft.Page):
         horizontal_alignment=ft.CrossAxisAlignment.CENTER
     )
 
-    page.add(layout_geral)
+    page_layout = ft.Stack(
+        controls=[
+            conteudo_telas,
+            camada_clique_fora,
+            # Mantém o cabeçalho acessível mesmo com a camada de fundo ativa
+            ft.Container(
+                content=cabecalho_fixo,
+                alignment=ft.Alignment(0, -1)
+            )
+        ],
+        expand=True
+    )
+
+    page.add(page_layout)
     page.update()
     carregar_populares()
 
