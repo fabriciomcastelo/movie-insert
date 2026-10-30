@@ -597,7 +597,7 @@ def main(page: ft.Page):
     spinner_carregamento = ft.ProgressRing(width=28, height=28, stroke_width=3, color="#3b82f6", visible=False)
 
     # -------------------------------------------------------------
-    # POPULARES (ROLAGEM CONTÍNUA ROBUSTA)
+    # POPULARES (ROLAGEM CONTÍNUA ROBUSTA SEM BOTÃO)
     # -------------------------------------------------------------
     def carregar_populares(incrementar=False):
         c = carregar_config()
@@ -661,8 +661,13 @@ def main(page: ft.Page):
         threading.Thread(target=_fetch, daemon=True).start()
 
     def ao_rolar_inicio(e: ft.OnScrollEvent):
-        # Gatilho de rolagem com margem alargada (800px) para antecipar a carga
-        if e.max_scroll_extent > 0 and (e.pixels + 800) >= e.max_scroll_extent:
+        # Fecha a caixa de pesquisa ao iniciar a rolagem
+        if container_sugestoes.visible:
+            container_sugestoes.visible = False
+            page.update()
+
+        # Gatilho robusto para carregar mais filmes (dispara antes de chegar aos 800px finais)
+        if e.max_scroll_extent > 0 and e.pixels >= (e.max_scroll_extent - 800):
             if not paginacao["carregando"] and not paginacao["fim"]:
                 carregar_populares(incrementar=True)
 
@@ -957,9 +962,10 @@ def main(page: ft.Page):
     )
 
     # -------------------------------------------------------------
-    # VIEWS ROLÁVEIS (COM ROLAGEM INFINITA ATIVA)
+    # VIEWS ROLÁVEIS (AGORA COM EXPAND=TRUE NO COLUMN)
     # -------------------------------------------------------------
     coluna_scroll_inicio = ft.Column(
+        expand=True,
         controls=[
             ft.Container(content=ft.Text("Filmes em Alta (TMDb Trends)", size=17, weight="bold"), width=420),
             grade_populares,
@@ -985,6 +991,7 @@ def main(page: ft.Page):
         expand=True,
         visible=False,
         content=ft.Column(
+            expand=True,
             controls=[coluna_biblioteca_itens],
             spacing=14,
             scroll=ft.ScrollMode.AUTO,
