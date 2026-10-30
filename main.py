@@ -94,9 +94,10 @@ def main(page: ft.Page):
     page.title = "Movie Insert"
     page.theme_mode = ft.ThemeMode.DARK
     page.bgcolor = "#0b0c0f"
-    page.padding = ft.Padding(12, 12, 12, 12)
+    page.padding = ft.Padding(12, 10, 12, 10)
     page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
-    page.scroll = ft.ScrollMode.AUTO
+    # Desativa scroll na página raiz para garantir cabeçalho estático
+    page.scroll = None
 
     init_db()
     item_ativo = {"data": None}
@@ -112,9 +113,6 @@ def main(page: ft.Page):
 
     progresso = ft.ProgressBar(color="#3b82f6", bgcolor="transparent", visible=False)
 
-    # -------------------------------------------------------------
-    # FECHAR LISTA DE BUSCA AO CLICAR FORA
-    # -------------------------------------------------------------
     def fechar_busca_se_aberta(e=None):
         if container_sugestoes.visible:
             container_sugestoes.visible = False
@@ -236,7 +234,7 @@ def main(page: ft.Page):
         abrir_dialogo(modal_avaliacao)
 
     # -------------------------------------------------------------
-    # JANELA DE DETALHES COM CORREÇÃO DE TRAILER NO YOUTUBE
+    # JANELA DE DETALHES (BOTÃO TRAILER NATIVO VIA URL)
     # -------------------------------------------------------------
     dt_img = ft.Image(
         src="https://via.placeholder.com/130x195?text=Sem+Poster",
@@ -262,23 +260,11 @@ def main(page: ft.Page):
     dt_rt = ft.Container(content=ft.Text("🍅 --", color="white", size=11, weight="bold"), bgcolor="#ef4444", padding=ft.Padding(5, 2, 5, 2), border_radius=5)
     dt_user = ft.Container(content=ft.Text("★ --", color="white", size=11, weight="bold"), bgcolor="#8b5cf6", padding=ft.Padding(5, 2, 5, 2), border_radius=5)
 
-    # Função garantida de abertura em nova aba (_blank)
-    def abrir_trailer_link(e):
-        it = item_ativo.get("data")
-        if not it:
-            return
-        
-        url_trailer = it.get("trailer_url")
-        if not url_trailer:
-            nome_busca = f"trailer oficial {it.get('titulo', '')} {it.get('ano', '')}"
-            url_trailer = f"https://www.youtube.com/results?search_query={quote_plus(nome_busca)}"
-        
-        page.launch_url(url_trailer, web_window_name="_blank")
-
+    # Utilização da propriedade nativa url do botão para burlar bloqueadores de pop-up
     btn_trailer = ft.Button(
         content=ft.Text("▶ Trailer", color="white", size=12, weight="bold"),
         bgcolor="#dc2626",
-        on_click=abrir_trailer_link
+        url="https://youtube.com"
     )
     btn_salvar = ft.Button(content=ft.Text("+ Adicionar à Lista", color="white", size=12), bgcolor="#3b82f6", disabled=True)
     btn_ir_lista = ft.Button(content=ft.Text("📁 Ir para Minha Lista", color="white", size=12), bgcolor="#10b981", visible=False)
@@ -386,6 +372,10 @@ def main(page: ft.Page):
         dt_user.content.value = "★ .."
         btn_salvar.disabled = True
         btn_ir_lista.visible = False
+
+        # Link de fallback inicial direto para pesquisa no YouTube
+        fallback_trailer = f"https://www.youtube.com/results?search_query={quote_plus('trailer oficial ' + titulo_prev + ' ' + ano_prev)}"
+        btn_trailer.url = fallback_trailer
 
         abrir_dialogo(modal_detalhes)
         progresso.visible = True
@@ -499,6 +489,9 @@ def main(page: ft.Page):
                 dt_stream.value = f"📺 {streamings}"
                 dt_sinopse.value = sinopse
 
+                # Define a URL final garantida do trailer
+                btn_trailer.url = trailer_url if trailer_url else fallback_trailer
+
                 if tem_digital:
                     txt_stremio.value = "🎬 Stremio: HD/4K Disponível"
                     txt_stremio.color = "#a7f3d0"
@@ -603,7 +596,7 @@ def main(page: ft.Page):
         return card_corpo
 
     grade_populares = ft.Row(wrap=True, spacing=10, run_spacing=12, alignment=ft.MainAxisAlignment.CENTER)
-    coluna_biblioteca = ft.Column(spacing=16, horizontal_alignment=ft.CrossAxisAlignment.START, visible=False)
+    coluna_biblioteca_itens = ft.Column(spacing=16, horizontal_alignment=ft.CrossAxisAlignment.START)
 
     spinner_carregamento = ft.ProgressRing(width=26, height=26, stroke_width=3, color="#3b82f6", visible=False)
     btn_carregar_mais = ft.Button(
@@ -707,10 +700,10 @@ def main(page: ft.Page):
         page.launch_url(f"file://{arq}")
 
     # -------------------------------------------------------------
-    # BIBLIOTECA: STREMIO (PENÚLTIMO) E SEM STREAMING (ÚLTIMO)
+    # BIBLIOTECA
     # -------------------------------------------------------------
     def carregar_biblioteca():
-        coluna_biblioteca.controls.clear()
+        coluna_biblioteca_itens.controls.clear()
         itens_db = []
 
         try:
@@ -722,7 +715,7 @@ def main(page: ft.Page):
             pass
 
         if not itens_db:
-            coluna_biblioteca.controls.append(
+            coluna_biblioteca_itens.controls.append(
                 ft.Container(
                     content=ft.Text("Nenhum filme salvo na biblioteca ainda.", color="#94a3b8", size=15),
                     padding=ft.Padding(10, 30, 10, 20)
@@ -736,7 +729,7 @@ def main(page: ft.Page):
             bgcolor="#334155",
             on_click=lambda e: imprimir_lista()
         )
-        coluna_biblioteca.controls.append(
+        coluna_biblioteca_itens.controls.append(
             ft.Row(
                 [
                     ft.Text(f"Biblioteca ({len(itens_db)})", size=20, weight="bold"),
@@ -796,12 +789,12 @@ def main(page: ft.Page):
                 linha_cards
             ], spacing=6)
 
-            coluna_biblioteca.controls.append(bloco_secao)
+            coluna_biblioteca_itens.controls.append(bloco_secao)
 
         page.update()
 
     # -------------------------------------------------------------
-    # BUSCA COM FECHAMENTO AUTOMÁTICO AO CLICAR FORA
+    # BUSCA
     # -------------------------------------------------------------
     coluna_sugestoes = ft.Column(spacing=4)
     container_sugestoes = ft.Container(
@@ -922,48 +915,6 @@ def main(page: ft.Page):
     ], spacing=4, width=420, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
 
     # -------------------------------------------------------------
-    # VIEWS
-    # -------------------------------------------------------------
-    view_inicio = ft.Container(
-        content=ft.Column(
-            controls=[
-                ft.Container(content=ft.Text("Filmes em Alta (TMDb Trends)", size=17, weight="bold"), width=420),
-                grade_populares,
-                ft.Container(
-                    content=ft.Column([spinner_carregamento, btn_carregar_mais], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-                    alignment=ft.Alignment(0, 0),
-                    padding=ft.Padding(0, 10, 0, 40)
-                )
-            ],
-            spacing=14,
-            horizontal_alignment=ft.CrossAxisAlignment.CENTER
-        ),
-        on_click=fechar_busca_se_aberta
-    )
-
-    def alternar_tela(indice):
-        fechar_dialogo(modal_detalhes)
-        fechar_busca_se_aberta()
-
-        if indice == 0:
-            view_inicio.visible = True
-            coluna_biblioteca.visible = False
-            btn_tab_inicio.bgcolor = "#e2e8f0"
-            btn_tab_inicio.content.color = "#0b0c0f"
-            btn_tab_bib.bgcolor = "#1d4ed8"
-            btn_tab_bib.content.color = "#ffffff"
-        elif indice == 1:
-            carregar_biblioteca()
-            view_inicio.visible = False
-            coluna_biblioteca.visible = True
-            btn_tab_inicio.bgcolor = "#1e293b"
-            btn_tab_inicio.content.color = "#94a3b8"
-            btn_tab_bib.bgcolor = "#e2e8f0"
-            btn_tab_bib.content.color = "#0b0c0f"
-
-        page.update()
-
-    # -------------------------------------------------------------
     # CABEÇALHO FIXO
     # -------------------------------------------------------------
     lbl_app_titulo = ft.Text("MOVIE INSERT", size=22, weight="bold", color="white", text_align=ft.TextAlign.CENTER)
@@ -992,24 +943,89 @@ def main(page: ft.Page):
 
     linha_botoes_topo = ft.Row(controls=[btn_tab_inicio, btn_tab_bib], spacing=12, alignment=ft.MainAxisAlignment.CENTER)
 
-    # Detetor global para fechar a busca ao clicar nas margens ou áreas vazias da página
-    area_pagina = ft.Container(
+    cabecalho_fixo = ft.Container(
         content=ft.Column(
             controls=[
                 progresso,
                 lbl_app_titulo,
                 linha_botoes_topo,
                 header_busca,
-                view_inicio,
-                coluna_biblioteca
             ],
-            spacing=12,
+            spacing=8,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER
+        ),
+        padding=ft.Padding(0, 0, 0, 8)
+    )
+
+    # -------------------------------------------------------------
+    # VIEWS ROLÁVEIS (ROLAM SEM MOVER O CABEÇALHO)
+    # -------------------------------------------------------------
+    view_inicio = ft.Container(
+        expand=True,
+        content=ft.Column(
+            controls=[
+                ft.Container(content=ft.Text("Filmes em Alta (TMDb Trends)", size=17, weight="bold"), width=420),
+                grade_populares,
+                ft.Container(
+                    content=ft.Column([spinner_carregamento, btn_carregar_mais], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                    alignment=ft.Alignment(0, 0),
+                    padding=ft.Padding(0, 10, 0, 40)
+                )
+            ],
+            spacing=14,
+            scroll=ft.ScrollMode.AUTO,
             horizontal_alignment=ft.CrossAxisAlignment.CENTER
         ),
         on_click=fechar_busca_se_aberta
     )
 
-    page.add(area_pagina)
+    view_biblioteca = ft.Container(
+        expand=True,
+        visible=False,
+        content=ft.Column(
+            controls=[coluna_biblioteca_itens],
+            spacing=14,
+            scroll=ft.ScrollMode.AUTO,
+            horizontal_alignment=ft.CrossAxisAlignment.START
+        ),
+        on_click=fechar_busca_se_aberta
+    )
+
+    def alternar_tela(indice):
+        fechar_dialogo(modal_detalhes)
+        fechar_busca_se_aberta()
+
+        if indice == 0:
+            view_inicio.visible = True
+            view_biblioteca.visible = False
+            btn_tab_inicio.bgcolor = "#e2e8f0"
+            btn_tab_inicio.content.color = "#0b0c0f"
+            btn_tab_bib.bgcolor = "#1d4ed8"
+            btn_tab_bib.content.color = "#ffffff"
+        elif indice == 1:
+            carregar_biblioteca()
+            view_inicio.visible = False
+            view_biblioteca.visible = True
+            btn_tab_inicio.bgcolor = "#1e293b"
+            btn_tab_inicio.content.color = "#94a3b8"
+            btn_tab_bib.bgcolor = "#e2e8f0"
+            btn_tab_bib.content.color = "#0b0c0f"
+
+        page.update()
+
+    # Monta a tela com cabeçalho rígido no topo e área rolável preenchendo o restante
+    layout_geral = ft.Column(
+        controls=[
+            cabecalho_fixo,
+            view_inicio,
+            view_biblioteca
+        ],
+        expand=True,
+        spacing=0,
+        horizontal_alignment=ft.CrossAxisAlignment.CENTER
+    )
+
+    page.add(layout_geral)
     page.update()
     carregar_populares()
 
