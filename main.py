@@ -96,6 +96,7 @@ def main(page: ft.Page):
     page.bgcolor = "#0b0c0f"
     page.padding = ft.Padding(12, 10, 12, 10)
     page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
+    # Desativa o scroll na raiz para que o cabeçalho fique estático no topo
     page.scroll = None
 
     init_db()
@@ -233,7 +234,7 @@ def main(page: ft.Page):
         abrir_dialogo(modal_avaliacao)
 
     # -------------------------------------------------------------
-    # JANELA DE DETALHES
+    # JANELA DE DETALHES COM BOTÃO TRAILER VIA URL NATIVA
     # -------------------------------------------------------------
     dt_img = ft.Image(
         src="https://via.placeholder.com/130x195?text=Sem+Poster",
@@ -597,7 +598,7 @@ def main(page: ft.Page):
     spinner_carregamento = ft.ProgressRing(width=28, height=28, stroke_width=3, color="#3b82f6", visible=False)
 
     # -------------------------------------------------------------
-    # POPULARES (ROLAGEM CONTÍNUA ROBUSTA SEM BOTÃO)
+    # POPULARES (ROLAGEM CONTÍNUA SEM BOTÃO)
     # -------------------------------------------------------------
     def carregar_populares(incrementar=False):
         c = carregar_config()
@@ -607,14 +608,11 @@ def main(page: ft.Page):
             grade_populares.controls.clear()
             grade_populares.controls.append(
                 ft.Container(
-                    content=ft.Text("⚠️ Chave do TMDb ausente. Adicione TMDB_KEY no Render ou no config.json.", color="#f87171", size=13, text_align=ft.TextAlign.CENTER),
+                    content=ft.Text("⚠️ Chave do TMDb ausente. Adicione TMDB_KEY no Render.", color="#f87171", size=13, text_align=ft.TextAlign.CENTER),
                     padding=20
                 )
             )
             page.update()
-            return
-
-        if paginacao["carregando"] or paginacao["fim"]:
             return
 
         paginacao["carregando"] = True
@@ -660,16 +658,17 @@ def main(page: ft.Page):
 
         threading.Thread(target=_fetch, daemon=True).start()
 
+    # OTIMIZAÇÃO: Margem gigante (2000px) para disparar bem antes de o scroll bater no fim
     def ao_rolar_inicio(e: ft.OnScrollEvent):
-        # Fecha a caixa de pesquisa ao iniciar a rolagem
-        if container_sugestoes.visible:
-            container_sugestoes.visible = False
-            page.update()
-
-        # Gatilho robusto para carregar mais filmes (dispara antes de chegar aos 800px finais)
-        if e.max_scroll_extent > 0 and e.pixels >= (e.max_scroll_extent - 800):
-            if not paginacao["carregando"] and not paginacao["fim"]:
-                carregar_populares(incrementar=True)
+        try:
+            pixels = float(e.pixels)
+            max_scroll = float(e.max_scroll_extent)
+            
+            if max_scroll > 0 and pixels >= (max_scroll - 2000):
+                if not paginacao["carregando"] and not paginacao["fim"]:
+                    carregar_populares(incrementar=True)
+        except Exception:
+            pass
 
     def remover_filme_direto(fid):
         try:
@@ -798,7 +797,7 @@ def main(page: ft.Page):
         page.update()
 
     # -------------------------------------------------------------
-    # BUSCA
+    # BUSCA (CAIXA SUSPENSA COM FECHO NO CLIQUE FORA)
     # -------------------------------------------------------------
     coluna_sugestoes = ft.Column(spacing=4)
     container_sugestoes = ft.Container(
@@ -962,7 +961,7 @@ def main(page: ft.Page):
     )
 
     # -------------------------------------------------------------
-    # VIEWS ROLÁVEIS (AGORA COM EXPAND=TRUE NO COLUMN)
+    # VIEWS ROLÁVEIS E GESTÃO DO CLIQUE FORA (EXPAND=TRUE)
     # -------------------------------------------------------------
     coluna_scroll_inicio = ft.Column(
         expand=True,
