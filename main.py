@@ -22,20 +22,18 @@ STREAMINGS_PADRAO = [
 ]
 
 def carregar_config():
+    cfg = {"omdb_key": "", "tmdb_key": ""}
     if os.path.exists(CONFIG_FILE):
         try:
             with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
+                cfg.update(json.load(f))
         except Exception:
             pass
-    return {"omdb_key": "", "tmdb_key": ""}
-
-def salvar_config(omdb, tmdb):
-    try:
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            json.dump({"omdb_key": omdb, "tmdb_key": tmdb}, f, indent=4)
-    except Exception:
-        pass
+    if not cfg.get("tmdb_key"):
+        cfg["tmdb_key"] = os.environ.get("TMDB_KEY", "")
+    if not cfg.get("omdb_key"):
+        cfg["omdb_key"] = os.environ.get("OMDB_KEY", "")
+    return cfg
 
 def init_db():
     try:
@@ -95,14 +93,9 @@ def main(page: ft.Page):
     page.title = "Movie Insert"
     page.theme_mode = ft.ThemeMode.DARK
     page.bgcolor = "#0b0c0f"
-    page.padding = 16
+    page.padding = ft.Padding(12, 12, 12, 12)
     page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
-    page.scroll = None
-
-    page.window_width = 1180
-    page.window_height = 840
-    page.window_min_width = 500
-    page.window_min_height = 650
+    page.scroll = ft.ScrollMode.AUTO
 
     init_db()
     item_ativo = {"data": None}
@@ -168,8 +161,8 @@ def main(page: ft.Page):
     # SELETOR DE NOTAS
     # -------------------------------------------------------------
     botoes_notas = []
-    linha_notas_1_5 = ft.Row(spacing=8, alignment=ft.MainAxisAlignment.CENTER)
-    linha_notas_6_10 = ft.Row(spacing=8, alignment=ft.MainAxisAlignment.CENTER)
+    linha_notas_1_5 = ft.Row(spacing=6, alignment=ft.MainAxisAlignment.CENTER)
+    linha_notas_6_10 = ft.Row(spacing=6, alignment=ft.MainAxisAlignment.CENTER)
 
     def selecionar_nota_valor(valor):
         filme_avaliando["nota"] = str(valor)
@@ -183,10 +176,10 @@ def main(page: ft.Page):
         s_val = str(n)
         is_padrao = (n == 10)
         btn_n = ft.Container(
-            content=ft.Text(s_val, size=14, weight="bold", color="white" if is_padrao else "#94a3b8", text_align=ft.TextAlign.CENTER),
+            content=ft.Text(s_val, size=13, weight="bold", color="white" if is_padrao else "#94a3b8", text_align=ft.TextAlign.CENTER),
             alignment=ft.Alignment(0, 0),
-            width=46,
-            height=46,
+            width=42,
+            height=42,
             shape=ft.BoxShape.CIRCLE,
             bgcolor="#3b82f6" if is_padrao else "#1f2937",
             ink=True,
@@ -240,19 +233,19 @@ def main(page: ft.Page):
         abrir_dialogo(modal_avaliacao)
 
     # -------------------------------------------------------------
-    # JANELA DE DETALHES
+    # DETALHES RESPONSIVO
     # -------------------------------------------------------------
-    dt_img = ft.Image(src="https://via.placeholder.com/140x210?text=Sem+Poster", width=130, height=195, border_radius=8, fit="cover")
-    dt_titulo = ft.Text("", size=18, weight="bold")
+    dt_img = ft.Image(src="https://via.placeholder.com/140x210?text=Sem+Poster", width=120, height=180, border_radius=8, fit="cover")
+    dt_titulo = ft.Text("", size=17, weight="bold")
     dt_meta = ft.Text("", size=11, color="#94a3b8")
     dt_stream = ft.Text("", size=12, color="#10b981", weight="bold")
-    dt_sinopse = ft.Text("", size=13, color="#cbd5e1")
+    dt_sinopse = ft.Text("", size=12, color="#cbd5e1")
     
-    txt_stremio = ft.Text("🔍 Verificando lançamento digital...", size=11, weight="bold", color="#93c5fd")
+    txt_stremio = ft.Text("🔍 Verificando lançamento...", size=11, weight="bold", color="#93c5fd")
     dt_stremio_status = ft.Container(
         content=txt_stremio,
         bgcolor="#1e293b",
-        padding=ft.Padding(8, 4, 8, 4),
+        padding=ft.Padding(6, 4, 6, 4),
         border_radius=6
     )
 
@@ -265,9 +258,9 @@ def main(page: ft.Page):
         if it and it.get("trailer_url"):
             page.launch_url(it["trailer_url"])
 
-    btn_trailer = ft.Button(content=ft.Text("▶ Trailer", color="white"), bgcolor="#dc2626", disabled=True, on_click=abrir_trailer_link)
-    btn_salvar = ft.Button(content=ft.Text("+ Adicionar à Lista", color="white"), bgcolor="#3b82f6", disabled=True)
-    btn_ir_lista = ft.Button(content=ft.Text("📁 Ir para Minha Lista", color="white"), bgcolor="#10b981", visible=False)
+    btn_trailer = ft.Button(content=ft.Text("▶ Trailer", color="white", size=12), bgcolor="#dc2626", disabled=True, on_click=abrir_trailer_link)
+    btn_salvar = ft.Button(content=ft.Text("+ Adicionar à Lista", color="white", size=12), bgcolor="#3b82f6", disabled=True)
+    btn_ir_lista = ft.Button(content=ft.Text("📁 Ir para Minha Lista", color="white", size=12), bgcolor="#10b981", visible=False)
 
     def fechar_detalhes(e=None):
         fechar_dialogo(modal_detalhes)
@@ -279,15 +272,15 @@ def main(page: ft.Page):
     btn_ir_lista.on_click = acao_ir_para_lista
 
     btn_fechar = ft.Button(
-        content=ft.Text("✕ Voltar ao Catálogo", color="white", weight="bold"),
+        content=ft.Text("✕ Fechar", color="white", weight="bold", size=12),
         bgcolor="#2563eb",
         on_click=fechar_detalhes
     )
 
     conteudo_modal = ft.Container(
-        width=550,
+        width=520,
         bgcolor="#111827",
-        padding=16,
+        padding=14,
         border_radius=12,
         border=ft.Border(
             ft.BorderSide(1.5, "#3b82f6"),
@@ -302,16 +295,16 @@ def main(page: ft.Page):
                 ft.Column([
                     dt_titulo,
                     dt_meta,
-                    ft.Row([dt_imdb, dt_rt, dt_user], spacing=5, wrap=True),
+                    ft.Row([dt_imdb, dt_rt, dt_user], spacing=4, wrap=True),
                     dt_stremio_status,
                     dt_stream,
                 ], spacing=4, expand=True)
-            ], alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.START),
+            ], alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.START, wrap=True),
             ft.Row([btn_trailer, btn_salvar], spacing=8, wrap=True),
             btn_ir_lista,
-            ft.Text("Sinopse", size=15, weight="bold", color="#94a3b8"),
+            ft.Text("Sinopse", size=14, weight="bold", color="#94a3b8"),
             dt_sinopse,
-        ], spacing=10, scroll=ft.ScrollMode.AUTO, tight=True)
+        ], spacing=8, scroll=ft.ScrollMode.AUTO, tight=True)
     )
 
     modal_detalhes = ft.AlertDialog(
@@ -344,7 +337,7 @@ def main(page: ft.Page):
             pass
 
         it["categoria_existente"] = "Para Assistir"
-        btn_salvar.content = ft.Text("✓ Na sua Lista", color="white")
+        btn_salvar.content = ft.Text("✓ Na sua Lista", color="white", size=12)
         btn_salvar.bgcolor = "#475569"
         btn_salvar.disabled = True
         btn_ir_lista.visible = True
@@ -355,10 +348,10 @@ def main(page: ft.Page):
     def abrir_detalhes(mid, mtype, titulo_prev, ano_prev, poster_prev):
         dt_img.src = poster_prev if poster_prev else "https://via.placeholder.com/140x210?text=Sem+Poster"
         dt_titulo.value = f"{titulo_prev} ({ano_prev})"
-        dt_meta.value = "A carregar ficha técnica..."
-        dt_stream.value = "A consultar streaming..."
-        dt_sinopse.value = "A carregar sinopse..."
-        txt_stremio.value = "🔍 Checando alta qualidade..."
+        dt_meta.value = "Obtendo dados..."
+        dt_stream.value = "Consultando disponibilidade..."
+        dt_sinopse.value = "Carregando sinopse..."
+        txt_stremio.value = "🔍 Checando qualidade..."
         txt_stremio.color = "#93c5fd"
         dt_stremio_status.bgcolor = "#1e293b"
         dt_imdb.content.value = "⭐ .."
@@ -484,12 +477,12 @@ def main(page: ft.Page):
                     dt_stremio_status.bgcolor = "#78350f"
 
                 if cat_exist:
-                    btn_salvar.content = ft.Text("✓ Na sua Lista", color="white")
+                    btn_salvar.content = ft.Text("✓ Na sua Lista", color="white", size=12)
                     btn_salvar.bgcolor = "#475569"
                     btn_salvar.disabled = True
                     btn_ir_lista.visible = True
                 else:
-                    btn_salvar.content = ft.Text("+ Adicionar à Lista", color="white")
+                    btn_salvar.content = ft.Text("+ Adicionar à Lista", color="white", size=12)
                     btn_salvar.bgcolor = "#3b82f6"
                     btn_salvar.disabled = False
                     btn_ir_lista.visible = False
@@ -506,21 +499,21 @@ def main(page: ft.Page):
         threading.Thread(target=_fetch, daemon=True).start()
 
     # -------------------------------------------------------------
-    # CARDS DOS FILMES
+    # CARDS COMPACTOS E RESPONSIVOS
     # -------------------------------------------------------------
     def criar_card_filme(mid, mtype, titulo, ano, poster_url, categoria=None, nota=None):
         acoes = []
         if categoria == "Para Assistir":
             acoes.append(
                 ft.Button(
-                    content=ft.Text("✓ Visto", color="white", size=10),
+                    content=ft.Text("✓ Visto", color="white", size=9),
                     bgcolor="#10b981",
                     on_click=lambda e: abrir_modal_avaliacao(mid)
                 )
             )
             acoes.append(
                 ft.Button(
-                    content=ft.Text("✕", color="red400", size=10),
+                    content=ft.Text("✕", color="red400", size=9),
                     on_click=lambda e: remover_filme_direto(mid)
                 )
             )
@@ -528,71 +521,71 @@ def main(page: ft.Page):
             bg_nota, cor_texto, borda_nota = obter_estilo_nota(nota)
             acoes.append(
                 ft.Container(
-                    content=ft.Text(f"★ {nota}" if nota else "★ Avaliar", color=cor_texto, size=11, weight="bold"),
+                    content=ft.Text(f"★ {nota}" if nota else "★ Avaliar", color=cor_texto, size=10, weight="bold"),
                     bgcolor=bg_nota,
                     border=borda_nota,
-                    padding=ft.Padding(8, 4, 8, 4),
-                    border_radius=6,
+                    padding=ft.Padding(6, 3, 6, 3),
+                    border_radius=5,
                     ink=True,
                     on_click=lambda e: abrir_modal_avaliacao(mid, nota)
                 )
             )
             acoes.append(
                 ft.Button(
-                    content=ft.Text("✕", color="red400", size=10),
+                    content=ft.Text("✕", color="red400", size=9),
                     on_click=lambda e: pedir_confirmacao_remocao(mid, titulo)
                 )
             )
 
         card_corpo = ft.Container(
-            width=150,
+            width=140,
             bgcolor="#111827",
-            padding=6,
-            border_radius=10,
+            padding=5,
+            border_radius=8,
             ink=True,
             border=ft.Border(
-                ft.BorderSide(1.5, "#1f2937"),
-                ft.BorderSide(1.5, "#1f2937"),
-                ft.BorderSide(1.5, "#1f2937"),
-                ft.BorderSide(1.5, "#1f2937")
+                ft.BorderSide(1.2, "#1f2937"),
+                ft.BorderSide(1.2, "#1f2937"),
+                ft.BorderSide(1.2, "#1f2937"),
+                ft.BorderSide(1.2, "#1f2937")
             ),
             content=ft.Column([
                 ft.Image(
-                    src=poster_url if poster_url else "https://via.placeholder.com/140x200?text=Sem+Poster",
-                    width=138,
-                    height=195,
-                    border_radius=8,
+                    src=poster_url if poster_url else "https://via.placeholder.com/130x185?text=Sem+Poster",
+                    width=130,
+                    height=185,
+                    border_radius=6,
                     fit="cover"
                 ),
                 ft.Text(
                     f"{titulo}\n({ano})",
-                    size=11,
+                    size=10,
                     weight="bold",
                     max_lines=2,
                     overflow="ellipsis",
-                    width=138,
+                    width=130,
                     text_align=ft.TextAlign.CENTER
                 ),
-                ft.Row(acoes, spacing=4, alignment=ft.MainAxisAlignment.SPACE_BETWEEN, width=138) if acoes else ft.Container()
-            ], spacing=4, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                ft.Row(acoes, spacing=3, alignment=ft.MainAxisAlignment.SPACE_BETWEEN, width=130) if acoes else ft.Container()
+            ], spacing=3, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
             on_click=lambda e: abrir_detalhes(mid, mtype, titulo, ano, poster_url)
         )
 
         def ao_passar_mouse(e):
             if e.data == "true":
                 card_corpo.border = ft.Border(
-                    ft.BorderSide(2.0, "#3b82f6"),
-                    ft.BorderSide(2.0, "#3b82f6"),
-                    ft.BorderSide(2.0, "#3b82f6"),
-                    ft.BorderSide(2.0, "#3b82f6")
+                    ft.BorderSide(1.8, "#3b82f6"),
+                    ft.BorderSide(1.8, "#3b82f6"),
+                    ft.BorderSide(1.8, "#3b82f6"),
+                    ft.BorderSide(1.8, "#3b82f6")
                 )
                 card_corpo.bgcolor = "#1e293b"
             else:
                 card_corpo.border = ft.Border(
-                    ft.BorderSide(1.5, "#1f2937"),
-                    ft.BorderSide(1.5, "#1f2937"),
-                    ft.BorderSide(1.5, "#1f2937"),
-                    ft.BorderSide(1.5, "#1f2937")
+                    ft.BorderSide(1.2, "#1f2937"),
+                    ft.BorderSide(1.2, "#1f2937"),
+                    ft.BorderSide(1.2, "#1f2937"),
+                    ft.BorderSide(1.2, "#1f2937")
                 )
                 card_corpo.bgcolor = "#111827"
             card_corpo.update()
@@ -600,18 +593,30 @@ def main(page: ft.Page):
         card_corpo.on_hover = ao_passar_mouse
         return card_corpo
 
-    grade_populares = ft.Row(wrap=True, spacing=16, run_spacing=18, alignment=ft.MainAxisAlignment.CENTER)
-    coluna_biblioteca = ft.Column(spacing=20, horizontal_alignment=ft.CrossAxisAlignment.START, expand=True)
+    grade_populares = ft.Row(wrap=True, spacing=12, run_spacing=14, alignment=ft.MainAxisAlignment.CENTER)
+    coluna_biblioteca = ft.Column(spacing=18, horizontal_alignment=ft.CrossAxisAlignment.START, visible=False)
 
-    spinner_carregamento = ft.ProgressRing(width=28, height=28, stroke_width=3, color="#3b82f6", visible=False)
+    spinner_carregamento = ft.ProgressRing(width=26, height=26, stroke_width=3, color="#3b82f6", visible=False)
 
     # -------------------------------------------------------------
-    # ROLAGEM INFINITA (INÍCIO)
+    # POPULARES E CARREGAMENTO
     # -------------------------------------------------------------
     def carregar_populares(incrementar=False):
         c = carregar_config()
         tmdb_key = c.get("tmdb_key", "").strip()
-        if not tmdb_key or paginacao["carregando"]:
+
+        if not tmdb_key:
+            grade_populares.controls.clear()
+            grade_populares.controls.append(
+                ft.Container(
+                    content=ft.Text("⚠️ Chave do TMDb ausente. Adicione TMDB_KEY no Render ou no config.json.", color="#f87171", size=13, text_align=ft.TextAlign.CENTER),
+                    padding=20
+                )
+            )
+            page.update()
+            return
+
+        if paginacao["carregando"]:
             return
 
         paginacao["carregando"] = True
@@ -624,32 +629,38 @@ def main(page: ft.Page):
             try:
                 p = paginacao["pagina_atual"]
                 url = f"https://api.themoviedb.org/3/trending/movie/week?api_key={tmdb_key}&language=pt-BR&page={p}"
-                itens = requests.get(url, timeout=4.0).json().get("results", [])
+                resp = requests.get(url, timeout=5.0)
 
+                if resp.status_code == 200:
+                    itens = resp.json().get("results", [])
+                    if not incrementar:
+                        grade_populares.controls.clear()
+
+                    for it in itens:
+                        mid = it.get("id")
+                        tit = it.get("title") or it.get("name")
+                        ano = str((it.get("release_date") or it.get("first_air_date")) or "")[:4]
+                        p_path = it.get("poster_path")
+                        p_url = f"https://image.tmdb.org/t/p/w300{p_path}" if p_path else None
+                        grade_populares.controls.append(criar_card_filme(mid, "movie", tit, ano, p_url))
+                else:
+                    if not incrementar:
+                        grade_populares.controls.clear()
+                        grade_populares.controls.append(
+                            ft.Text(f"Erro na API TMDb: {resp.status_code}", color="#f87171")
+                        )
+            except Exception as ex:
                 if not incrementar:
                     grade_populares.controls.clear()
-
-                for it in itens:
-                    mid = it.get("id")
-                    tit = it.get("title") or it.get("name")
-                    ano = str((it.get("release_date") or it.get("first_air_date")) or "")[:4]
-                    p_path = it.get("poster_path")
-                    p_url = f"https://image.tmdb.org/t/p/w300{p_path}" if p_path else None
-                    grade_populares.controls.append(criar_card_filme(mid, "movie", tit, ano, p_url))
-
-            except Exception:
-                pass
+                    grade_populares.controls.append(
+                        ft.Text("Falha ao consultar API. Verifique a conexão.", color="#f87171")
+                    )
             finally:
                 paginacao["carregando"] = False
                 spinner_carregamento.visible = False
                 page.update()
 
         threading.Thread(target=_fetch, daemon=True).start()
-
-    def ao_rolar_inicio(e: ft.OnScrollEvent):
-        if e.max_scroll_extent > 0 and e.pixels >= (e.max_scroll_extent - 450):
-            if not paginacao["carregando"]:
-                carregar_populares(incrementar=True)
 
     def remover_filme_direto(fid):
         try:
@@ -684,7 +695,7 @@ def main(page: ft.Page):
         page.launch_url(f"file://{arq}")
 
     # -------------------------------------------------------------
-    # BIBLIOTECA ORGANIZADA POR FILEIRAS DE STREAMING
+    # BIBLIOTECA
     # -------------------------------------------------------------
     def carregar_biblioteca():
         coluna_biblioteca.controls.clear()
@@ -701,30 +712,28 @@ def main(page: ft.Page):
         if not itens_db:
             coluna_biblioteca.controls.append(
                 ft.Container(
-                    content=ft.Text("Nenhum filme salvo na biblioteca ainda.", color="#94a3b8", size=16),
-                    padding=ft.Padding(20, 40, 20, 20)
+                    content=ft.Text("Nenhum filme salvo na biblioteca ainda.", color="#94a3b8", size=15),
+                    padding=ft.Padding(10, 30, 10, 20)
                 )
             )
             page.update()
             return
 
-        # Topo da Biblioteca com Botão de Imprimir
         btn_print = ft.Button(
-            content=ft.Text("🖨️ Imprimir Lista", color="white", size=12, weight="bold"),
+            content=ft.Text("🖨️ Imprimir", color="white", size=11, weight="bold"),
             bgcolor="#334155",
             on_click=lambda e: imprimir_lista()
         )
         coluna_biblioteca.controls.append(
             ft.Row(
                 [
-                    ft.Text(f"Minha Biblioteca ({len(itens_db)} filmes)", size=22, weight="bold"),
+                    ft.Text(f"Biblioteca ({len(itens_db)})", size=20, weight="bold"),
                     btn_print
                 ],
                 alignment=ft.MainAxisAlignment.SPACE_BETWEEN
             )
         )
 
-        # Mapeamento dos filmes para cada canal de streaming
         mapa_streamings = {s: [] for s in STREAMINGS_PADRAO}
         mapa_streamings["Outros / Sem Streaming"] = []
 
@@ -732,7 +741,6 @@ def main(page: ft.Page):
             st_str = streaming_txt or ""
             alocado = False
             for st_nome in STREAMINGS_PADRAO:
-                # Normalização simplificada de nomes (ex: Disney Plus vs Disney+)
                 termo_busca = st_nome.lower().replace(" plus", "").replace("+", "")
                 if termo_busca in st_str.lower():
                     mapa_streamings[st_nome].append((mid, tit, ano, p_url, nota, cat))
@@ -741,13 +749,12 @@ def main(page: ft.Page):
             if not alocado:
                 mapa_streamings["Outros / Sem Streaming"].append((mid, tit, ano, p_url, nota, cat))
 
-        # Criação de cada fileira horizontal
         for servico, lista_filmes in mapa_streamings.items():
             if not lista_filmes:
                 continue
 
             linha_cards = ft.Row(
-                spacing=14,
+                spacing=12,
                 scroll=ft.ScrollMode.AUTO,
                 controls=[
                     criar_card_filme(mid, "movie", tit, ano, p_url, categoria=cat, nota=nota)
@@ -757,7 +764,7 @@ def main(page: ft.Page):
 
             bloco_secao = ft.Column([
                 ft.Row([
-                    ft.Text(f"📺 {servico}", size=17, weight="bold", color="#60a5fa"),
+                    ft.Text(f"📺 {servico}", size=16, weight="bold", color="#60a5fa"),
                     ft.Container(
                         content=ft.Text(f"{len(lista_filmes)}", size=11, color="white", weight="bold"),
                         bgcolor="#1e293b",
@@ -766,14 +773,14 @@ def main(page: ft.Page):
                     )
                 ], spacing=8),
                 linha_cards
-            ], spacing=8)
+            ], spacing=6)
 
             coluna_biblioteca.controls.append(bloco_secao)
 
         page.update()
 
     # -------------------------------------------------------------
-    # BUSCA STRICT-PREFIX (A-Z)
+    # BUSCA STRICT-PREFIX
     # -------------------------------------------------------------
     coluna_sugestoes = ft.Column(spacing=4)
     container_sugestoes = ft.Container(
@@ -888,36 +895,34 @@ def main(page: ft.Page):
     ], spacing=6, width=420, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
 
     # -------------------------------------------------------------
-    # SECÇÕES (INÍCIO E BIBLIOTECA)
+    # VIEWS
     # -------------------------------------------------------------
+    btn_carregar_mais = ft.Button(
+        content=ft.Text("Carregar Mais Filmes", color="white", size=13),
+        bgcolor="#1e293b",
+        on_click=lambda e: carregar_populares(incrementar=True)
+    )
+
     view_inicio = ft.Column(
         controls=[
             header_busca,
-            ft.Container(content=ft.Text("Filmes em Alta (TMDb Trends)", size=18, weight="bold"), width=420),
+            ft.Container(content=ft.Text("Filmes em Alta (TMDb Trends)", size=17, weight="bold"), width=420),
             grade_populares,
-            ft.Container(content=spinner_carregamento, alignment=ft.Alignment(0, 0), padding=ft.Padding(0, 10, 0, 20))
+            ft.Container(
+                content=ft.Column([spinner_carregamento, btn_carregar_mais], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                alignment=ft.Alignment(0, 0),
+                padding=ft.Padding(0, 10, 0, 30)
+            )
         ],
         spacing=14,
-        scroll=ft.ScrollMode.AUTO,
-        expand=True,
-        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-        on_scroll=ao_rolar_inicio
-    )
-
-    view_biblioteca = ft.Column(
-        [coluna_biblioteca],
-        spacing=14,
-        visible=False,
-        scroll=ft.ScrollMode.AUTO,
-        expand=True,
-        horizontal_alignment=ft.CrossAxisAlignment.START
+        horizontal_alignment=ft.CrossAxisAlignment.CENTER
     )
 
     def alternar_tela(indice):
         fechar_dialogo(modal_detalhes)
         if indice == 0:
             view_inicio.visible = True
-            view_biblioteca.visible = False
+            coluna_biblioteca.visible = False
             btn_tab_inicio.bgcolor = "#e2e8f0"
             btn_tab_inicio.content.color = "#0b0c0f"
             btn_tab_bib.bgcolor = "#1d4ed8"
@@ -925,68 +930,53 @@ def main(page: ft.Page):
         elif indice == 1:
             carregar_biblioteca()
             view_inicio.visible = False
-            view_biblioteca.visible = True
+            coluna_biblioteca.visible = True
             btn_tab_inicio.bgcolor = "#1e293b"
             btn_tab_inicio.content.color = "#94a3b8"
             btn_tab_bib.bgcolor = "#e2e8f0"
             btn_tab_bib.content.color = "#0b0c0f"
-            try:
-                view_biblioteca.scroll_to(offset=0, duration=150)
-            except Exception:
-                pass
 
         page.update()
 
     # -------------------------------------------------------------
-    # CABEÇALHO DO APLICATIVO E BOTÕES
+    # CABEÇALHO
     # -------------------------------------------------------------
-    lbl_app_titulo = ft.Text("MOVIE INSERT", size=24, weight="bold", color="white", text_align=ft.TextAlign.CENTER)
+    lbl_app_titulo = ft.Text("MOVIE INSERT", size=22, weight="bold", color="white", text_align=ft.TextAlign.CENTER)
 
     btn_tab_inicio = ft.Container(
-        content=ft.Text("Início", color="#0b0c0f", size=16, weight="bold"),
+        content=ft.Text("Início", color="#0b0c0f", size=15, weight="bold"),
         bgcolor="#e2e8f0",
-        width=165,
-        height=48,
-        border_radius=25,
+        width=150,
+        height=44,
+        border_radius=22,
         alignment=ft.Alignment(0, 0),
         ink=True,
         on_click=lambda e: alternar_tela(0)
     )
 
     btn_tab_bib = ft.Container(
-        content=ft.Text("Biblioteca", color="#ffffff", size=16, weight="bold"),
+        content=ft.Text("Biblioteca", color="#ffffff", size=15, weight="bold"),
         bgcolor="#1d4ed8",
-        width=165,
-        height=48,
-        border_radius=25,
+        width=150,
+        height=44,
+        border_radius=22,
         alignment=ft.Alignment(0, 0),
         ink=True,
         on_click=lambda e: alternar_tela(1)
     )
 
-    linha_botoes_topo = ft.Row(controls=[btn_tab_inicio, btn_tab_bib], spacing=14, alignment=ft.MainAxisAlignment.CENTER)
+    linha_botoes_topo = ft.Row(controls=[btn_tab_inicio, btn_tab_bib], spacing=12, alignment=ft.MainAxisAlignment.CENTER)
 
-    conteudo_principal = ft.Column(
-        controls=[
-            progresso,
-            lbl_app_titulo,
-            linha_botoes_topo,
-            view_inicio,
-            view_biblioteca
-        ],
-        expand=True,
-        spacing=12,
-        horizontal_alignment=ft.CrossAxisAlignment.CENTER
+    page.add(
+        progresso,
+        lbl_app_titulo,
+        linha_botoes_topo,
+        view_inicio,
+        coluna_biblioteca
     )
-
-    page.add(conteudo_principal)
     page.update()
     carregar_populares()
 
 if __name__ == "__main__":
-    # Compatível tanto para Windows nativo quanto para Nuvem/Render
     porta = int(os.environ.get("PORT", 8550))
-    if "PORT" in os.environ:
-        ft.run(main, view=ft.AppView.WEB_BROWSER, host="0.0.0.0", port=porta)
-    else:
-        ft.run(main)
+    ft.run(main, view=ft.AppView.WEB_BROWSER, host="0.0.0.0", port=porta)
