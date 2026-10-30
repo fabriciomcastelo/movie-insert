@@ -10,8 +10,8 @@ from datetime import datetime
 CONFIG_FILE = "config.json"
 DB_FILE = "filmes.db"
 
+# Canais padrão (Stremio será posicionado como penúltimo e Sem Streaming como último na Biblioteca)
 STREAMINGS_PADRAO = [
-    "Stremio",
     "Netflix",
     "Max",
     "Amazon Prime Video",
@@ -451,7 +451,7 @@ def main(page: ft.Page):
                         tem_digital = True
 
                 if tem_digital and "Stremio" not in stream_nomes:
-                    stream_nomes.insert(0, "Stremio")
+                    stream_nomes.append("Stremio")
 
                 streamings = ", ".join(stream_nomes) if stream_nomes else "Sem streaming no BR"
 
@@ -694,7 +694,7 @@ def main(page: ft.Page):
         page.launch_url(f"file://{arq}")
 
     # -------------------------------------------------------------
-    # BIBLIOTECA
+    # MELHORIA 3: BIBLIOTECA COM STREMIO (PENÚLTIMO) E SEM STREAMING (ÚLTIMO)
     # -------------------------------------------------------------
     def carregar_biblioteca():
         coluna_biblioteca.controls.clear()
@@ -733,27 +733,37 @@ def main(page: ft.Page):
             )
         )
 
-        mapa_streamings = {s: [] for s in STREAMINGS_PADRAO}
-        mapa_streamings["Outros / Sem Streaming"] = []
+        # Mapa com a ordem exata: canais padrão -> Stremio -> Sem Streaming no Brasil
+        ordem_secoes = list(STREAMINGS_PADRAO) + ["Stremio", "Sem streaming no BR"]
+        mapa_streamings = {s: [] for s in ordem_secoes}
 
         for mid, tit, ano, p_url, nota, cat, streaming_txt in itens_db:
             st_str = streaming_txt or ""
             alocado = False
+            
+            # Checa os serviços tradicionais
             for st_nome in STREAMINGS_PADRAO:
                 termo_busca = st_nome.lower().replace(" plus", "").replace("+", "")
                 if termo_busca in st_str.lower():
                     mapa_streamings[st_nome].append((mid, tit, ano, p_url, nota, cat))
                     alocado = True
+            
+            # Checa Stremio (penúltima)
+            if "stremio" in st_str.lower():
+                mapa_streamings["Stremio"].append((mid, tit, ano, p_url, nota, cat))
+                alocado = True
 
-            if not alocado:
-                mapa_streamings["Outros / Sem Streaming"].append((mid, tit, ano, p_url, nota, cat))
+            # Se não tiver nenhum serviço, vai para "Sem streaming no BR" (última)
+            if not alocado or "sem streaming" in st_str.lower():
+                mapa_streamings["Sem streaming no BR"].append((mid, tit, ano, p_url, nota, cat))
 
-        for servico, lista_filmes in mapa_streamings.items():
+        for servico in ordem_secoes:
+            lista_filmes = mapa_streamings[servico]
             if not lista_filmes:
                 continue
 
-            cor_titulo = "#a78bfa" if servico == "Stremio" else "#60a5fa"
-            icone = "🎬" if servico == "Stremio" else "📺"
+            cor_titulo = "#a78bfa" if servico == "Stremio" else ("#94a3b8" if servico == "Sem streaming no BR" else "#60a5fa")
+            icone = "🎬" if servico == "Stremio" else ("❌" if servico == "Sem streaming no BR" else "📺")
 
             linha_cards = ft.Row(
                 spacing=10,
@@ -782,7 +792,7 @@ def main(page: ft.Page):
         page.update()
 
     # -------------------------------------------------------------
-    # BUSCA
+    # MELHORIA 2: CAMPO DE BUSCA COM BOTÃO DE LUPA
     # -------------------------------------------------------------
     coluna_sugestoes = ft.Column(spacing=4)
     container_sugestoes = ft.Container(
@@ -791,15 +801,6 @@ def main(page: ft.Page):
         border_radius=8,
         padding=6,
         visible=False
-    )
-
-    campo_busca = ft.TextField(
-        hint_text="Buscar filmes ou séries...",
-        bgcolor="#0f172a",
-        dense=True,
-        border_radius=8,
-        border_color="#1e293b",
-        focused_border_color="#3b82f6"
     )
 
     def selecionar_sugestao(mid, mtype, tit, ano, p_url):
@@ -868,6 +869,11 @@ def main(page: ft.Page):
         except Exception:
             pass
 
+    def disparar_busca_manual(e=None):
+        termo = campo_busca.value
+        if termo and len(termo.strip()) >= 2:
+            buscar_sugestoes_api(termo)
+
     def ao_digitar_busca(e):
         termo = campo_busca.value
         if timer_busca["timer"]:
@@ -878,24 +884,41 @@ def main(page: ft.Page):
             page.update()
             return
 
-        t = threading.Timer(0.2, buscar_sugestoes_api, args=[termo])
+        t = threading.Timer(0.25, buscar_sugestoes_api, args=[termo])
         timer_busca["timer"] = t
         t.start()
 
-    campo_busca.on_change = ao_digitar_busca
+    campo_busca = ft.TextField(
+        hint_text="Buscar filmes ou séries...",
+        bgcolor="#0f172a",
+        dense=True,
+        border_radius=8,
+        border_color="#1e293b",
+        focused_border_color="#3b82f6",
+        expand=True,
+        on_change=ao_digitar_busca,
+        on_submit=disparar_busca_manual
+    )
 
+    btn_lupa = ft.IconButton(
+        icon=ft.Icons.SEARCH,
+        icon_color="#3b82f6",
+        tooltip="Buscar filme",
+        on_click=disparar_busca_manual
+    )
+
+    # MELHORIA 1: Bloco de busca estático e fixo no topo
     header_busca = ft.Column([
-        campo_busca,
+        ft.Row([campo_busca, btn_lupa], spacing=4, alignment=ft.MainAxisAlignment.CENTER),
         container_sugestoes
-    ], spacing=6, width=400, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
+    ], spacing=4, width=420, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
 
     # -------------------------------------------------------------
     # VIEWS
     # -------------------------------------------------------------
     view_inicio = ft.Column(
         controls=[
-            header_busca,
-            ft.Container(content=ft.Text("Filmes em Alta (TMDb Trends)", size=17, weight="bold"), width=400),
+            ft.Container(content=ft.Text("Filmes em Alta (TMDb Trends)", size=17, weight="bold"), width=420),
             grade_populares,
             ft.Container(
                 content=ft.Column([spinner_carregamento, btn_carregar_mais], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
@@ -930,7 +953,7 @@ def main(page: ft.Page):
         page.update()
 
     # -------------------------------------------------------------
-    # CABEÇALHO
+    # CABEÇALHO FIXO
     # -------------------------------------------------------------
     lbl_app_titulo = ft.Text("MOVIE INSERT", size=22, weight="bold", color="white", text_align=ft.TextAlign.CENTER)
 
@@ -958,10 +981,12 @@ def main(page: ft.Page):
 
     linha_botoes_topo = ft.Row(controls=[btn_tab_inicio, btn_tab_bib], spacing=12, alignment=ft.MainAxisAlignment.CENTER)
 
+    # Elementos adicionados na raiz: Topo com Título, Abas e Busca permanecem estáticos no topo
     page.add(
         progresso,
         lbl_app_titulo,
         linha_botoes_topo,
+        header_busca,
         view_inicio,
         coluna_biblioteca
     )
