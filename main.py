@@ -11,6 +11,7 @@ CONFIG_FILE = "config.json"
 DB_FILE = "filmes.db"
 
 STREAMINGS_PADRAO = [
+    "Stremio",
     "Netflix",
     "Max",
     "Amazon Prime Video",
@@ -105,7 +106,8 @@ def main(page: ft.Page):
 
     paginacao = {
         "pagina_atual": 1,
-        "carregando": False
+        "carregando": False,
+        "fim_catalogo": False
     }
 
     progresso = ft.ProgressBar(color="#3b82f6", bgcolor="transparent", visible=False)
@@ -142,6 +144,7 @@ def main(page: ft.Page):
         fechar_dialogo(modal_confirmacao)
 
     modal_confirmacao = ft.AlertDialog(
+        modal=False,  # Clicar fora fecha a confirmação
         title=ft.Text("Confirmar Exclusão", size=16, weight="bold", color="#ef4444"),
         content=txt_confirmacao_msg,
         actions=[
@@ -210,6 +213,7 @@ def main(page: ft.Page):
         fechar_dialogo(modal_avaliacao)
 
     modal_avaliacao = ft.AlertDialog(
+        modal=False,  # Clicar fora fecha a avaliação
         title=ft.Text("Qual nota você dá ao filme?", size=16, weight="bold"),
         content=ft.Column([
             ft.Text("Toque na nota de 1 a 10:", size=13, color="#94a3b8"),
@@ -233,7 +237,7 @@ def main(page: ft.Page):
         abrir_dialogo(modal_avaliacao)
 
     # -------------------------------------------------------------
-    # JANELA DE DETALHES (CORRIGIDA SEM BLOCO CINZA)
+    # JANELA DE DETALHES (CLICAR FORA FECHA)
     # -------------------------------------------------------------
     dt_img = ft.Image(
         src="https://via.placeholder.com/130x195?text=Sem+Poster",
@@ -246,7 +250,7 @@ def main(page: ft.Page):
     dt_meta = ft.Text("", size=12, color="#94a3b8")
     dt_stream = ft.Text("", size=12, color="#10b981", weight="bold")
     dt_sinopse = ft.Text("", size=13, color="#cbd5e1")
-    
+
     txt_stremio = ft.Text("🔍 Verificando lançamento...", size=11, weight="bold", color="#93c5fd")
     dt_stremio_status = ft.Container(
         content=txt_stremio,
@@ -283,7 +287,6 @@ def main(page: ft.Page):
         on_click=fechar_detalhes
     )
 
-    # Coluna com as informações textuais ao lado ou abaixo da imagem
     coluna_info_topo = ft.Column([
         dt_titulo,
         dt_meta,
@@ -321,7 +324,7 @@ def main(page: ft.Page):
 
     modal_detalhes = ft.AlertDialog(
         content=conteudo_modal,
-        modal=True,
+        modal=False,  # MELHORIA 2: Clicar fora fecha a tela de detalhes
         bgcolor="transparent",
         content_padding=0
     )
@@ -358,6 +361,9 @@ def main(page: ft.Page):
     btn_salvar.on_click = salvar_filme_ativo
 
     def abrir_detalhes(mid, mtype, titulo_prev, ano_prev, poster_prev):
+        # Esconde a busca se estiver aberta
+        container_sugestoes.visible = False
+
         dt_img.src = poster_prev if poster_prev else "https://via.placeholder.com/130x195?text=Sem+Poster"
         dt_titulo.value = f"{titulo_prev} ({ano_prev})"
         dt_meta.value = "Obtendo dados..."
@@ -405,7 +411,7 @@ def main(page: ft.Page):
                 sinopse = res.get("overview") or "Sinopse não disponível em português."
 
                 br_providers = res.get("watch/providers", {}).get("results", {}).get("BR", {}).get("flatrate", [])
-                streamings = ", ".join([p.get("provider_name") for p in br_providers]) if br_providers else "Sem streaming no BR"
+                stream_nomes = [p.get("provider_name") for p in br_providers]
 
                 poster_path = res.get("poster_path")
                 poster_url = f"https://image.tmdb.org/t/p/w300{poster_path}" if poster_path else poster_prev
@@ -447,6 +453,12 @@ def main(page: ft.Page):
                             break
                     if not tem_digital and br_providers:
                         tem_digital = True
+
+                # Se houver lançamento digital, adiciona Stremio à lista de plataformas
+                if tem_digital and "Stremio" not in stream_nomes:
+                    stream_nomes.insert(0, "Stremio")
+
+                streamings = ", ".join(stream_nomes) if stream_nomes else "Sem streaming no BR"
 
                 chave_id = imdb_id or f"{mtype}_{mid}"
                 nota_usr = None
@@ -608,10 +620,10 @@ def main(page: ft.Page):
     grade_populares = ft.Row(wrap=True, spacing=12, run_spacing=14, alignment=ft.MainAxisAlignment.CENTER)
     coluna_biblioteca = ft.Column(spacing=18, horizontal_alignment=ft.CrossAxisAlignment.START, visible=False)
 
-    spinner_carregamento = ft.ProgressRing(width=26, height=26, stroke_width=3, color="#3b82f6", visible=False)
+    spinner_carregamento = ft.ProgressRing(width=28, height=28, stroke_width=3, color="#3b82f6", visible=False)
 
     # -------------------------------------------------------------
-    # POPULARES E CARREGAMENTO
+    # MELHORIA 3: CARREGAMENTO AUTOMÁTICO POR NAVEGAÇÃO / SCROLL
     # -------------------------------------------------------------
     def carregar_populares(incrementar=False):
         c = carregar_config()
@@ -628,14 +640,15 @@ def main(page: ft.Page):
             page.update()
             return
 
-        if paginacao["carregando"]:
+        if paginacao["carregando"] or paginacao["fim_catalogo"]:
             return
 
         paginacao["carregando"] = True
         if incrementar:
             paginacao["pagina_atual"] += 1
-            spinner_carregamento.visible = True
-            page.update()
+        
+        spinner_carregamento.visible = True
+        page.update()
 
         def _fetch():
             try:
@@ -644,7 +657,13 @@ def main(page: ft.Page):
                 resp = requests.get(url, timeout=5.0)
 
                 if resp.status_code == 200:
-                    itens = resp.json().get("results", [])
+                    dados = resp.json()
+                    itens = dados.get("results", [])
+                    total_paginas = dados.get("total_pages", 1000)
+
+                    if p >= total_paginas or not itens:
+                        paginacao["fim_catalogo"] = True
+
                     if not incrementar:
                         grade_populares.controls.clear()
 
@@ -673,6 +692,20 @@ def main(page: ft.Page):
                 page.update()
 
         threading.Thread(target=_fetch, daemon=True).start()
+
+    def ao_rolar_pagina(e: ft.OnScrollEvent):
+        # Esconde a busca ao rolar
+        if container_sugestoes.visible:
+            container_sugestoes.visible = False
+            page.update()
+
+        # Gatilho para carregar mais filmes conforme o usuário navega para baixo
+        if view_inicio.visible and e.max_scroll_extent > 0:
+            if e.pixels >= (e.max_scroll_extent - 500):
+                if not paginacao["carregando"]:
+                    carregar_populares(incrementar=True)
+
+    page.on_scroll = ao_rolar_pagina
 
     def remover_filme_direto(fid):
         try:
@@ -707,7 +740,7 @@ def main(page: ft.Page):
         page.launch_url(f"file://{arq}")
 
     # -------------------------------------------------------------
-    # BIBLIOTECA
+    # MELHORIA 4: BIBLIOTECA COM FILEIRA EXCLUSIVA DO STREMIO
     # -------------------------------------------------------------
     def carregar_biblioteca():
         coluna_biblioteca.controls.clear()
@@ -765,6 +798,10 @@ def main(page: ft.Page):
             if not lista_filmes:
                 continue
 
+            # Destaque especial na cor do Stremio
+            cor_titulo = "#a78bfa" if servico == "Stremio" else "#60a5fa"
+            icone = "🎬" if servico == "Stremio" else "📺"
+
             linha_cards = ft.Row(
                 spacing=12,
                 scroll=ft.ScrollMode.AUTO,
@@ -776,7 +813,7 @@ def main(page: ft.Page):
 
             bloco_secao = ft.Column([
                 ft.Row([
-                    ft.Text(f"📺 {servico}", size=16, weight="bold", color="#60a5fa"),
+                    ft.Text(f"{icone} {servico}", size=16, weight="bold", color=cor_titulo),
                     ft.Container(
                         content=ft.Text(f"{len(lista_filmes)}", size=11, color="white", weight="bold"),
                         bgcolor="#1e293b",
@@ -792,7 +829,7 @@ def main(page: ft.Page):
         page.update()
 
     # -------------------------------------------------------------
-    # BUSCA STRICT-PREFIX
+    # BUSCA STRICT-PREFIX COM SUPORTE A FECHAMENTO AO CLICAR FORA
     # -------------------------------------------------------------
     coluna_sugestoes = ft.Column(spacing=4)
     container_sugestoes = ft.Container(
@@ -909,19 +946,13 @@ def main(page: ft.Page):
     # -------------------------------------------------------------
     # VIEWS
     # -------------------------------------------------------------
-    btn_carregar_mais = ft.Button(
-        content=ft.Text("Carregar Mais Filmes", color="white", size=13),
-        bgcolor="#1e293b",
-        on_click=lambda e: carregar_populares(incrementar=True)
-    )
-
     view_inicio = ft.Column(
         controls=[
             header_busca,
             ft.Container(content=ft.Text("Filmes em Alta (TMDb Trends)", size=17, weight="bold"), width=420),
             grade_populares,
             ft.Container(
-                content=ft.Column([spinner_carregamento, btn_carregar_mais], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                content=spinner_carregamento,
                 alignment=ft.Alignment(0, 0),
                 padding=ft.Padding(0, 10, 0, 30)
             )
@@ -932,6 +963,8 @@ def main(page: ft.Page):
 
     def alternar_tela(indice):
         fechar_dialogo(modal_detalhes)
+        container_sugestoes.visible = False
+
         if indice == 0:
             view_inicio.visible = True
             coluna_biblioteca.visible = False
@@ -951,7 +984,7 @@ def main(page: ft.Page):
         page.update()
 
     # -------------------------------------------------------------
-    # CABEÇALHO
+    # CABEÇALHO E DETECÇÃO DE CLIQUE FORA (MELHORIA 1)
     # -------------------------------------------------------------
     lbl_app_titulo = ft.Text("MOVIE INSERT", size=22, weight="bold", color="white", text_align=ft.TextAlign.CENTER)
 
@@ -979,13 +1012,28 @@ def main(page: ft.Page):
 
     linha_botoes_topo = ft.Row(controls=[btn_tab_inicio, btn_tab_bib], spacing=12, alignment=ft.MainAxisAlignment.CENTER)
 
-    page.add(
-        progresso,
-        lbl_app_titulo,
-        linha_botoes_topo,
-        view_inicio,
-        coluna_biblioteca
+    def ao_clicar_no_fundo(e):
+        # MELHORIA 1: Se a lista de busca estiver aberta e o usuário tocar fora dela, ela fecha
+        if container_sugestoes.visible:
+            container_sugestoes.visible = False
+            page.update()
+
+    layout_principal = ft.GestureDetector(
+        on_tap=ao_clicar_no_fundo,
+        content=ft.Column(
+            controls=[
+                progresso,
+                lbl_app_titulo,
+                linha_botoes_topo,
+                view_inicio,
+                coluna_biblioteca
+            ],
+            spacing=12,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER
+        )
     )
+
+    page.add(layout_principal)
     page.update()
     carregar_populares()
 
