@@ -233,19 +233,25 @@ def main(page: ft.Page):
         abrir_dialogo(modal_avaliacao)
 
     # -------------------------------------------------------------
-    # DETALHES RESPONSIVO
+    # JANELA DE DETALHES (CORRIGIDA SEM BLOCO CINZA)
     # -------------------------------------------------------------
-    dt_img = ft.Image(src="https://via.placeholder.com/140x210?text=Sem+Poster", width=120, height=180, border_radius=8, fit="cover")
-    dt_titulo = ft.Text("", size=17, weight="bold")
-    dt_meta = ft.Text("", size=11, color="#94a3b8")
+    dt_img = ft.Image(
+        src="https://via.placeholder.com/130x195?text=Sem+Poster",
+        width=125,
+        height=185,
+        border_radius=8,
+        fit="cover"
+    )
+    dt_titulo = ft.Text("", size=18, weight="bold", color="white")
+    dt_meta = ft.Text("", size=12, color="#94a3b8")
     dt_stream = ft.Text("", size=12, color="#10b981", weight="bold")
-    dt_sinopse = ft.Text("", size=12, color="#cbd5e1")
+    dt_sinopse = ft.Text("", size=13, color="#cbd5e1")
     
     txt_stremio = ft.Text("🔍 Verificando lançamento...", size=11, weight="bold", color="#93c5fd")
     dt_stremio_status = ft.Container(
         content=txt_stremio,
         bgcolor="#1e293b",
-        padding=ft.Padding(6, 4, 6, 4),
+        padding=ft.Padding(8, 4, 8, 4),
         border_radius=6
     )
 
@@ -277,10 +283,19 @@ def main(page: ft.Page):
         on_click=fechar_detalhes
     )
 
+    # Coluna com as informações textuais ao lado ou abaixo da imagem
+    coluna_info_topo = ft.Column([
+        dt_titulo,
+        dt_meta,
+        ft.Row([dt_imdb, dt_rt, dt_user], spacing=6, wrap=True),
+        dt_stremio_status,
+        dt_stream,
+    ], spacing=6, width=320)
+
     conteudo_modal = ft.Container(
         width=520,
         bgcolor="#111827",
-        padding=14,
+        padding=16,
         border_radius=12,
         border=ft.Border(
             ft.BorderSide(1.5, "#3b82f6"),
@@ -290,21 +305,18 @@ def main(page: ft.Page):
         ),
         content=ft.Column([
             ft.Row([btn_fechar], alignment=ft.MainAxisAlignment.END),
-            ft.Row([
-                dt_img,
-                ft.Column([
-                    dt_titulo,
-                    dt_meta,
-                    ft.Row([dt_imdb, dt_rt, dt_user], spacing=4, wrap=True),
-                    dt_stremio_status,
-                    dt_stream,
-                ], spacing=4, expand=True)
-            ], alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.START, wrap=True),
+            ft.Row(
+                [dt_img, coluna_info_topo],
+                alignment=ft.MainAxisAlignment.START,
+                vertical_alignment=ft.CrossAxisAlignment.START,
+                wrap=True,
+                spacing=12
+            ),
             ft.Row([btn_trailer, btn_salvar], spacing=8, wrap=True),
             btn_ir_lista,
             ft.Text("Sinopse", size=14, weight="bold", color="#94a3b8"),
             dt_sinopse,
-        ], spacing=8, scroll=ft.ScrollMode.AUTO, tight=True)
+        ], spacing=10, scroll=ft.ScrollMode.AUTO, tight=True)
     )
 
     modal_detalhes = ft.AlertDialog(
@@ -346,7 +358,7 @@ def main(page: ft.Page):
     btn_salvar.on_click = salvar_filme_ativo
 
     def abrir_detalhes(mid, mtype, titulo_prev, ano_prev, poster_prev):
-        dt_img.src = poster_prev if poster_prev else "https://via.placeholder.com/140x210?text=Sem+Poster"
+        dt_img.src = poster_prev if poster_prev else "https://via.placeholder.com/130x195?text=Sem+Poster"
         dt_titulo.value = f"{titulo_prev} ({ano_prev})"
         dt_meta.value = "Obtendo dados..."
         dt_stream.value = "Consultando disponibilidade..."
@@ -499,7 +511,7 @@ def main(page: ft.Page):
         threading.Thread(target=_fetch, daemon=True).start()
 
     # -------------------------------------------------------------
-    # CARDS COMPACTOS E RESPONSIVOS
+    # CARDS DOS FILMES
     # -------------------------------------------------------------
     def criar_card_filme(mid, mtype, titulo, ano, poster_url, categoria=None, nota=None):
         acoes = []
@@ -649,7 +661,7 @@ def main(page: ft.Page):
                         grade_populares.controls.append(
                             ft.Text(f"Erro na API TMDb: {resp.status_code}", color="#f87171")
                         )
-            except Exception as ex:
+            except Exception:
                 if not incrementar:
                     grade_populares.controls.clear()
                     grade_populares.controls.append(
