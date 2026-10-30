@@ -594,15 +594,10 @@ def main(page: ft.Page):
     grade_populares = ft.Row(wrap=True, spacing=10, run_spacing=12, alignment=ft.MainAxisAlignment.CENTER)
     coluna_biblioteca_itens = ft.Column(spacing=16, horizontal_alignment=ft.CrossAxisAlignment.START)
 
-    spinner_carregamento = ft.ProgressRing(width=26, height=26, stroke_width=3, color="#3b82f6", visible=False)
-    btn_carregar_mais = ft.Button(
-        content=ft.Text("Carregar Mais Filmes", color="white", size=12),
-        bgcolor="#1e293b",
-        on_click=lambda e: carregar_populares(incrementar=True)
-    )
+    spinner_carregamento = ft.ProgressRing(width=28, height=28, stroke_width=3, color="#3b82f6", visible=False)
 
     # -------------------------------------------------------------
-    # POPULARES
+    # POPULARES (CARREGAMENTO AUTOMÁTICO VIA SCROLL)
     # -------------------------------------------------------------
     def carregar_populares(incrementar=False):
         c = carregar_config()
@@ -638,7 +633,9 @@ def main(page: ft.Page):
                 if resp.status_code == 200:
                     dados = resp.json()
                     itens = dados.get("results", [])
-                    if not itens:
+                    total_p = dados.get("total_pages", 1000)
+
+                    if not itens or p >= total_p:
                         paginacao["fim"] = True
 
                     if not incrementar:
@@ -662,6 +659,12 @@ def main(page: ft.Page):
                 page.update()
 
         threading.Thread(target=_fetch, daemon=True).start()
+
+    def ao_rolar_inicio(e: ft.OnScrollEvent):
+        # Gatilho automático ao aproximar-se do rodapé da tela
+        if e.max_scroll_extent > 0 and e.pixels >= (e.max_scroll_extent - 400):
+            if not paginacao["carregando"]:
+                carregar_populares(incrementar=True)
 
     def remover_filme_direto(fid):
         try:
@@ -954,24 +957,27 @@ def main(page: ft.Page):
     )
 
     # -------------------------------------------------------------
-    # VIEWS ROLÁVEIS
+    # VIEWS ROLÁVEIS COM ROLAGEM INFINITA AUTOMÁTICA
     # -------------------------------------------------------------
+    coluna_scroll_inicio = ft.Column(
+        controls=[
+            ft.Container(content=ft.Text("Filmes em Alta (TMDb Trends)", size=17, weight="bold"), width=420),
+            grade_populares,
+            ft.Container(
+                content=spinner_carregamento,
+                alignment=ft.Alignment(0, 0),
+                padding=ft.Padding(0, 15, 0, 35)
+            )
+        ],
+        spacing=14,
+        scroll=ft.ScrollMode.AUTO,
+        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+        on_scroll=ao_rolar_inicio
+    )
+
     view_inicio = ft.Container(
         expand=True,
-        content=ft.Column(
-            controls=[
-                ft.Container(content=ft.Text("Filmes em Alta (TMDb Trends)", size=17, weight="bold"), width=420),
-                grade_populares,
-                ft.Container(
-                    content=ft.Column([spinner_carregamento, btn_carregar_mais], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-                    alignment=ft.Alignment(0, 0),
-                    padding=ft.Padding(0, 10, 0, 40)
-                )
-            ],
-            spacing=14,
-            scroll=ft.ScrollMode.AUTO,
-            horizontal_alignment=ft.CrossAxisAlignment.CENTER
-        ),
+        content=coluna_scroll_inicio,
         on_click=fechar_busca_se_aberta
     )
 
