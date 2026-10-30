@@ -597,7 +597,7 @@ def main(page: ft.Page):
     spinner_carregamento = ft.ProgressRing(width=28, height=28, stroke_width=3, color="#3b82f6", visible=False)
 
     # -------------------------------------------------------------
-    # POPULARES (CARREGAMENTO AUTOMÁTICO VIA SCROLL)
+    # POPULARES (ROLAGEM CONTÍNUA ROBUSTA)
     # -------------------------------------------------------------
     def carregar_populares(incrementar=False):
         c = carregar_config()
@@ -628,7 +628,7 @@ def main(page: ft.Page):
             try:
                 p = paginacao["pagina_atual"]
                 url = f"https://api.themoviedb.org/3/trending/movie/week?api_key={tmdb_key}&language=pt-BR&page={p}"
-                resp = requests.get(url, timeout=4.0)
+                resp = requests.get(url, timeout=5.0)
 
                 if resp.status_code == 200:
                     dados = resp.json()
@@ -661,9 +661,9 @@ def main(page: ft.Page):
         threading.Thread(target=_fetch, daemon=True).start()
 
     def ao_rolar_inicio(e: ft.OnScrollEvent):
-        # Gatilho automático ao aproximar-se do rodapé da tela
-        if e.max_scroll_extent > 0 and e.pixels >= (e.max_scroll_extent - 400):
-            if not paginacao["carregando"]:
+        # Gatilho de rolagem com margem alargada (800px) para antecipar a carga
+        if e.max_scroll_extent > 0 and (e.pixels + 800) >= e.max_scroll_extent:
+            if not paginacao["carregando"] and not paginacao["fim"]:
                 carregar_populares(incrementar=True)
 
     def remover_filme_direto(fid):
@@ -957,7 +957,7 @@ def main(page: ft.Page):
     )
 
     # -------------------------------------------------------------
-    # VIEWS ROLÁVEIS COM ROLAGEM INFINITA AUTOMÁTICA
+    # VIEWS ROLÁVEIS (COM ROLAGEM INFINITA ATIVA)
     # -------------------------------------------------------------
     coluna_scroll_inicio = ft.Column(
         controls=[
