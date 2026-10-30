@@ -5,12 +5,12 @@ import os
 import requests
 import threading
 import unicodedata
+from urllib.parse import quote_plus
 from datetime import datetime
 
 CONFIG_FILE = "config.json"
 DB_FILE = "filmes.db"
 
-# Canais padrão (Stremio será posicionado como penúltimo e Sem Streaming como último na Biblioteca)
 STREAMINGS_PADRAO = [
     "Netflix",
     "Max",
@@ -113,8 +113,13 @@ def main(page: ft.Page):
     progresso = ft.ProgressBar(color="#3b82f6", bgcolor="transparent", visible=False)
 
     # -------------------------------------------------------------
-    # DIÁLOGOS
+    # FECHAR LISTA DE BUSCA AO CLICAR FORA
     # -------------------------------------------------------------
+    def fechar_busca_se_aberta(e=None):
+        if container_sugestoes.visible:
+            container_sugestoes.visible = False
+            page.update()
+
     def abrir_dialogo(modal):
         modal.open = True
         if modal not in page.overlay:
@@ -231,7 +236,7 @@ def main(page: ft.Page):
         abrir_dialogo(modal_avaliacao)
 
     # -------------------------------------------------------------
-    # JANELA DE DETALHES
+    # JANELA DE DETALHES COM CORREÇÃO DE TRAILER NO YOUTUBE
     # -------------------------------------------------------------
     dt_img = ft.Image(
         src="https://via.placeholder.com/130x195?text=Sem+Poster",
@@ -257,16 +262,24 @@ def main(page: ft.Page):
     dt_rt = ft.Container(content=ft.Text("🍅 --", color="white", size=11, weight="bold"), bgcolor="#ef4444", padding=ft.Padding(5, 2, 5, 2), border_radius=5)
     dt_user = ft.Container(content=ft.Text("★ --", color="white", size=11, weight="bold"), bgcolor="#8b5cf6", padding=ft.Padding(5, 2, 5, 2), border_radius=5)
 
+    # Função garantida de abertura em nova aba (_blank)
     def abrir_trailer_link(e):
         it = item_ativo.get("data")
-        if it:
-            url = it.get("trailer_url")
-            if not url:
-                termo = f"trailer {it.get('titulo', '')} {it.get('ano', '')}"
-                url = f"https://www.youtube.com/results?search_query={requests.utils.quote(termo)}"
-            page.launch_url(url, web_window_name="_blank")
+        if not it:
+            return
+        
+        url_trailer = it.get("trailer_url")
+        if not url_trailer:
+            nome_busca = f"trailer oficial {it.get('titulo', '')} {it.get('ano', '')}"
+            url_trailer = f"https://www.youtube.com/results?search_query={quote_plus(nome_busca)}"
+        
+        page.launch_url(url_trailer, web_window_name="_blank")
 
-    btn_trailer = ft.Button(content=ft.Text("▶ Trailer", color="white", size=12), bgcolor="#dc2626", on_click=abrir_trailer_link)
+    btn_trailer = ft.Button(
+        content=ft.Text("▶ Trailer", color="white", size=12, weight="bold"),
+        bgcolor="#dc2626",
+        on_click=abrir_trailer_link
+    )
     btn_salvar = ft.Button(content=ft.Text("+ Adicionar à Lista", color="white", size=12), bgcolor="#3b82f6", disabled=True)
     btn_ir_lista = ft.Button(content=ft.Text("📁 Ir para Minha Lista", color="white", size=12), bgcolor="#10b981", visible=False)
 
@@ -359,7 +372,7 @@ def main(page: ft.Page):
     btn_salvar.on_click = salvar_filme_ativo
 
     def abrir_detalhes(mid, mtype, titulo_prev, ano_prev, poster_prev):
-        container_sugestoes.visible = False
+        fechar_busca_se_aberta()
         dt_img.src = poster_prev if poster_prev else "https://via.placeholder.com/130x195?text=Sem+Poster"
         dt_titulo.value = f"{titulo_prev} ({ano_prev})"
         dt_meta.value = "Obtendo dados..."
@@ -694,7 +707,7 @@ def main(page: ft.Page):
         page.launch_url(f"file://{arq}")
 
     # -------------------------------------------------------------
-    # MELHORIA 3: BIBLIOTECA COM STREMIO (PENÚLTIMO) E SEM STREAMING (ÚLTIMO)
+    # BIBLIOTECA: STREMIO (PENÚLTIMO) E SEM STREAMING (ÚLTIMO)
     # -------------------------------------------------------------
     def carregar_biblioteca():
         coluna_biblioteca.controls.clear()
@@ -733,7 +746,6 @@ def main(page: ft.Page):
             )
         )
 
-        # Mapa com a ordem exata: canais padrão -> Stremio -> Sem Streaming no Brasil
         ordem_secoes = list(STREAMINGS_PADRAO) + ["Stremio", "Sem streaming no BR"]
         mapa_streamings = {s: [] for s in ordem_secoes}
 
@@ -741,19 +753,16 @@ def main(page: ft.Page):
             st_str = streaming_txt or ""
             alocado = False
             
-            # Checa os serviços tradicionais
             for st_nome in STREAMINGS_PADRAO:
                 termo_busca = st_nome.lower().replace(" plus", "").replace("+", "")
                 if termo_busca in st_str.lower():
                     mapa_streamings[st_nome].append((mid, tit, ano, p_url, nota, cat))
                     alocado = True
             
-            # Checa Stremio (penúltima)
             if "stremio" in st_str.lower():
                 mapa_streamings["Stremio"].append((mid, tit, ano, p_url, nota, cat))
                 alocado = True
 
-            # Se não tiver nenhum serviço, vai para "Sem streaming no BR" (última)
             if not alocado or "sem streaming" in st_str.lower():
                 mapa_streamings["Sem streaming no BR"].append((mid, tit, ano, p_url, nota, cat))
 
@@ -792,7 +801,7 @@ def main(page: ft.Page):
         page.update()
 
     # -------------------------------------------------------------
-    # MELHORIA 2: CAMPO DE BUSCA COM BOTÃO DE LUPA
+    # BUSCA COM FECHAMENTO AUTOMÁTICO AO CLICAR FORA
     # -------------------------------------------------------------
     coluna_sugestoes = ft.Column(spacing=4)
     container_sugestoes = ft.Container(
@@ -907,7 +916,6 @@ def main(page: ft.Page):
         on_click=disparar_busca_manual
     )
 
-    # MELHORIA 1: Bloco de busca estático e fixo no topo
     header_busca = ft.Column([
         ft.Row([campo_busca, btn_lupa], spacing=4, alignment=ft.MainAxisAlignment.CENTER),
         container_sugestoes
@@ -916,23 +924,26 @@ def main(page: ft.Page):
     # -------------------------------------------------------------
     # VIEWS
     # -------------------------------------------------------------
-    view_inicio = ft.Column(
-        controls=[
-            ft.Container(content=ft.Text("Filmes em Alta (TMDb Trends)", size=17, weight="bold"), width=420),
-            grade_populares,
-            ft.Container(
-                content=ft.Column([spinner_carregamento, btn_carregar_mais], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-                alignment=ft.Alignment(0, 0),
-                padding=ft.Padding(0, 10, 0, 40)
-            )
-        ],
-        spacing=14,
-        horizontal_alignment=ft.CrossAxisAlignment.CENTER
+    view_inicio = ft.Container(
+        content=ft.Column(
+            controls=[
+                ft.Container(content=ft.Text("Filmes em Alta (TMDb Trends)", size=17, weight="bold"), width=420),
+                grade_populares,
+                ft.Container(
+                    content=ft.Column([spinner_carregamento, btn_carregar_mais], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                    alignment=ft.Alignment(0, 0),
+                    padding=ft.Padding(0, 10, 0, 40)
+                )
+            ],
+            spacing=14,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER
+        ),
+        on_click=fechar_busca_se_aberta
     )
 
     def alternar_tela(indice):
         fechar_dialogo(modal_detalhes)
-        container_sugestoes.visible = False
+        fechar_busca_se_aberta()
 
         if indice == 0:
             view_inicio.visible = True
@@ -981,15 +992,24 @@ def main(page: ft.Page):
 
     linha_botoes_topo = ft.Row(controls=[btn_tab_inicio, btn_tab_bib], spacing=12, alignment=ft.MainAxisAlignment.CENTER)
 
-    # Elementos adicionados na raiz: Topo com Título, Abas e Busca permanecem estáticos no topo
-    page.add(
-        progresso,
-        lbl_app_titulo,
-        linha_botoes_topo,
-        header_busca,
-        view_inicio,
-        coluna_biblioteca
+    # Detetor global para fechar a busca ao clicar nas margens ou áreas vazias da página
+    area_pagina = ft.Container(
+        content=ft.Column(
+            controls=[
+                progresso,
+                lbl_app_titulo,
+                linha_botoes_topo,
+                header_busca,
+                view_inicio,
+                coluna_biblioteca
+            ],
+            spacing=12,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER
+        ),
+        on_click=fechar_busca_se_aberta
     )
+
+    page.add(area_pagina)
     page.update()
     carregar_populares()
 
