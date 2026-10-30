@@ -10,6 +10,17 @@ from datetime import datetime
 CONFIG_FILE = "config.json"
 DB_FILE = "filmes.db"
 
+STREAMINGS_PADRAO = [
+    "Netflix",
+    "Max",
+    "Amazon Prime Video",
+    "Disney Plus",
+    "Apple TV Plus",
+    "Globoplay",
+    "Paramount Plus",
+    "Telecine"
+]
+
 def carregar_config():
     if os.path.exists(CONFIG_FILE):
         try:
@@ -28,7 +39,7 @@ def salvar_config(omdb, tmdb):
 
 def init_db():
     try:
-        with sqlite3.connect(DB_FILE, timeout=5) as conn:
+        with sqlite3.connect(DB_FILE, timeout=10) as conn:
             c = conn.cursor()
             c.execute("""
                 CREATE TABLE IF NOT EXISTS filmes (
@@ -90,11 +101,10 @@ def main(page: ft.Page):
 
     page.window_width = 1180
     page.window_height = 840
-    page.window_min_width = 600
+    page.window_min_width = 500
     page.window_min_height = 650
 
     init_db()
-    cfg = carregar_config()
     item_ativo = {"data": None}
     timer_busca = {"timer": None}
     filme_avaliando = {"id": None, "nota": "10"}
@@ -108,7 +118,7 @@ def main(page: ft.Page):
     progresso = ft.ProgressBar(color="#3b82f6", bgcolor="transparent", visible=False)
 
     # -------------------------------------------------------------
-    # DIÁLOGOS DE AVALIAÇÃO E EXCLUSÃO
+    # DIÁLOGOS
     # -------------------------------------------------------------
     def abrir_dialogo(modal):
         modal.open = True
@@ -126,7 +136,7 @@ def main(page: ft.Page):
         fid = filme_para_remover["id"]
         if fid:
             try:
-                with sqlite3.connect(DB_FILE, timeout=5) as conn:
+                with sqlite3.connect(DB_FILE, timeout=10) as conn:
                     c = conn.cursor()
                     c.execute("DELETE FROM filmes WHERE id = ?", (fid,))
                     conn.commit()
@@ -194,7 +204,7 @@ def main(page: ft.Page):
         nota = filme_avaliando.get("nota", "10")
         if fid:
             try:
-                with sqlite3.connect(DB_FILE, timeout=5) as conn:
+                with sqlite3.connect(DB_FILE, timeout=10) as conn:
                     c = conn.cursor()
                     c.execute("UPDATE filmes SET categoria = 'Assistidos', nota_usuario = ? WHERE id = ?", (nota, fid))
                     conn.commit()
@@ -265,10 +275,6 @@ def main(page: ft.Page):
     def acao_ir_para_lista(e):
         fechar_dialogo(modal_detalhes)
         alternar_tela(1)
-        try:
-            view_biblioteca.scroll_to(offset=0, duration=200)
-        except Exception:
-            pass
 
     btn_ir_lista.on_click = acao_ir_para_lista
 
@@ -321,7 +327,7 @@ def main(page: ft.Page):
             return
 
         try:
-            with sqlite3.connect(DB_FILE, timeout=5) as conn:
+            with sqlite3.connect(DB_FILE, timeout=10) as conn:
                 c = conn.cursor()
                 c.execute("SELECT categoria FROM filmes WHERE id = ?", (it["id"],))
                 if not c.fetchone():
@@ -346,11 +352,7 @@ def main(page: ft.Page):
 
     btn_salvar.on_click = salvar_filme_ativo
 
-    # -------------------------------------------------------------
-    # CARREGAMENTO DOS DETALHES COM DESBLOQUEIO DE TELA
-    # -------------------------------------------------------------
     def abrir_detalhes(mid, mtype, titulo_prev, ano_prev, poster_prev):
-        # 1. Popula de imediato os dados já conhecidos antes de exibir
         dt_img.src = poster_prev if poster_prev else "https://via.placeholder.com/140x210?text=Sem+Poster"
         dt_titulo.value = f"{titulo_prev} ({ano_prev})"
         dt_meta.value = "A carregar ficha técnica..."
@@ -377,7 +379,7 @@ def main(page: ft.Page):
         def _fetch():
             try:
                 url_tmdb = f"https://api.themoviedb.org/3/{mtype}/{mid}?api_key={tmdb_key}&language=pt-BR&append_to_response=credits,watch/providers,external_ids,videos,release_dates"
-                res = requests.get(url_tmdb, timeout=3.5).json()
+                res = requests.get(url_tmdb, timeout=4.0).json()
 
                 diretor = "N/A"
                 credits_data = res.get("credits", {})
@@ -408,7 +410,7 @@ def main(page: ft.Page):
 
                 if omdb_key and imdb_id:
                     try:
-                        res_omdb = requests.get(f"https://www.omdbapi.com/?i={imdb_id}&apikey={omdb_key}", timeout=2.0).json()
+                        res_omdb = requests.get(f"https://www.omdbapi.com/?i={imdb_id}&apikey={omdb_key}", timeout=2.5).json()
                         if res_omdb.get("Response") == "True":
                             imdb_nota = res_omdb.get("imdbRating", "N/A")
                             for val in res_omdb.get("Ratings", []):
@@ -446,7 +448,7 @@ def main(page: ft.Page):
                 cat_exist = None
 
                 try:
-                    with sqlite3.connect(DB_FILE, timeout=5) as conn:
+                    with sqlite3.connect(DB_FILE, timeout=10) as conn:
                         cur = conn.cursor()
                         cur.execute("SELECT nota_usuario, categoria FROM filmes WHERE id = ?", (chave_id,))
                         row = cur.fetchone()
@@ -498,14 +500,13 @@ def main(page: ft.Page):
                 pass
             finally:
                 progresso.visible = False
-                # Atualiza os componentes diretamente
                 conteudo_modal.update()
                 page.update()
 
         threading.Thread(target=_fetch, daemon=True).start()
 
     # -------------------------------------------------------------
-    # CRIAÇÃO DOS CARDS (ZOOM E HOVER LEVE COM HIGHLIGHT AZUL)
+    # CARDS DOS FILMES
     # -------------------------------------------------------------
     def criar_card_filme(mid, mtype, titulo, ano, poster_url, categoria=None, nota=None):
         acoes = []
@@ -544,7 +545,7 @@ def main(page: ft.Page):
             )
 
         card_corpo = ft.Container(
-            width=165,
+            width=150,
             bgcolor="#111827",
             padding=6,
             border_radius=10,
@@ -557,9 +558,9 @@ def main(page: ft.Page):
             ),
             content=ft.Column([
                 ft.Image(
-                    src=poster_url if poster_url else "https://via.placeholder.com/150x210?text=Sem+Poster",
-                    width=153,
-                    height=215,
+                    src=poster_url if poster_url else "https://via.placeholder.com/140x200?text=Sem+Poster",
+                    width=138,
+                    height=195,
                     border_radius=8,
                     fit="cover"
                 ),
@@ -569,10 +570,10 @@ def main(page: ft.Page):
                     weight="bold",
                     max_lines=2,
                     overflow="ellipsis",
-                    width=153,
+                    width=138,
                     text_align=ft.TextAlign.CENTER
                 ),
-                ft.Row(acoes, spacing=4, alignment=ft.MainAxisAlignment.SPACE_BETWEEN, width=153) if acoes else ft.Container()
+                ft.Row(acoes, spacing=4, alignment=ft.MainAxisAlignment.SPACE_BETWEEN, width=138) if acoes else ft.Container()
             ], spacing=4, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
             on_click=lambda e: abrir_detalhes(mid, mtype, titulo, ano, poster_url)
         )
@@ -600,12 +601,12 @@ def main(page: ft.Page):
         return card_corpo
 
     grade_populares = ft.Row(wrap=True, spacing=16, run_spacing=18, alignment=ft.MainAxisAlignment.CENTER)
-    coluna_biblioteca = ft.Column(spacing=15, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
+    coluna_biblioteca = ft.Column(spacing=20, horizontal_alignment=ft.CrossAxisAlignment.START, expand=True)
 
     spinner_carregamento = ft.ProgressRing(width=28, height=28, stroke_width=3, color="#3b82f6", visible=False)
 
     # -------------------------------------------------------------
-    # ROLAGEM INFINITA
+    # ROLAGEM INFINITA (INÍCIO)
     # -------------------------------------------------------------
     def carregar_populares(incrementar=False):
         c = carregar_config()
@@ -652,7 +653,7 @@ def main(page: ft.Page):
 
     def remover_filme_direto(fid):
         try:
-            with sqlite3.connect(DB_FILE, timeout=5) as conn:
+            with sqlite3.connect(DB_FILE, timeout=10) as conn:
                 c = conn.cursor()
                 c.execute("DELETE FROM filmes WHERE id = ?", (fid,))
                 conn.commit()
@@ -663,7 +664,7 @@ def main(page: ft.Page):
     def imprimir_lista():
         filmes = []
         try:
-            with sqlite3.connect(DB_FILE, timeout=5) as conn:
+            with sqlite3.connect(DB_FILE, timeout=10) as conn:
                 c = conn.cursor()
                 c.execute("SELECT titulo, ano, imdb, rotten, streaming, diretor FROM filmes WHERE categoria = 'Para Assistir' ORDER BY titulo ASC")
                 filmes = c.fetchall()
@@ -682,44 +683,92 @@ def main(page: ft.Page):
             f.write(html)
         page.launch_url(f"file://{arq}")
 
+    # -------------------------------------------------------------
+    # BIBLIOTECA ORGANIZADA POR FILEIRAS DE STREAMING
+    # -------------------------------------------------------------
     def carregar_biblioteca():
         coluna_biblioteca.controls.clear()
-        total = 0
+        itens_db = []
 
         try:
-            with sqlite3.connect(DB_FILE, timeout=5) as conn:
+            with sqlite3.connect(DB_FILE, timeout=10) as conn:
                 c = conn.cursor()
-                for cat in ["Para Assistir", "Assistidos"]:
-                    c.execute("SELECT id, titulo, ano, poster_url, nota_usuario FROM filmes WHERE categoria = ? ORDER BY rowid DESC", (cat,))
-                    itens = c.fetchall()
-                    if not itens:
-                        continue
-
-                    total += len(itens)
-                    cabecalho = [ft.Text(f"{cat} ({len(itens)})", size=20, weight="bold")]
-                    if cat == "Para Assistir":
-                        cabecalho.append(
-                            ft.Button(
-                                content=ft.Text("🖨️ Imprimir Lista", color="white", size=12, weight="bold"),
-                                bgcolor="#334155",
-                                on_click=lambda e: imprimir_lista()
-                            )
-                        )
-
-                    grade_cat = ft.Row(wrap=True, spacing=16, run_spacing=18, alignment=ft.MainAxisAlignment.CENTER)
-                    for mid, tit, ano, p_url, nota in itens:
-                        grade_cat.controls.append(criar_card_filme(mid, "movie", tit, ano, p_url, categoria=cat, nota=nota))
-
-                    coluna_biblioteca.controls.append(ft.Container(
-                        content=ft.Row(cabecalho, alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                        width=720
-                    ))
-                    coluna_biblioteca.controls.append(grade_cat)
+                c.execute("SELECT id, titulo, ano, poster_url, nota_usuario, categoria, streaming FROM filmes ORDER BY rowid DESC")
+                itens_db = c.fetchall()
         except Exception:
             pass
 
-        if total == 0:
-            coluna_biblioteca.controls.append(ft.Text("Nenhum filme salvo na biblioteca ainda.", color="grey", size=16))
+        if not itens_db:
+            coluna_biblioteca.controls.append(
+                ft.Container(
+                    content=ft.Text("Nenhum filme salvo na biblioteca ainda.", color="#94a3b8", size=16),
+                    padding=ft.Padding(20, 40, 20, 20)
+                )
+            )
+            page.update()
+            return
+
+        # Topo da Biblioteca com Botão de Imprimir
+        btn_print = ft.Button(
+            content=ft.Text("🖨️ Imprimir Lista", color="white", size=12, weight="bold"),
+            bgcolor="#334155",
+            on_click=lambda e: imprimir_lista()
+        )
+        coluna_biblioteca.controls.append(
+            ft.Row(
+                [
+                    ft.Text(f"Minha Biblioteca ({len(itens_db)} filmes)", size=22, weight="bold"),
+                    btn_print
+                ],
+                alignment=ft.MainAxisAlignment.SPACE_BETWEEN
+            )
+        )
+
+        # Mapeamento dos filmes para cada canal de streaming
+        mapa_streamings = {s: [] for s in STREAMINGS_PADRAO}
+        mapa_streamings["Outros / Sem Streaming"] = []
+
+        for mid, tit, ano, p_url, nota, cat, streaming_txt in itens_db:
+            st_str = streaming_txt or ""
+            alocado = False
+            for st_nome in STREAMINGS_PADRAO:
+                # Normalização simplificada de nomes (ex: Disney Plus vs Disney+)
+                termo_busca = st_nome.lower().replace(" plus", "").replace("+", "")
+                if termo_busca in st_str.lower():
+                    mapa_streamings[st_nome].append((mid, tit, ano, p_url, nota, cat))
+                    alocado = True
+            
+            if not alocado:
+                mapa_streamings["Outros / Sem Streaming"].append((mid, tit, ano, p_url, nota, cat))
+
+        # Criação de cada fileira horizontal
+        for servico, lista_filmes in mapa_streamings.items():
+            if not lista_filmes:
+                continue
+
+            linha_cards = ft.Row(
+                spacing=14,
+                scroll=ft.ScrollMode.AUTO,
+                controls=[
+                    criar_card_filme(mid, "movie", tit, ano, p_url, categoria=cat, nota=nota)
+                    for mid, tit, ano, p_url, nota, cat in lista_filmes
+                ]
+            )
+
+            bloco_secao = ft.Column([
+                ft.Row([
+                    ft.Text(f"📺 {servico}", size=17, weight="bold", color="#60a5fa"),
+                    ft.Container(
+                        content=ft.Text(f"{len(lista_filmes)}", size=11, color="white", weight="bold"),
+                        bgcolor="#1e293b",
+                        padding=ft.Padding(6, 2, 6, 2),
+                        border_radius=10
+                    )
+                ], spacing=8),
+                linha_cards
+            ], spacing=8)
+
+            coluna_biblioteca.controls.append(bloco_secao)
 
         page.update()
 
@@ -861,7 +910,7 @@ def main(page: ft.Page):
         visible=False,
         scroll=ft.ScrollMode.AUTO,
         expand=True,
-        horizontal_alignment=ft.CrossAxisAlignment.CENTER
+        horizontal_alignment=ft.CrossAxisAlignment.START
     )
 
     def alternar_tela(indice):
@@ -935,6 +984,9 @@ def main(page: ft.Page):
     carregar_populares()
 
 if __name__ == "__main__":
+    # Compatível tanto para Windows nativo quanto para Nuvem/Render
     porta = int(os.environ.get("PORT", 8550))
-    ft.run(main, view=ft.AppView.WEB_BROWSER, host="0.0.0.0", port=porta)
-
+    if "PORT" in os.environ:
+        ft.run(main, view=ft.AppView.WEB_BROWSER, host="0.0.0.0", port=porta)
+    else:
+        ft.run(main)
