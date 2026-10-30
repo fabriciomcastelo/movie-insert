@@ -96,7 +96,6 @@ def main(page: ft.Page):
     page.bgcolor = "#0b0c0f"
     page.padding = ft.Padding(12, 10, 12, 10)
     page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
-    # Scroll nativo da página garante compatibilidade com roda do rato no PC e toque no móvel
     page.scroll = ft.ScrollMode.AUTO
 
     init_db()
@@ -229,7 +228,7 @@ def main(page: ft.Page):
         abrir_dialogo(modal_avaliacao)
 
     # -------------------------------------------------------------
-    # JANELA DE DETALHES COM TRAILER GARANTIDO
+    # JANELA DE DETALHES (COM TÍTULO ORIGINAL)
     # -------------------------------------------------------------
     dt_img = ft.Image(
         src="https://via.placeholder.com/130x195?text=Sem+Poster",
@@ -239,6 +238,7 @@ def main(page: ft.Page):
         fit="cover"
     )
     dt_titulo = ft.Text("", size=17, weight="bold", color="white")
+    dt_titulo_original = ft.Text("", size=12, italic=True, color="#94a3b8", visible=False)
     dt_meta = ft.Text("", size=11, color="#94a3b8")
     dt_stream = ft.Text("", size=12, color="#10b981", weight="bold")
     dt_sinopse = ft.Text("", size=12, color="#cbd5e1")
@@ -278,13 +278,15 @@ def main(page: ft.Page):
         on_click=fechar_detalhes
     )
 
+    # Inclusão do dt_titulo_original abaixo do título principal
     coluna_info_topo = ft.Column([
         dt_titulo,
+        dt_titulo_original,
         dt_meta,
         ft.Row([dt_imdb, dt_rt, dt_user], spacing=6, wrap=True),
         dt_stremio_status,
         dt_stream,
-    ], spacing=4, width=310)
+    ], spacing=3, width=310)
 
     conteudo_modal = ft.Container(
         width=480,
@@ -357,6 +359,7 @@ def main(page: ft.Page):
 
         dt_img.src = poster_prev if poster_prev else "https://via.placeholder.com/130x195?text=Sem+Poster"
         dt_titulo.value = f"{titulo_prev} ({ano_prev})"
+        dt_titulo_original.visible = False
         dt_meta.value = "Obtendo dados..."
         dt_stream.value = "Consultando disponibilidade..."
         dt_sinopse.value = "Carregando sinopse..."
@@ -400,6 +403,7 @@ def main(page: ft.Page):
                 elenco = ", ".join(elenco_list) if elenco_list else "Não informado"
 
                 titulo = res.get("title") or res.get("name") or titulo_prev
+                titulo_orig = res.get("original_title") or res.get("original_name") or ""
                 ano = str((res.get("release_date") or res.get("first_air_date")) or "")[:4] or ano_prev
                 sinopse = res.get("overview") or "Sinopse não disponível em português."
 
@@ -477,6 +481,14 @@ def main(page: ft.Page):
 
                 dt_img.src = poster_url
                 dt_titulo.value = f"{titulo} ({ano})"
+                
+                # Exibe o título original apenas se for diferente do título em português
+                if titulo_orig and normalizar_texto(titulo_orig) != normalizar_texto(titulo):
+                    dt_titulo_original.value = f"Original: {titulo_orig}"
+                    dt_titulo_original.visible = True
+                else:
+                    dt_titulo_original.visible = False
+
                 dt_meta.value = f"Direção: {diretor}\nElenco: {elenco}"
                 dt_imdb.content.value = f"⭐ {imdb_nota}"
                 dt_rt.content.value = f"🍅 {rt_nota}"
@@ -595,7 +607,7 @@ def main(page: ft.Page):
     spinner_carregamento = ft.ProgressRing(width=28, height=28, stroke_width=3, color="#3b82f6", visible=False)
 
     # -------------------------------------------------------------
-    # POPULARES E ROLAGEM INFINITA GLOBAL (ROBUSTA NO PC E NO MÓVEL)
+    # POPULARES E ROLAGEM INFINITA GLOBAL
     # -------------------------------------------------------------
     def carregar_populares(incrementar=False):
         c = carregar_config()
@@ -655,7 +667,6 @@ def main(page: ft.Page):
             finally:
                 paginacao["carregando"] = False
                 spinner_carregamento.visible = False
-                # Exibe botão sutil apenas caso a rolagem automática não seja acionada
                 btn_carregar_manual.visible = not paginacao["fim"]
                 page.update()
 
@@ -668,7 +679,6 @@ def main(page: ft.Page):
         visible=False
     )
 
-    # Detetor nativo do Flet na página toda (funciona com rato no PC e dedo no ecrã móvel)
     def ao_rolar_pagina(e: ft.OnScrollEvent):
         if container_sugestoes.visible:
             container_sugestoes.visible = False
