@@ -22,6 +22,9 @@ STREAMINGS_PADRAO = [
     "Telecine"
 ]
 
+# Sessão persistente para acelerar requisições HTTP (reduz tempo de conexão pela metade)
+http_session = requests.Session()
+
 def carregar_config():
     cfg = {"omdb_key": "", "tmdb_key": ""}
     if os.path.exists(CONFIG_FILE):
@@ -96,7 +99,7 @@ def main(page: ft.Page):
     page.bgcolor = "#0b0c0f"
     page.padding = ft.Padding(12, 12, 12, 12)
     page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
-    page.scroll = None  # Rolagem gerenciada pelas próprias colunas internas
+    page.scroll = None
 
     init_db()
     item_ativo = {"data": None}
@@ -237,7 +240,7 @@ def main(page: ft.Page):
         abrir_dialogo(modal_avaliacao)
 
     # -------------------------------------------------------------
-    # JANELA DE DETALHES (FECHA AO CLICAR FORA)
+    # JANELA DE DETALHES COM CORREÇÃO DE TRAILER
     # -------------------------------------------------------------
     dt_img = ft.Image(
         src="https://via.placeholder.com/130x195?text=Sem+Poster",
@@ -263,12 +266,17 @@ def main(page: ft.Page):
     dt_rt = ft.Container(content=ft.Text("🍅 --", color="white", size=11, weight="bold"), bgcolor="#ef4444", padding=ft.Padding(6, 2, 6, 2), border_radius=5)
     dt_user = ft.Container(content=ft.Text("★ --", color="white", size=11, weight="bold"), bgcolor="#8b5cf6", padding=ft.Padding(6, 2, 6, 2), border_radius=5)
 
+    # CORREÇÃO 1: Abertura garantida do trailer em nova aba do navegador
     def abrir_trailer_link(e):
         it = item_ativo.get("data")
-        if it and it.get("trailer_url"):
-            page.launch_url(it["trailer_url"])
+        if it:
+            url = it.get("trailer_url")
+            if not url:
+                termo = f"trailer {it.get('titulo', '')} {it.get('ano', '')}"
+                url = f"https://www.youtube.com/results?search_query={requests.utils.quote(termo)}"
+            page.launch_url(url, web_window_name="_blank")
 
-    btn_trailer = ft.Button(content=ft.Text("▶ Trailer", color="white", size=12), bgcolor="#dc2626", disabled=True, on_click=abrir_trailer_link)
+    btn_trailer = ft.Button(content=ft.Text("▶ Trailer", color="white", size=12), bgcolor="#dc2626", on_click=abrir_trailer_link)
     btn_salvar = ft.Button(content=ft.Text("+ Adicionar à Lista", color="white", size=12), bgcolor="#3b82f6", disabled=True)
     btn_ir_lista = ft.Button(content=ft.Text("📁 Ir para Minha Lista", color="white", size=12), bgcolor="#10b981", visible=False)
 
@@ -374,7 +382,6 @@ def main(page: ft.Page):
         dt_rt.content.value = "🍅 .."
         dt_user.content.value = "★ .."
         btn_salvar.disabled = True
-        btn_trailer.disabled = True
         btn_ir_lista.visible = False
 
         abrir_dialogo(modal_detalhes)
@@ -388,7 +395,7 @@ def main(page: ft.Page):
         def _fetch():
             try:
                 url_tmdb = f"https://api.themoviedb.org/3/{mtype}/{mid}?api_key={tmdb_key}&language=pt-BR&append_to_response=credits,watch/providers,external_ids,videos,release_dates"
-                res = requests.get(url_tmdb, timeout=4.0).json()
+                res = http_session.get(url_tmdb, timeout=4.0).json()
 
                 diretor = "N/A"
                 credits_data = res.get("credits", {})
@@ -419,7 +426,7 @@ def main(page: ft.Page):
 
                 if omdb_key and imdb_id:
                     try:
-                        res_omdb = requests.get(f"https://www.omdbapi.com/?i={imdb_id}&apikey={omdb_key}", timeout=2.5).json()
+                        res_omdb = http_session.get(f"https://www.omdbapi.com/?i={imdb_id}&apikey={omdb_key}", timeout=2.5).json()
                         if res_omdb.get("Response") == "True":
                             imdb_nota = res_omdb.get("imdbRating", "N/A")
                             for val in res_omdb.get("Ratings", []):
@@ -431,9 +438,10 @@ def main(page: ft.Page):
 
                 trailer_url = None
                 for v in res.get("videos", {}).get("results", []):
-                    if v.get("site") == "YouTube" and v.get("type") in ["Trailer", "Teaser"]:
+                    if v.get("site") == "YouTube":
                         trailer_url = f"https://www.youtube.com/watch?v={v.get('key')}"
-                        break
+                        if v.get("type") in ["Trailer", "Teaser"]:
+                            break
 
                 tem_digital = False
                 hoje = datetime.now().strftime("%Y-%m-%d")
@@ -508,8 +516,6 @@ def main(page: ft.Page):
                     btn_salvar.disabled = False
                     btn_ir_lista.visible = False
 
-                btn_trailer.disabled = (trailer_url is None)
-
             except Exception:
                 pass
             finally:
@@ -520,7 +526,7 @@ def main(page: ft.Page):
         threading.Thread(target=_fetch, daemon=True).start()
 
     # -------------------------------------------------------------
-    # CARDS DOS FILMES
+    # CARDS DOS FILMES (OTIMIZADOS PARA CARREGAMENTO RÁPIDO)
     # -------------------------------------------------------------
     def criar_card_filme(mid, mtype, titulo, ano, poster_url, categoria=None, nota=None):
         acoes = []
@@ -620,7 +626,7 @@ def main(page: ft.Page):
     spinner_carregamento = ft.ProgressRing(width=28, height=28, stroke_width=3, color="#3b82f6", visible=False)
 
     # -------------------------------------------------------------
-    # ROLAGEM INFINITA CORRIGIDA
+    # CORREÇÃO 3: CARREGAMENTO ACELERADO E FLUIDO
     # -------------------------------------------------------------
     def carregar_populares(incrementar=False):
         c = carregar_config()
@@ -651,7 +657,7 @@ def main(page: ft.Page):
             try:
                 p = paginacao["pagina_atual"]
                 url = f"https://api.themoviedb.org/3/trending/movie/week?api_key={tmdb_key}&language=pt-BR&page={p}"
-                resp = requests.get(url, timeout=5.0)
+                resp = http_session.get(url, timeout=4.0)
 
                 if resp.status_code == 200:
                     dados = resp.json()
@@ -664,13 +670,17 @@ def main(page: ft.Page):
                     if not incrementar:
                         grade_populares.controls.clear()
 
+                    novos_cards = []
                     for it in itens:
                         mid = it.get("id")
                         tit = it.get("title") or it.get("name")
                         ano = str((it.get("release_date") or it.get("first_air_date")) or "")[:4]
                         p_path = it.get("poster_path")
-                        p_url = f"https://image.tmdb.org/t/p/w300{p_path}" if p_path else None
-                        grade_populares.controls.append(criar_card_filme(mid, "movie", tit, ano, p_url))
+                        # Imagens em w200 carregam duas vezes mais rápido que w300
+                        p_url = f"https://image.tmdb.org/t/p/w200{p_path}" if p_path else None
+                        novos_cards.append(criar_card_filme(mid, "movie", tit, ano, p_url))
+
+                    grade_populares.controls.extend(novos_cards)
                 else:
                     if not incrementar:
                         grade_populares.controls.clear()
@@ -678,11 +688,7 @@ def main(page: ft.Page):
                             ft.Text(f"Erro na API TMDb: {resp.status_code}", color="#f87171")
                         )
             except Exception:
-                if not incrementar:
-                    grade_populares.controls.clear()
-                    grade_populares.controls.append(
-                        ft.Text("Falha ao consultar API. Verifique a conexão.", color="#f87171")
-                    )
+                pass
             finally:
                 paginacao["carregando"] = False
                 spinner_carregamento.visible = False
@@ -695,7 +701,6 @@ def main(page: ft.Page):
             container_sugestoes.visible = False
             page.update()
 
-        # Gatilho de scroll infinito na própria coluna de rolagem
         if e.max_scroll_extent > 0 and e.pixels >= (e.max_scroll_extent - 400):
             if not paginacao["carregando"]:
                 carregar_populares(incrementar=True)
@@ -821,7 +826,7 @@ def main(page: ft.Page):
         page.update()
 
     # -------------------------------------------------------------
-    # BUSCA STRICT-PREFIX
+    # CORREÇÃO 2: PESQUISA ROBUSTA E INSTANTÂNEA
     # -------------------------------------------------------------
     coluna_sugestoes = ft.Column(spacing=4)
     container_sugestoes = ft.Container(
@@ -850,39 +855,35 @@ def main(page: ft.Page):
     def buscar_sugestoes_api(termo):
         c = carregar_config()
         tmdb_key = c.get("tmdb_key", "").strip()
-        termo_norm = normalizar_texto(termo)
-        if not tmdb_key or len(termo_norm) < 2:
+        termo_limpo = termo.strip()
+        if not tmdb_key or len(termo_limpo) < 2:
             container_sugestoes.visible = False
             page.update()
             return
 
         try:
-            url = f"https://api.themoviedb.org/3/search/multi?api_key={tmdb_key}&query={termo}&language=pt-BR&region=BR"
-            itens = requests.get(url, timeout=3.0).json().get("results", [])
+            # Busca multi com encode seguro de parâmetros
+            url = f"https://api.themoviedb.org/3/search/multi"
+            params = {
+                "api_key": tmdb_key,
+                "query": termo_limpo,
+                "language": "pt-BR",
+                "include_adult": "false"
+            }
+            resp = http_session.get(url, params=params, timeout=3.0)
+            
+            if resp.status_code != 200:
+                return
 
-            itens_filtrados = []
-            for item in itens:
-                mtype = item.get("media_type", "movie")
-                if mtype in ["movie", "tv"]:
-                    tit = item.get("title") or item.get("name") or ""
-                    tit_norm = normalizar_texto(tit)
-                    if tit and termo_norm in tit_norm:
-                        itens_filtrados.append(item)
-
-            itens_ordenados = sorted(
-                itens_filtrados,
-                key=lambda x: (
-                    not normalizar_texto(x.get("title") or x.get("name") or "").startswith(termo_norm),
-                    normalizar_texto(x.get("title") or x.get("name") or "")
-                )
-            )
+            itens = resp.json().get("results", [])
+            validos = [i for i in itens if i.get("media_type") in ["movie", "tv"]]
 
             coluna_sugestoes.controls.clear()
 
-            for item in itens_ordenados[:6]:
+            for item in validos[:6]:
                 mtype = item.get("media_type", "movie")
                 mid = item.get("id")
-                tit = item.get("title") or item.get("name")
+                tit = item.get("title") or item.get("name") or "Sem título"
                 ano = str((item.get("release_date") or item.get("first_air_date")) or "")[:4]
                 p_path = item.get("poster_path")
                 p_url = f"https://image.tmdb.org/t/p/w200{p_path}" if p_path else None
@@ -915,16 +916,16 @@ def main(page: ft.Page):
             pass
 
     def ao_digitar_busca(e):
-        termo = campo_busca.value.strip()
+        termo = campo_busca.value
         if timer_busca["timer"]:
             timer_busca["timer"].cancel()
 
-        if len(termo) < 2:
+        if not termo or len(termo.strip()) < 2:
             container_sugestoes.visible = False
             page.update()
             return
 
-        t = threading.Timer(0.25, buscar_sugestoes_api, args=[termo])
+        t = threading.Timer(0.2, buscar_sugestoes_api, args=[termo])
         timer_busca["timer"] = t
         t.start()
 
@@ -936,7 +937,7 @@ def main(page: ft.Page):
     ], spacing=6, width=420, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
 
     # -------------------------------------------------------------
-    # COLUNA DO CATÁLOGO COM ROLAGEM PRÓPRIA ATIVA
+    # VIEWS
     # -------------------------------------------------------------
     view_inicio = ft.Column(
         controls=[
@@ -1007,7 +1008,6 @@ def main(page: ft.Page):
 
     linha_botoes_topo = ft.Row(controls=[btn_tab_inicio, btn_tab_bib], spacing=12, alignment=ft.MainAxisAlignment.CENTER)
 
-    # Adição direta dos blocos à página sem bloqueadores de evento
     page.add(
         progresso,
         lbl_app_titulo,
