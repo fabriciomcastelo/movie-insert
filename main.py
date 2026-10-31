@@ -152,8 +152,8 @@ def main(page: ft.Page):
         title=ft.Text("Confirmar Exclusão", size=16, weight="bold", color="#ef4444"),
         content=txt_confirmacao_msg,
         actions=[
-            ft.TextButton(text="Cancelar", on_click=lambda e: fechar_dialogo(modal_confirmacao)),
-            ft.ElevatedButton(text="Sim, remover", bgcolor="#dc2626", color="white", on_click=executar_remocao)
+            ft.Button(content=ft.Text("Cancelar", color="#94a3b8"), on_click=lambda e: fechar_dialogo(modal_confirmacao)),
+            ft.Button(content=ft.Text("Sim, remover", color="white"), bgcolor="#dc2626", on_click=executar_remocao)
         ],
         actions_alignment=ft.MainAxisAlignment.END
     )
@@ -222,8 +222,8 @@ def main(page: ft.Page):
             linha_notas_6_10,
         ], tight=True, spacing=10),
         actions=[
-            ft.TextButton(text="Cancelar", on_click=lambda e: fechar_dialogo(modal_avaliacao)),
-            ft.ElevatedButton(text="Confirmar", bgcolor="#10b981", color="white", on_click=confirmar_avaliacao)
+            ft.Button(content=ft.Text("Cancelar", color="#94a3b8"), on_click=lambda e: fechar_dialogo(modal_avaliacao)),
+            ft.Button(content=ft.Text("Confirmar", color="white"), bgcolor="#10b981", on_click=confirmar_avaliacao)
         ],
         actions_alignment=ft.MainAxisAlignment.END
     )
@@ -265,14 +265,13 @@ def main(page: ft.Page):
     dt_rt = ft.Container(content=ft.Text("🍅 --", color="white", size=11, weight="bold"), bgcolor="#ef4444", padding=ft.Padding(5, 2, 5, 2), border_radius=5)
     dt_user = ft.Container(content=ft.Text("★ --", color="white", size=11, weight="bold"), bgcolor="#8b5cf6", padding=ft.Padding(5, 2, 5, 2), border_radius=5)
 
-    btn_trailer = ft.ElevatedButton(
-        text="▶ Trailer",
+    btn_trailer = ft.Button(
+        content=ft.Text("▶ Trailer", color="white", size=12, weight="bold"),
         bgcolor="#dc2626",
-        color="white",
         url="https://youtube.com"
     )
-    btn_salvar = ft.ElevatedButton(text="+ Adicionar à Lista", bgcolor="#3b82f6", color="white", disabled=True)
-    btn_ir_lista = ft.ElevatedButton(text="📁 Ir para Minha Lista", bgcolor="#10b981", color="white", visible=False)
+    btn_salvar = ft.Button(content=ft.Text("+ Adicionar à Lista", color="white", size=12), bgcolor="#3b82f6", disabled=True)
+    btn_ir_lista = ft.Button(content=ft.Text("📁 Ir para Minha Lista", color="white", size=12), bgcolor="#10b981", visible=False)
 
     def fechar_detalhes(e=None):
         fechar_dialogo(modal_detalhes)
@@ -283,10 +282,9 @@ def main(page: ft.Page):
 
     btn_ir_lista.on_click = acao_ir_para_lista
 
-    btn_fechar = ft.ElevatedButton(
-        text="✕ Fechar",
+    btn_fechar = ft.Button(
+        content=ft.Text("✕ Fechar", color="white", weight="bold", size=12),
         bgcolor="#2563eb",
-        color="white",
         on_click=fechar_detalhes
     )
 
@@ -357,7 +355,7 @@ def main(page: ft.Page):
             pass
 
         it["categoria_existente"] = "Para Assistir"
-        btn_salvar.text = "✓ Na sua Lista"
+        btn_salvar.content = ft.Text("✓ Na sua Lista", color="white", size=12)
         btn_salvar.bgcolor = "#475569"
         btn_salvar.disabled = True
         btn_ir_lista.visible = True
@@ -523,12 +521,12 @@ def main(page: ft.Page):
                     dt_stremio_status.bgcolor = "#78350f"
 
                 if cat_exist:
-                    btn_salvar.text = "✓ Na sua Lista"
+                    btn_salvar.content = ft.Text("✓ Na sua Lista", color="white", size=12)
                     btn_salvar.bgcolor = "#475569"
                     btn_salvar.disabled = True
                     btn_ir_lista.visible = True
                 else:
-                    btn_salvar.text = "+ Adicionar à Lista"
+                    btn_salvar.content = ft.Text("+ Adicionar à Lista", color="white", size=12)
                     btn_salvar.bgcolor = "#3b82f6"
                     btn_salvar.disabled = False
                     btn_ir_lista.visible = False
@@ -549,12 +547,10 @@ def main(page: ft.Page):
         acoes = []
         if categoria == "Para Assistir":
             acoes.append(
-                ft.ElevatedButton(
-                    text="✓ Visto",
-                    color="white",
+                ft.Button(
+                    content=ft.Text("✓ Visto", color="white", size=10),
                     bgcolor="#10b981",
-                    height=26,
-                    style=ft.ButtonStyle(padding=ft.Padding(8, 0, 8, 0)),
+                    height=28,
                     on_click=lambda e: abrir_modal_avaliacao(mid)
                 )
             )
@@ -769,23 +765,20 @@ def main(page: ft.Page):
 
         itens_filtrados = [it for it in todos_itens if it[5] == aba_atual]
 
-        btn_print = ft.ElevatedButton(
-            text="🖨️ Imprimir",
-            color="white",
+        btn_print = ft.Button(
+            content=ft.Text("🖨️ Imprimir", color="white", size=11, weight="bold"),
             bgcolor="#334155",
             on_click=lambda e: imprimir_lista()
         )
 
-        btn_aba_para_assistir = ft.ElevatedButton(
-            text=f"⏳ Para Assistir ({total_para_assistir})",
-            color="white" if aba_atual == "Para Assistir" else "#94a3b8",
+        btn_aba_para_assistir = ft.Button(
+            content=ft.Text(f"⏳ Para Assistir ({total_para_assistir})", color="white" if aba_atual == "Para Assistir" else "#94a3b8", weight="bold"),
             bgcolor="#2563eb" if aba_atual == "Para Assistir" else "#1e293b",
             on_click=lambda e: mudar_aba_biblioteca("Para Assistir")
         )
 
-        btn_aba_assistidos = ft.ElevatedButton(
-            text=f"✓ Assistidos ({total_assistidos})",
-            color="white" if aba_atual == "Assistidos" else "#94a3b8",
+        btn_aba_assistidos = ft.Button(
+            content=ft.Text(f"✓ Assistidos ({total_assistidos})", color="white" if aba_atual == "Assistidos" else "#94a3b8", weight="bold"),
             bgcolor="#10b981" if aba_atual == "Assistidos" else "#1e293b",
             on_click=lambda e: mudar_aba_biblioteca("Assistidos")
         )
@@ -798,12 +791,10 @@ def main(page: ft.Page):
 
         def criar_botao_filtro(rotulo, modo_alvo):
             ativo = (modo_atual == modo_alvo)
-            return ft.ElevatedButton(
-                text=rotulo,
-                color="white" if ativo else "#94a3b8",
+            return ft.Button(
+                content=ft.Text(rotulo, color="white" if ativo else "#94a3b8", size=11, weight="bold"),
                 bgcolor="#3b82f6" if ativo else "#111827",
                 height=32,
-                style=ft.ButtonStyle(padding=ft.Padding(10, 0, 10, 0)),
                 on_click=lambda e, m=modo_alvo: mudar_modo_filtro(m)
             )
 
@@ -1017,7 +1008,7 @@ def main(page: ft.Page):
         page.update()
 
     # -------------------------------------------------------------
-    # BUSCA COM FECHAMENTO AUTOMÁTICO AO CLICAR FORA (ON_BLUR)
+    # BUSCA COM FECHAMENTO AO CLICAR FORA (ON_BLUR COM DELAY)
     # -------------------------------------------------------------
     coluna_sugestoes = ft.Column(spacing=4)
     container_sugestoes = ft.Container(
@@ -1113,7 +1104,7 @@ def main(page: ft.Page):
         timer_busca["timer"] = t
         t.start()
 
-    # Oculta a lista de sugestões automaticamente ao clicar fora
+    # Fecha a lista suspensa com delay para permitir o clique no item
     def fechar_busca_ao_perder_foco(e):
         def _ocultar():
             if container_sugestoes.visible:
@@ -1151,18 +1142,16 @@ def main(page: ft.Page):
     # -------------------------------------------------------------
     lbl_app_titulo = ft.Text("MOVIE INSERT", size=22, weight="bold", color="white", text_align=ft.TextAlign.CENTER)
 
-    btn_tab_inicio = ft.ElevatedButton(
-        text="Início",
-        color="#0b0c0f",
+    btn_tab_inicio = ft.Button(
+        content=ft.Text("Início", color="#0b0c0f", size=15, weight="bold"),
         bgcolor="#e2e8f0",
         width=140,
         height=42,
         on_click=lambda e: alternar_tela(0)
     )
 
-    btn_tab_bib = ft.ElevatedButton(
-        text="Biblioteca",
-        color="#ffffff",
+    btn_tab_bib = ft.Button(
+        content=ft.Text("Biblioteca", color="#ffffff", size=15, weight="bold"),
         bgcolor="#1d4ed8",
         width=140,
         height=42,
@@ -1230,17 +1219,17 @@ def main(page: ft.Page):
             view_inicio.visible = True
             view_biblioteca.visible = False
             btn_tab_inicio.bgcolor = "#e2e8f0"
-            btn_tab_inicio.color = "#0b0c0f"
+            btn_tab_inicio.content.color = "#0b0c0f"
             btn_tab_bib.bgcolor = "#1d4ed8"
-            btn_tab_bib.color = "#ffffff"
+            btn_tab_bib.content.color = "#ffffff"
         elif indice == 1:
             carregar_biblioteca()
             view_inicio.visible = False
             view_biblioteca.visible = True
             btn_tab_inicio.bgcolor = "#1e293b"
-            btn_tab_inicio.color = "#94a3b8"
+            btn_tab_inicio.content.color = "#94a3b8"
             btn_tab_bib.bgcolor = "#e2e8f0"
-            btn_tab_bib.color = "#0b0c0f"
+            btn_tab_bib.content.color = "#0b0c0f"
 
         page.update()
 
