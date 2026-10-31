@@ -1131,23 +1131,20 @@ def main(page: ft.Page):
         page.update()
 
     # -------------------------------------------------------------
-    # BUSCA COM LISTA FLUTUANTE QUE NÃO EMPURRA O LAYOUT
+    # BUSCA ATIVA COM AUTOCOMPLETE FLUTUANTE
     # -------------------------------------------------------------
     coluna_sugestoes = ft.Column(spacing=4, scroll=ft.ScrollMode.AUTO)
-    
-    # Caixa suspensa flutuante corrigida com height padrão
+
     container_sugestoes = ft.Container(
         content=coluna_sugestoes,
-        bgcolor=COR_CARD,
+        bgcolor="#111827",
         border_radius=8,
         border=criar_borda(1.2, COR_PETROLEO),
         padding=6,
         visible=False,
         width=320,
-        height=300,
-        top=64,
-        left=0,
-        shadow=ft.BoxShadow(blur_radius=12, color="#000000")
+        height=260,
+        shadow=ft.BoxShadow(blur_radius=15, color="#000000")
     )
 
     def selecionar_sugestao(mid, mtype, tit, ano, p_url):
@@ -1166,14 +1163,14 @@ def main(page: ft.Page):
             return
 
         try:
-            url = f"https://api.themoviedb.org/3/search/multi"
+            url = "https://api.themoviedb.org/3/search/multi"
             params = {
                 "api_key": tmdb_key,
                 "query": termo_limpo,
                 "language": "pt-BR",
                 "include_adult": "false"
             }
-            resp = requests.get(url, params=params, timeout=3.0)
+            resp = requests.get(url, params=params, timeout=3.5)
             if resp.status_code != 200:
                 return
 
@@ -1193,7 +1190,7 @@ def main(page: ft.Page):
                     padding=6,
                     border_radius=6,
                     ink=True,
-                    bgcolor=COR_FUNDO,
+                    bgcolor=COR_CARD,
                     on_click=lambda e, m=mid, mt=mtype, t=tit, a=ano, p=p_url: selecionar_sugestao(m, mt, t, a, p),
                     content=ft.Row([
                         ft.Image(
@@ -1231,7 +1228,7 @@ def main(page: ft.Page):
             page.update()
             return
 
-        t = threading.Timer(0.25, buscar_sugestoes_api, args=[termo])
+        t = threading.Timer(0.2, buscar_sugestoes_api, args=[termo])
         timer_busca["timer"] = t
         t.start()
 
@@ -1242,18 +1239,18 @@ def main(page: ft.Page):
                 page.update()
         threading.Timer(0.25, _ocultar).start()
 
+    # Campo de busca com tamanho otimizado (320px x 50px)
     campo_busca = ft.TextField(
         hint_text="Buscar filmes ou séries...",
-        hint_style=ft.TextStyle(size=12, color="#64748b"),
-        text_size=12,
+        hint_style=ft.TextStyle(size=13, color="#64748b"),
+        text_size=13,
         bgcolor="#0d1419",
-        dense=True,
         border_radius=10,
         border_color=COR_BORDA,
         focused_border_color=COR_PETROLEO,
-        width=235,
-        height=58,
-        content_padding=ft.Padding(12, 0, 8, 0),
+        width=320,
+        height=50,
+        content_padding=ft.Padding(14, 0, 10, 0),
         on_change=ao_digitar_busca,
         on_submit=disparar_busca_manual,
         on_blur=fechar_busca_ao_perder_foco
@@ -1267,16 +1264,14 @@ def main(page: ft.Page):
         on_click=disparar_busca_manual
     )
 
-    bloco_busca_flutuante = ft.Stack(
-        controls=[
-            ft.Row([campo_busca, btn_lupa], spacing=2, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-            container_sugestoes
-        ],
-        width=290
-    )
+    # Bloco com a barra de busca e os resultados logo abaixo
+    bloco_busca = ft.Column([
+        ft.Row([campo_busca, btn_lupa], spacing=2, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+        container_sugestoes
+    ], spacing=4, tight=True)
 
     # -------------------------------------------------------------
-    # LOGO INTERATIVO (RETORNO AO INÍCIO)
+    # LOGO INTERATIVO (VOLTA AO INÍCIO)
     # -------------------------------------------------------------
     def clicar_no_logo(e):
         btn_logo_interativo.scale = 0.94
@@ -1305,6 +1300,7 @@ def main(page: ft.Page):
         on_click=lambda e: alternar_tela(1)
     )
 
+    # Informações de usuário e Logout no canto superior direito
     lbl_user_tag = ft.Text("", size=12, color="#64748b", weight="bold")
 
     def acao_logout(e):
@@ -1350,11 +1346,12 @@ def main(page: ft.Page):
         vertical_alignment=ft.CrossAxisAlignment.CENTER
     )
 
+    # Menu central horizontal (Logo + Botão Biblioteca + Busca)
     menu_central = ft.Row(
         controls=[
             btn_logo_interativo,
             btn_tab_bib,
-            bloco_busca_flutuante
+            bloco_busca
         ],
         spacing=18,
         run_spacing=10,
@@ -1375,20 +1372,18 @@ def main(page: ft.Page):
     )
 
     # -------------------------------------------------------------
-    # ADAPTAÇÃO DINÂMICA DE TAMANHO
+    # ADAPTAÇÃO DINÂMICA (MOBILE / DESKTOP)
     # -------------------------------------------------------------
     def ajustar_layout_responsivo(e=None):
         largura_janela = page.width if page.width else 1000
         if largura_janela < 720:
-            campo_busca.width = max(190, int(largura_janela - 100))
-            bloco_busca_flutuante.width = max(240, int(largura_janela - 50))
-            container_sugestoes.width = max(220, int(largura_janela - 60))
+            campo_busca.width = max(220, int(largura_janela - 100))
+            container_sugestoes.width = max(220, int(largura_janela - 100))
             btn_logo_interativo.content.height = 46
             btn_tab_bib.content.height = 42
             titulo_trends.width = None
         else:
-            campo_busca.width = 235
-            bloco_busca_flutuante.width = 290
+            campo_busca.width = 320
             container_sugestoes.width = 320
             btn_logo_interativo.content.height = 65
             btn_tab_bib.content.height = 56
@@ -1471,7 +1466,7 @@ def main(page: ft.Page):
     )
 
     # -------------------------------------------------------------
-    # TELA DE AUTENTICAÇÃO COM LOGO PNG E PALETA OFICIAL
+    # TELA DE AUTENTICAÇÃO
     # -------------------------------------------------------------
     logo_login = ft.Image(src="logo.png", height=65, fit="contain")
 
