@@ -1143,7 +1143,7 @@ def main(page: ft.Page):
         border=criar_borda(1, COR_BORDA),
         padding=6,
         visible=False,
-        width=320
+        width=380
     )
 
     def selecionar_sugestao(mid, mtype, tit, ano, p_url):
@@ -1238,7 +1238,7 @@ def main(page: ft.Page):
                 page.update()
         threading.Timer(0.25, _ocultar).start()
 
-    # Campo de busca aumentado em +20% (largura de 230 para 280, altura para 46)
+    # Campo de busca aumentado em +20% (largura de 280 para 336px)
     campo_busca = ft.TextField(
         hint_text="Buscar filmes ou séries...",
         hint_style=ft.TextStyle(size=13, color="#64748b"),
@@ -1248,7 +1248,7 @@ def main(page: ft.Page):
         border_radius=10,
         border_color=COR_BORDA,
         focused_border_color=COR_PETROLEO,
-        width=280,
+        width=336,
         height=46,
         content_padding=ft.Padding(14, 0, 10, 0),
         on_change=ao_digitar_busca,
@@ -1270,12 +1270,11 @@ def main(page: ft.Page):
     ], spacing=2, tight=True)
 
     # -------------------------------------------------------------
-    # CABEÇALHO HORIZONTAL CENTRALIZADO, PRÓXIMO E PROPORCIONAL
+    # CABEÇALHO HORIZONTAL TOTALMENTE RESPONSIVO
     # -------------------------------------------------------------
-    # Logo aumentado em +30% (altura de 38 para 50)
     logo_header = ft.Image(src="logo.png", height=50, fit="contain")
 
-    # Botões aumentados em +30% (altura de 36 para 47) com 100% de visibilidade constante
+    # Botões oficiais sem transparência sumindo
     btn_tab_inicio = ft.Container(
         content=ft.Image(src="inicio.png", height=47, fit="contain"),
         ink=True,
@@ -1332,33 +1331,61 @@ def main(page: ft.Page):
         on_click=acao_logout
     )
 
-    # Todos os componentes agrupados próximos em linha centralizada
-    linha_navbar_central = ft.Row(
+    bloco_usuario = ft.Row(
+        controls=[lbl_user_tag, btn_logout],
+        spacing=4,
+        vertical_alignment=ft.CrossAxisAlignment.CENTER
+    )
+
+    # Linha com wrap=True: se a tela encolher (mobile), os itens descem com harmonia
+    linha_navbar_responsiva = ft.Row(
         controls=[
             logo_header,
-            ft.Container(width=10),
-            btn_tab_inicio,
-            btn_tab_bib,
-            ft.Container(width=14),
+            ft.Row([btn_tab_inicio, btn_tab_bib], spacing=6),
             bloco_busca,
-            ft.Container(width=8),
-            lbl_user_tag,
-            btn_logout
+            bloco_usuario
         ],
-        spacing=8,
+        spacing=12,
+        run_spacing=10,
+        wrap=True,
         alignment=ft.MainAxisAlignment.CENTER,
         vertical_alignment=ft.CrossAxisAlignment.CENTER
     )
 
     cabecalho_fixo = ft.Container(
         bgcolor=COR_FUNDO,
-        padding=ft.Padding(16, 12, 16, 12),
+        padding=ft.Padding(12, 10, 12, 10),
         border=ft.Border(bottom=ft.BorderSide(1, COR_BORDA)),
         content=ft.Column([
             progresso,
-            linha_navbar_central
+            linha_navbar_responsiva
         ], spacing=4, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
     )
+
+    # -------------------------------------------------------------
+    # ADAPTAÇÃO DINÂMICA DE TAMANHO (MOBILE / DESKTOP)
+    # -------------------------------------------------------------
+    def ajustar_layout_responsivo(e=None):
+        largura_janela = page.width if page.width else 1000
+        if largura_janela < 600:
+            # Modo Smartphone
+            campo_busca.width = max(240, int(largura_janela - 70))
+            container_sugestoes.width = max(240, int(largura_janela - 70))
+            logo_header.height = 40
+            btn_tab_inicio.content.height = 38
+            btn_tab_bib.content.height = 38
+            titulo_trends.width = None
+        else:
+            # Modo Desktop / Tablet
+            campo_busca.width = 336
+            container_sugestoes.width = 380
+            logo_header.height = 50
+            btn_tab_inicio.content.height = 47
+            btn_tab_bib.content.height = 47
+            titulo_trends.width = 1100
+        page.update()
+
+    page.on_resized = ajustar_layout_responsivo
 
     # -------------------------------------------------------------
     # VIEWS ROLÁVEIS INDEPENDENTES
@@ -1552,6 +1579,7 @@ def main(page: ft.Page):
         spinner_autologin.visible = False
         card_auth.visible = False
         layout_mestre.visible = True
+        ajustar_layout_responsivo()
         page.update()
 
         paginacao["pagina_atual"] = 1
@@ -1741,6 +1769,7 @@ def main(page: ft.Page):
             definir_modo_auth("login")
             card_auth.visible = True
             layout_mestre.visible = False
+            ajustar_layout_responsivo()
             page.update()
 
     threading.Thread(target=verificar_sessao_salva, daemon=True).start()
