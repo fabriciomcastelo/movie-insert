@@ -13,19 +13,17 @@ from datetime import datetime
 CONFIG_FILE = "config.json"
 DB_FILE = "filmes.db"
 
-# PASTA DE ASSETS ABSOLUTA
 DIR_BASE = os.path.dirname(os.path.abspath(__file__))
 DIR_ASSETS = os.path.join(DIR_BASE, "assets")
 
-# PALETA OFICIAL EXTRAÍDA DOS ASSETS
-COR_PETROLEO = "#03434d"        # Destaque / Ativo (Início / Badge)
-COR_PETROLEO_HOVER = "#055663"  # Hover sutil
-COR_CHUMBO = "#48585e"          # Inativo (Biblioteca)
-COR_TEXTO_CLARO = "#e5ecf0"     # Branco gelo da tipografia
-COR_VERMELHO_PLAY = "#9e0f0f"   # Vermelho do triângulo play
-COR_FUNDO = "#070b0e"           # Fundo escuro premium
-COR_CARD = "#0d1419"            # Superfície dos cartões
-COR_BORDA = "#17232b"           # Borda dos cartões e campos
+COR_PETROLEO = "#03434d"
+COR_PETROLEO_HOVER = "#055663"
+COR_CHUMBO = "#48585e"
+COR_TEXTO_CLARO = "#e5ecf0"
+COR_VERMELHO_PLAY = "#9e0f0f"
+COR_FUNDO = "#070b0e"
+COR_CARD = "#0d1419"
+COR_BORDA = "#17232b"
 
 def criar_borda(espessura, cor):
     bs = ft.BorderSide(espessura, cor)
@@ -626,7 +624,7 @@ def main(page: ft.Page):
         threading.Thread(target=_fetch, daemon=True).start()
 
     # -------------------------------------------------------------
-    # CARTÕES DOS FILMES (+20% DE TAMANHO)
+    # CARTÕES DOS FILMES
     # -------------------------------------------------------------
     def criar_card_filme(mid, mtype, titulo, ano, poster_url, categoria=None, nota=None):
         acoes = []
@@ -707,7 +705,7 @@ def main(page: ft.Page):
     spinner_carregamento = ft.ProgressRing(width=30, height=30, stroke_width=3, color=COR_PETROLEO, visible=False)
 
     # -------------------------------------------------------------
-    # POPULARES E ROLAGEM INFINITA (FLUXO CONTÍNUO)
+    # POPULARES E ROLAGEM INFINITA
     # -------------------------------------------------------------
     def carregar_populares(incrementar=False):
         c = carregar_config()
@@ -1133,17 +1131,23 @@ def main(page: ft.Page):
         page.update()
 
     # -------------------------------------------------------------
-    # BUSCA COM AUTOCOMPLETE
+    # BUSCA COM LISTA FLUTUANTE QUE NÃO EMPURRA O LAYOUT
     # -------------------------------------------------------------
-    coluna_sugestoes = ft.Column(spacing=4)
+    coluna_sugestoes = ft.Column(spacing=4, scroll=ft.ScrollMode.AUTO)
+    
+    # Caixa suspensa flutuante
     container_sugestoes = ft.Container(
         content=coluna_sugestoes,
         bgcolor=COR_CARD,
         border_radius=8,
-        border=criar_borda(1, COR_BORDA),
+        border=criar_borda(1.2, COR_PETROLEO),
         padding=6,
         visible=False,
-        width=380
+        width=320,
+        max_height=320,
+        top=62,     # Fica exatamente flutuando abaixo do campo de busca
+        left=0,
+        shadow=ft.BoxShadow(blur_radius=12, color="#000000")
     )
 
     def selecionar_sugestao(mid, mtype, tit, ano, p_url):
@@ -1238,18 +1242,19 @@ def main(page: ft.Page):
                 page.update()
         threading.Timer(0.25, _ocultar).start()
 
+    # Dimensões atualizadas: +20% altura (58px), -30% largura (235px)
     campo_busca = ft.TextField(
         hint_text="Buscar filmes ou séries...",
-        hint_style=ft.TextStyle(size=13, color="#64748b"),
-        text_size=13,
+        hint_style=ft.TextStyle(size=12, color="#64748b"),
+        text_size=12,
         bgcolor="#0d1419",
         dense=True,
         border_radius=10,
         border_color=COR_BORDA,
         focused_border_color=COR_PETROLEO,
-        width=336,
-        height=48,
-        content_padding=ft.Padding(14, 0, 10, 0),
+        width=235,
+        height=58,
+        content_padding=ft.Padding(12, 0, 8, 0),
         on_change=ao_digitar_busca,
         on_submit=disparar_busca_manual,
         on_blur=fechar_busca_ao_perder_foco
@@ -1258,21 +1263,24 @@ def main(page: ft.Page):
     btn_lupa = ft.IconButton(
         icon=ft.Icons.SEARCH,
         icon_color="#64748b",
-        icon_size=20,
+        icon_size=22,
         tooltip="Buscar filme",
         on_click=disparar_busca_manual
     )
 
-    bloco_busca = ft.Column([
-        ft.Row([campo_busca, btn_lupa], spacing=2, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-        container_sugestoes
-    ], spacing=2, tight=True)
+    # Stack que mantém a lista flutuando sem mexer no alinhamento do menu
+    bloco_busca_flutuante = ft.Stack(
+        controls=[
+            ft.Row([campo_busca, btn_lupa], spacing=2, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+            container_sugestoes
+        ],
+        width=290
+    )
 
     # -------------------------------------------------------------
-    # LOGO INTERATIVO (VOLTA AO INÍCIO COM ANIMAÇÃO DE TOQUE)
+    # LOGO INTERATIVO (RETORNO AO INÍCIO)
     # -------------------------------------------------------------
     def clicar_no_logo(e):
-        # Efeito elástico de clique
         btn_logo_interativo.scale = 0.94
         page.update()
         time.sleep(0.08)
@@ -1290,7 +1298,6 @@ def main(page: ft.Page):
         on_click=clicar_no_logo
     )
 
-    # Botão Biblioteca oficial aumentado em +20%
     btn_tab_bib = ft.Container(
         content=ft.Image(src="biblioteca.png", height=56, fit="contain"),
         ink=True,
@@ -1346,12 +1353,12 @@ def main(page: ft.Page):
         vertical_alignment=ft.CrossAxisAlignment.CENTER
     )
 
-    # Menu Principal Centralizado (Logo Clicável + Botão Biblioteca + Busca)
+    # Menu Principal Centralizado
     menu_central = ft.Row(
         controls=[
             btn_logo_interativo,
             btn_tab_bib,
-            bloco_busca
+            bloco_busca_flutuante
         ],
         spacing=18,
         run_spacing=10,
@@ -1360,7 +1367,6 @@ def main(page: ft.Page):
         vertical_alignment=ft.CrossAxisAlignment.CENTER
     )
 
-    # Cabeçalho com linha do usuário no topo direito e menu centralizado
     cabecalho_fixo = ft.Container(
         bgcolor=COR_FUNDO,
         padding=ft.Padding(20, 6, 20, 10),
@@ -1373,19 +1379,21 @@ def main(page: ft.Page):
     )
 
     # -------------------------------------------------------------
-    # ADAPTAÇÃO DINÂMICA DE TAMANHO (MOBILE / DESKTOP)
+    # ADAPTAÇÃO DINÂMICA DE TAMANHO
     # -------------------------------------------------------------
     def ajustar_layout_responsivo(e=None):
         largura_janela = page.width if page.width else 1000
         if largura_janela < 720:
-            campo_busca.width = max(240, int(largura_janela - 70))
-            container_sugestoes.width = max(240, int(largura_janela - 70))
+            campo_busca.width = max(190, int(largura_janela - 100))
+            bloco_busca_flutuante.width = max(240, int(largura_janela - 50))
+            container_sugestoes.width = max(220, int(largura_janela - 60))
             btn_logo_interativo.content.height = 46
             btn_tab_bib.content.height = 42
             titulo_trends.width = None
         else:
-            campo_busca.width = 336
-            container_sugestoes.width = 380
+            campo_busca.width = 235
+            bloco_busca_flutuante.width = 290
+            container_sugestoes.width = 320
             btn_logo_interativo.content.height = 65
             btn_tab_bib.content.height = 56
             titulo_trends.width = 1100
