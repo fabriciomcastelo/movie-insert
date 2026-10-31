@@ -23,6 +23,14 @@ COR_FUNDO = "#070b0e"           # Fundo escuro premium
 COR_CARD = "#0d1419"            # Superfície dos cards
 COR_BORDA = "#17232b"           # Borda dos cards e inputs
 
+def criar_borda(espessura, cor):
+    return ft.Border(
+        ft.BorderSide(espessura, cor),
+        ft.BorderSide(espessura, cor),
+        ft.BorderSide(espessura, cor),
+        ft.BorderSide(espessura, cor)
+    )
+
 STREAMINGS_PADRAO = [
     "Netflix",
     "Max",
@@ -145,7 +153,7 @@ def obter_estilo_nota(nota_str):
     elif val == 9:
         return "#16a34a", "white", None
     elif val >= 10:
-        return "#000000", "#f8fafc", ft.border.all(1, "#475569")
+        return "#000000", "#f8fafc", criar_borda(1, "#475569")
     return "#1e1b4b", "#a78bfa", None
 
 # -------------------------------------------------------------
@@ -399,7 +407,7 @@ def main(page: ft.Page):
         bgcolor=COR_CARD,
         padding=14,
         border_radius=12,
-        border=ft.border.all(1.5, COR_PETROLEO),
+        border=criar_borda(1.5, COR_PETROLEO),
         content=ft.Column([
             ft.Row([btn_fechar], alignment=ft.MainAxisAlignment.END),
             ft.Row(
@@ -695,7 +703,7 @@ def main(page: ft.Page):
             padding=5,
             border_radius=8,
             ink=True,
-            border=ft.border.all(1.2, COR_BORDA),
+            border=criar_borda(1.2, COR_BORDA),
             content=ft.Column([
                 ft.Image(
                     src=poster_url if poster_url else "https://via.placeholder.com/152x216?text=Sem+Poster",
@@ -1008,7 +1016,7 @@ def main(page: ft.Page):
                         ft.Container(
                             content=ft.Text(f"{len(lista)}", size=11, color="white", weight="bold"),
                             bgcolor=COR_CARD,
-                            border=ft.border.all(1, COR_BORDA),
+                            border=criar_borda(1, COR_BORDA),
                             padding=ft.Padding(5, 2, 5, 2),
                             border_radius=8
                         )
@@ -1040,7 +1048,7 @@ def main(page: ft.Page):
                         ft.Container(
                             content=ft.Text(f"{len(lista)}", size=11, color="white", weight="bold"),
                             bgcolor=COR_CARD,
-                            border=ft.border.all(1, COR_BORDA),
+                            border=criar_borda(1, COR_BORDA),
                             padding=ft.Padding(5, 2, 5, 2),
                             border_radius=8
                         )
@@ -1158,7 +1166,7 @@ def main(page: ft.Page):
         content=coluna_sugestoes,
         bgcolor=COR_CARD,
         border_radius=8,
-        border=ft.border.all(1, COR_BORDA),
+        border=criar_borda(1, COR_BORDA),
         padding=6,
         visible=False,
         width=250
@@ -1693,7 +1701,7 @@ def main(page: ft.Page):
         bgcolor=COR_CARD,
         padding=24,
         border_radius=12,
-        border=ft.border.all(1.5, COR_BORDA),
+        border=criar_borda(1.5, COR_BORDA),
         content=ft.Column([
             componente_logo_login,
             ft.Container(height=4),
@@ -1747,23 +1755,4 @@ def main(page: ft.Page):
             try:
                 cookies = page.cookies
                 if cookies:
-                    saved_uid = cookies.get("user_id")
-                    saved_user = cookies.get("username")
-                    saved_manter = cookies.get("manter_conectado")
-            except Exception:
-                pass
-
-        if saved_uid and saved_user and (str(saved_manter).lower() == "true"):
-            iniciar_sessao(saved_uid, saved_user, persistir=True)
-        else:
-            spinner_autologin.visible = False
-            definir_modo_auth("login")
-            card_auth.visible = True
-            layout_mestre.visible = False
-            page.update()
-
-    threading.Thread(target=verificar_sessao_salva, daemon=True).start()
-
-if __name__ == "__main__":
-    porta = int(os.environ.get("PORT", 8550))
-    ft.run(main, view=ft.AppView.WEB_BROWSER, host="0.0.0.0", port=porta)
+                    saved_uid = cookies.get("user_id
