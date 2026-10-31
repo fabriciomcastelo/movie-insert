@@ -145,16 +145,11 @@ def obter_estilo_nota(nota_str):
     elif val == 9:
         return "#16a34a", "white", None
     elif val >= 10:
-        return "#000000", "#f8fafc", ft.Border(
-            ft.BorderSide(1, "#475569"),
-            ft.BorderSide(1, "#475569"),
-            ft.BorderSide(1, "#475569"),
-            ft.BorderSide(1, "#475569")
-        )
+        return "#000000", "#f8fafc", ft.border.all(1, "#475569")
     return "#1e1b4b", "#a78bfa", None
 
 # -------------------------------------------------------------
-# COMPONENTE VISUAL IDÊNTICO DO LOGO
+# COMPONENTE VISUAL DO LOGO
 # -------------------------------------------------------------
 def criar_componente_logo(tamanho=24):
     fator = tamanho / 24.0
@@ -404,12 +399,7 @@ def main(page: ft.Page):
         bgcolor=COR_CARD,
         padding=14,
         border_radius=12,
-        border=ft.Border(
-            ft.BorderSide(1.5, COR_PETROLEO),
-            ft.BorderSide(1.5, COR_PETROLEO),
-            ft.BorderSide(1.5, COR_PETROLEO),
-            ft.BorderSide(1.5, COR_PETROLEO)
-        ),
+        border=ft.border.all(1.5, COR_PETROLEO),
         content=ft.Column([
             ft.Row([btn_fechar], alignment=ft.MainAxisAlignment.END),
             ft.Row(
@@ -705,12 +695,7 @@ def main(page: ft.Page):
             padding=5,
             border_radius=8,
             ink=True,
-            border=ft.Border(
-                ft.BorderSide(1.2, COR_BORDA),
-                ft.BorderSide(1.2, COR_BORDA),
-                ft.BorderSide(1.2, COR_BORDA),
-                ft.BorderSide(1.2, COR_BORDA)
-            ),
+            border=ft.border.all(1.2, COR_BORDA),
             content=ft.Column([
                 ft.Image(
                     src=poster_url if poster_url else "https://via.placeholder.com/152x216?text=Sem+Poster",
@@ -1023,7 +1008,7 @@ def main(page: ft.Page):
                         ft.Container(
                             content=ft.Text(f"{len(lista)}", size=11, color="white", weight="bold"),
                             bgcolor=COR_CARD,
-                            border=ft.Border(all=ft.BorderSide(1, COR_BORDA)),
+                            border=ft.border.all(1, COR_BORDA),
                             padding=ft.Padding(5, 2, 5, 2),
                             border_radius=8
                         )
@@ -1055,7 +1040,7 @@ def main(page: ft.Page):
                         ft.Container(
                             content=ft.Text(f"{len(lista)}", size=11, color="white", weight="bold"),
                             bgcolor=COR_CARD,
-                            border=ft.Border(all=ft.BorderSide(1, COR_BORDA)),
+                            border=ft.border.all(1, COR_BORDA),
                             padding=ft.Padding(5, 2, 5, 2),
                             border_radius=8
                         )
@@ -1173,7 +1158,7 @@ def main(page: ft.Page):
         content=coluna_sugestoes,
         bgcolor=COR_CARD,
         border_radius=8,
-        border=ft.Border(all=ft.BorderSide(1, COR_BORDA)),
+        border=ft.border.all(1, COR_BORDA),
         padding=6,
         visible=False,
         width=250
@@ -1302,11 +1287,10 @@ def main(page: ft.Page):
     ], spacing=2, tight=True)
 
     # -------------------------------------------------------------
-    # CABEÇALHO HORIZONTAL (IDÊNTICO À PROPOSTA)
+    # CABEÇALHO HORIZONTAL
     # -------------------------------------------------------------
     componente_logo_header = criar_componente_logo(tamanho=24)
 
-    # Botões de navegação idênticos aos assets enviados
     btn_tab_inicio = ft.Button(
         content=ft.Text("INÍCIO", color="white", size=13, weight="bold", font_family="Arial, sans-serif"),
         bgcolor=COR_PETROLEO,
@@ -1709,12 +1693,7 @@ def main(page: ft.Page):
         bgcolor=COR_CARD,
         padding=24,
         border_radius=12,
-        border=ft.Border(
-            ft.BorderSide(1.5, COR_BORDA),
-            ft.BorderSide(1.5, COR_BORDA),
-            ft.BorderSide(1.5, COR_BORDA),
-            ft.BorderSide(1.5, COR_BORDA)
-        ),
+        border=ft.border.all(1.5, COR_BORDA),
         content=ft.Column([
             componente_logo_login,
             ft.Container(height=4),
