@@ -1238,7 +1238,7 @@ def main(page: ft.Page):
                 page.update()
         threading.Timer(0.25, _ocultar).start()
 
-    # Campo de busca aumentado em +20% (largura de 280 para 336px)
+    # Campo de busca ampliado
     campo_busca = ft.TextField(
         hint_text="Buscar filmes ou séries...",
         hint_style=ft.TextStyle(size=13, color="#64748b"),
@@ -1249,7 +1249,7 @@ def main(page: ft.Page):
         border_color=COR_BORDA,
         focused_border_color=COR_PETROLEO,
         width=336,
-        height=46,
+        height=48,
         content_padding=ft.Padding(14, 0, 10, 0),
         on_change=ao_digitar_busca,
         on_submit=disparar_busca_manual,
@@ -1270,29 +1270,31 @@ def main(page: ft.Page):
     ], spacing=2, tight=True)
 
     # -------------------------------------------------------------
-    # CABEÇALHO HORIZONTAL TOTALMENTE RESPONSIVO
+    # CABEÇALHO HORIZONTAL (MENU CENTRALIZADO + LOGIN NO CANTO DIREITO)
     # -------------------------------------------------------------
-    logo_header = ft.Image(src="logo.png", height=50, fit="contain")
+    # Logo aumentado em +30% (de 50 para 65)
+    logo_header = ft.Image(src="logo.png", height=65, fit="contain")
 
-    # Botões oficiais sem transparência sumindo
+    # Botões aumentados em +20% (de 47 para 56)
     btn_tab_inicio = ft.Container(
-        content=ft.Image(src="inicio.png", height=47, fit="contain"),
+        content=ft.Image(src="inicio.png", height=56, fit="contain"),
         ink=True,
-        border_radius=8,
+        border_radius=10,
         border=criar_borda(2, COR_PETROLEO),
         padding=2,
         on_click=lambda e: alternar_tela(0)
     )
 
     btn_tab_bib = ft.Container(
-        content=ft.Image(src="biblioteca.png", height=47, fit="contain"),
+        content=ft.Image(src="biblioteca.png", height=56, fit="contain"),
         ink=True,
-        border_radius=8,
+        border_radius=10,
         border=criar_borda(2, "transparent"),
         padding=2,
         on_click=lambda e: alternar_tela(1)
     )
 
+    # Informações de usuário e Logout para o canto superior direito
     lbl_user_tag = ft.Text("", size=12, color="#64748b", weight="bold")
 
     def acao_logout(e):
@@ -1331,34 +1333,37 @@ def main(page: ft.Page):
         on_click=acao_logout
     )
 
-    bloco_usuario = ft.Row(
+    # Bloco do usuário isolado para o canto superior direito
+    bloco_usuario_topo = ft.Row(
         controls=[lbl_user_tag, btn_logout],
         spacing=4,
+        alignment=ft.MainAxisAlignment.END,
         vertical_alignment=ft.CrossAxisAlignment.CENTER
     )
 
-    # Linha com wrap=True: se a tela encolher (mobile), os itens descem com harmonia
-    linha_navbar_responsiva = ft.Row(
+    # Menu Principal Centralizado (Logo + Botões + Busca próximos)
+    menu_central = ft.Row(
         controls=[
             logo_header,
-            ft.Row([btn_tab_inicio, btn_tab_bib], spacing=6),
-            bloco_busca,
-            bloco_usuario
+            ft.Row([btn_tab_inicio, btn_tab_bib], spacing=8),
+            bloco_busca
         ],
-        spacing=12,
+        spacing=16,
         run_spacing=10,
         wrap=True,
         alignment=ft.MainAxisAlignment.CENTER,
         vertical_alignment=ft.CrossAxisAlignment.CENTER
     )
 
+    # Estrutura com linha superior do usuário + menu 100% centralizado
     cabecalho_fixo = ft.Container(
         bgcolor=COR_FUNDO,
-        padding=ft.Padding(12, 10, 12, 10),
+        padding=ft.Padding(20, 6, 20, 10),
         border=ft.Border(bottom=ft.BorderSide(1, COR_BORDA)),
         content=ft.Column([
             progresso,
-            linha_navbar_responsiva
+            bloco_usuario_topo,
+            ft.Row([menu_central], alignment=ft.MainAxisAlignment.CENTER)
         ], spacing=4, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
     )
 
@@ -1367,21 +1372,21 @@ def main(page: ft.Page):
     # -------------------------------------------------------------
     def ajustar_layout_responsivo(e=None):
         largura_janela = page.width if page.width else 1000
-        if largura_janela < 600:
+        if largura_janela < 720:
             # Modo Smartphone
             campo_busca.width = max(240, int(largura_janela - 70))
             container_sugestoes.width = max(240, int(largura_janela - 70))
-            logo_header.height = 40
-            btn_tab_inicio.content.height = 38
-            btn_tab_bib.content.height = 38
+            logo_header.height = 46
+            btn_tab_inicio.content.height = 42
+            btn_tab_bib.content.height = 42
             titulo_trends.width = None
         else:
             # Modo Desktop / Tablet
             campo_busca.width = 336
             container_sugestoes.width = 380
-            logo_header.height = 50
-            btn_tab_inicio.content.height = 47
-            btn_tab_bib.content.height = 47
+            logo_header.height = 65
+            btn_tab_inicio.content.height = 56
+            btn_tab_bib.content.height = 56
             titulo_trends.width = 1100
         page.update()
 
@@ -1463,7 +1468,7 @@ def main(page: ft.Page):
     # -------------------------------------------------------------
     # TELA DE AUTENTICAÇÃO COM LOGO PNG E PALETA OFICIAL
     # -------------------------------------------------------------
-    logo_login = ft.Image(src="logo.png", height=58, fit="contain")
+    logo_login = ft.Image(src="logo.png", height=65, fit="contain")
 
     txt_auth_titulo = ft.Text("Entrar", size=18, weight="bold", color=COR_TEXTO_CLARO)
     txt_auth_erro = ft.Text("", size=12, color="#ef4444")
