@@ -13,6 +13,16 @@ from datetime import datetime
 CONFIG_FILE = "config.json"
 DB_FILE = "filmes.db"
 
+# PALETA OFICIAL EXTRAÍDA DOS ASSETS
+COR_PETROLEO = "#03434d"        # Destaque / Ativo (Início / Badge)
+COR_PETROLEO_HOVER = "#055663"  # Hover sutil
+COR_CHUMBO = "#48585e"          # Inativo (Biblioteca)
+COR_TEXTO_CLARO = "#e5ecf0"     # Branco gelo da tipografia
+COR_VERMELHO_PLAY = "#9e0f0f"   # Vermelho do triângulo play
+COR_FUNDO = "#070b0e"           # Fundo escuro premium
+COR_CARD = "#0d1419"            # Superfície dos cards
+COR_BORDA = "#17232b"           # Borda dos cards e inputs
+
 STREAMINGS_PADRAO = [
     "Netflix",
     "Max",
@@ -131,7 +141,7 @@ def obter_estilo_nota(nota_str):
     if 1 <= val <= 5:
         return "#dc2626", "white", None
     elif 6 <= val <= 8:
-        return "#2563eb", "white", None
+        return COR_PETROLEO, "white", None
     elif val == 9:
         return "#16a34a", "white", None
     elif val >= 10:
@@ -143,10 +153,36 @@ def obter_estilo_nota(nota_str):
         )
     return "#1e1b4b", "#a78bfa", None
 
+# -------------------------------------------------------------
+# COMPONENTE VISUAL IDÊNTICO DO LOGO
+# -------------------------------------------------------------
+def criar_componente_logo(tamanho=24):
+    fator = tamanho / 24.0
+    return ft.Row(
+        controls=[
+            ft.Text("MOVIE", size=int(26 * fator), weight="black", color=COR_PETROLEO, font_family="Impact, sans-serif"),
+            ft.Container(
+                content=ft.Icon(ft.Icons.PLAY_ARROW_ROUNDED, color=COR_VERMELHO_PLAY, size=int(22 * fator)),
+                alignment=ft.Alignment(0, 0),
+                padding=0,
+                margin=0
+            ),
+            ft.Container(
+                content=ft.Text("INSERT", size=int(24 * fator), weight="black", color=COR_TEXTO_CLARO, font_family="Impact, sans-serif"),
+                bgcolor=COR_PETROLEO,
+                padding=ft.Padding(int(10 * fator), int(2 * fator), int(10 * fator), int(2 * fator)),
+                border_radius=int(6 * fator)
+            )
+        ],
+        spacing=int(4 * fator),
+        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        tight=True
+    )
+
 def main(page: ft.Page):
     page.title = "Movie Insert"
     page.theme_mode = ft.ThemeMode.DARK
-    page.bgcolor = "#0b0c0f"
+    page.bgcolor = COR_FUNDO
     page.padding = 0
     page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
     page.scroll = None
@@ -176,7 +212,7 @@ def main(page: ft.Page):
         "ids_carregados": set()
     }
 
-    progresso = ft.ProgressBar(color="#0284c7", bgcolor="transparent", visible=False)
+    progresso = ft.ProgressBar(color=COR_PETROLEO, bgcolor="transparent", visible=False)
 
     def abrir_dialogo(modal):
         modal.open = True
@@ -214,7 +250,7 @@ def main(page: ft.Page):
         content=txt_confirmacao_msg,
         actions=[
             ft.Button(content=ft.Text("Cancelar", color="#94a3b8"), on_click=lambda e: fechar_dialogo(modal_confirmacao)),
-            ft.Button(content=ft.Text("Sim, remover", color="white"), bgcolor="#dc2626", on_click=executar_remocao)
+            ft.Button(content=ft.Text("Sim, remover", color="white"), bgcolor=COR_VERMELHO_PLAY, on_click=executar_remocao)
         ],
         actions_alignment=ft.MainAxisAlignment.END
     )
@@ -236,7 +272,7 @@ def main(page: ft.Page):
         filme_avaliando["nota"] = str(valor)
         for btn in botoes_notas:
             is_ativo = (btn.data == str(valor))
-            btn.bgcolor = "#0284c7" if is_ativo else "#1f2937"
+            btn.bgcolor = COR_PETROLEO if is_ativo else "#1f2937"
             btn.content.color = "white" if is_ativo else "#94a3b8"
         page.update()
 
@@ -249,7 +285,7 @@ def main(page: ft.Page):
             width=40,
             height=40,
             shape=ft.BoxShape.CIRCLE,
-            bgcolor="#0284c7" if is_padrao else "#1f2937",
+            bgcolor=COR_PETROLEO if is_padrao else "#1f2937",
             ink=True,
             data=s_val,
             on_click=lambda e, v=s_val: selecionar_nota_valor(v)
@@ -289,7 +325,7 @@ def main(page: ft.Page):
         ], tight=True, spacing=10),
         actions=[
             ft.Button(content=ft.Text("Cancelar", color="#94a3b8"), on_click=lambda e: fechar_dialogo(modal_avaliacao)),
-            ft.Button(content=ft.Text("Confirmar", color="white"), bgcolor="#10b981", on_click=confirmar_avaliacao)
+            ft.Button(content=ft.Text("Confirmar", color="white"), bgcolor=COR_PETROLEO, on_click=confirmar_avaliacao)
         ],
         actions_alignment=ft.MainAxisAlignment.END
     )
@@ -328,15 +364,15 @@ def main(page: ft.Page):
     )
 
     dt_imdb = ft.Container(content=ft.Text("⭐ --", color="black", size=11, weight="bold"), bgcolor="#f59e0b", padding=ft.Padding(5, 2, 5, 2), border_radius=5)
-    dt_rt = ft.Container(content=ft.Text("🍅 --", color="white", size=11, weight="bold"), bgcolor="#ef4444", padding=ft.Padding(5, 2, 5, 2), border_radius=5)
-    dt_user = ft.Container(content=ft.Text("★ --", color="white", size=11, weight="bold"), bgcolor="#8b5cf6", padding=ft.Padding(5, 2, 5, 2), border_radius=5)
+    dt_rt = ft.Container(content=ft.Text("🍅 --", color="white", size=11, weight="bold"), bgcolor=COR_VERMELHO_PLAY, padding=ft.Padding(5, 2, 5, 2), border_radius=5)
+    dt_user = ft.Container(content=ft.Text("★ --", color="white", size=11, weight="bold"), bgcolor=COR_PETROLEO, padding=ft.Padding(5, 2, 5, 2), border_radius=5)
 
     btn_trailer = ft.Button(
         content=ft.Text("▶ Trailer", color="white", size=12, weight="bold"),
-        bgcolor="#dc2626",
+        bgcolor=COR_VERMELHO_PLAY,
         url="https://youtube.com"
     )
-    btn_salvar = ft.Button(content=ft.Text("+ Adicionar à Lista", color="white", size=12), bgcolor="#0284c7", disabled=True)
+    btn_salvar = ft.Button(content=ft.Text("+ Adicionar à Lista", color="white", size=12), bgcolor=COR_PETROLEO, disabled=True)
     btn_ir_lista = ft.Button(content=ft.Text("📁 Ir para Minha Lista", color="white", size=12), bgcolor="#10b981", visible=False)
 
     def fechar_detalhes(e=None):
@@ -350,7 +386,7 @@ def main(page: ft.Page):
 
     btn_fechar = ft.Button(
         content=ft.Text("✕ Fechar", color="white", weight="bold", size=12),
-        bgcolor="#0284c7",
+        bgcolor=COR_PETROLEO,
         on_click=fechar_detalhes
     )
 
@@ -365,14 +401,14 @@ def main(page: ft.Page):
 
     conteudo_modal = ft.Container(
         width=480,
-        bgcolor="#111827",
+        bgcolor=COR_CARD,
         padding=14,
         border_radius=12,
         border=ft.Border(
-            ft.BorderSide(1.5, "#0284c7"),
-            ft.BorderSide(1.5, "#0284c7"),
-            ft.BorderSide(1.5, "#0284c7"),
-            ft.BorderSide(1.5, "#0284c7")
+            ft.BorderSide(1.5, COR_PETROLEO),
+            ft.BorderSide(1.5, COR_PETROLEO),
+            ft.BorderSide(1.5, COR_PETROLEO),
+            ft.BorderSide(1.5, COR_PETROLEO)
         ),
         content=ft.Column([
             ft.Row([btn_fechar], alignment=ft.MainAxisAlignment.END),
@@ -427,7 +463,7 @@ def main(page: ft.Page):
 
         it["categoria_existente"] = "Para Assistir"
         btn_salvar.content = ft.Text("✓ Na sua Lista", color="white", size=12)
-        btn_salvar.bgcolor = "#475569"
+        btn_salvar.bgcolor = "#334155"
         btn_salvar.disabled = True
         btn_ir_lista.visible = True
         page.update()
@@ -599,12 +635,12 @@ def main(page: ft.Page):
 
                 if cat_exist:
                     btn_salvar.content = ft.Text("✓ Na sua Lista", color="white", size=12)
-                    btn_salvar.bgcolor = "#475569"
+                    btn_salvar.bgcolor = "#334155"
                     btn_salvar.disabled = True
                     btn_ir_lista.visible = True
                 else:
                     btn_salvar.content = ft.Text("+ Adicionar à Lista", color="white", size=12)
-                    btn_salvar.bgcolor = "#0284c7"
+                    btn_salvar.bgcolor = COR_PETROLEO
                     btn_salvar.disabled = False
                     btn_ir_lista.visible = False
 
@@ -665,15 +701,15 @@ def main(page: ft.Page):
 
         card_corpo = ft.Container(
             width=162,
-            bgcolor="#111827",
+            bgcolor=COR_CARD,
             padding=5,
             border_radius=8,
             ink=True,
             border=ft.Border(
-                ft.BorderSide(1.2, "#1f2937"),
-                ft.BorderSide(1.2, "#1f2937"),
-                ft.BorderSide(1.2, "#1f2937"),
-                ft.BorderSide(1.2, "#1f2937")
+                ft.BorderSide(1.2, COR_BORDA),
+                ft.BorderSide(1.2, COR_BORDA),
+                ft.BorderSide(1.2, COR_BORDA),
+                ft.BorderSide(1.2, COR_BORDA)
             ),
             content=ft.Column([
                 ft.Image(
@@ -690,7 +726,8 @@ def main(page: ft.Page):
                     max_lines=2,
                     overflow="ellipsis",
                     width=152,
-                    text_align=ft.TextAlign.CENTER
+                    text_align=ft.TextAlign.CENTER,
+                    color=COR_TEXTO_CLARO
                 ),
                 ft.Row(acoes, spacing=3, alignment=ft.MainAxisAlignment.SPACE_BETWEEN, width=152) if acoes else ft.Container()
             ], spacing=3, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
@@ -700,7 +737,7 @@ def main(page: ft.Page):
 
     grade_populares = ft.Row(wrap=True, spacing=12, run_spacing=14, alignment=ft.MainAxisAlignment.CENTER)
     coluna_biblioteca_itens = ft.Column(spacing=16, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
-    spinner_carregamento = ft.ProgressRing(width=30, height=30, stroke_width=3, color="#0284c7", visible=False)
+    spinner_carregamento = ft.ProgressRing(width=30, height=30, stroke_width=3, color=COR_PETROLEO, visible=False)
 
     # -------------------------------------------------------------
     # POPULARES E ROLAGEM INFINITA (FLUXO CONTÍNUO)
@@ -880,19 +917,21 @@ def main(page: ft.Page):
 
         btn_print = ft.Button(
             content=ft.Text("🖨️ Imprimir", color="white", size=11, weight="bold"),
-            bgcolor="#334155",
+            bgcolor=COR_CHUMBO,
             on_click=lambda e: imprimir_lista()
         )
 
         btn_aba_para_assistir = ft.Button(
-            content=ft.Text(f"⏳ Para Assistir ({total_para_assistir})", color="white" if aba_atual == "Para Assistir" else "#94a3b8", weight="bold"),
-            bgcolor="#0284c7" if aba_atual == "Para Assistir" else "#1e293b",
+            content=ft.Text(f"⏳ Para Assistir ({total_para_assistir})", color=COR_TEXTO_CLARO if aba_atual == "Para Assistir" else "#94a3b8", weight="bold"),
+            bgcolor=COR_PETROLEO if aba_atual == "Para Assistir" else COR_CHUMBO,
+            style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10)),
             on_click=lambda e: mudar_aba_biblioteca("Para Assistir")
         )
 
         btn_aba_assistidos = ft.Button(
-            content=ft.Text(f"✓ Assistidos ({total_assistidos})", color="white" if aba_atual == "Assistidos" else "#94a3b8", weight="bold"),
-            bgcolor="#10b981" if aba_atual == "Assistidos" else "#1e293b",
+            content=ft.Text(f"✓ Assistidos ({total_assistidos})", color=COR_TEXTO_CLARO if aba_atual == "Assistidos" else "#94a3b8", weight="bold"),
+            bgcolor=COR_PETROLEO if aba_atual == "Assistidos" else COR_CHUMBO,
+            style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10)),
             on_click=lambda e: mudar_aba_biblioteca("Assistidos")
         )
 
@@ -905,9 +944,13 @@ def main(page: ft.Page):
         def criar_botao_filtro(rotulo, modo_alvo):
             ativo = (modo_atual == modo_alvo)
             return ft.Button(
-                content=ft.Text(rotulo, color="white" if ativo else "#94a3b8", size=11, weight="bold"),
-                bgcolor="#0284c7" if ativo else "#111827",
+                content=ft.Text(rotulo, color=COR_TEXTO_CLARO if ativo else "#94a3b8", size=11, weight="bold"),
+                bgcolor=COR_PETROLEO if ativo else COR_CARD,
                 height=32,
+                style=ft.ButtonStyle(
+                    shape=ft.RoundedRectangleBorder(radius=8),
+                    side=ft.BorderSide(1, COR_PETROLEO if ativo else COR_BORDA)
+                ),
                 on_click=lambda e, m=modo_alvo: mudar_modo_filtro(m)
             )
 
@@ -934,7 +977,7 @@ def main(page: ft.Page):
             content=ft.Column([
                 ft.Row(
                     [
-                        ft.Text(f"Biblioteca ({len(todos_itens)})", size=20, weight="bold"),
+                        ft.Text(f"Biblioteca ({len(todos_itens)})", size=20, weight="bold", color=COR_TEXTO_CLARO),
                         btn_print
                     ],
                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN
@@ -979,7 +1022,8 @@ def main(page: ft.Page):
                         ft.Text(f"{icone} {titulo_secao}", size=15, weight="bold", color=cor),
                         ft.Container(
                             content=ft.Text(f"{len(lista)}", size=11, color="white", weight="bold"),
-                            bgcolor="#1e293b",
+                            bgcolor=COR_CARD,
+                            border=ft.Border(all=ft.BorderSide(1, COR_BORDA)),
                             padding=ft.Padding(5, 2, 5, 2),
                             border_radius=8
                         )
@@ -1007,10 +1051,11 @@ def main(page: ft.Page):
             if texto_info:
                 elementos.append(
                     ft.Row([
-                        ft.Text(texto_info, size=15, weight="bold", color="#38bdf8"),
+                        ft.Text(texto_info, size=15, weight="bold", color=COR_TEXTO_CLARO),
                         ft.Container(
                             content=ft.Text(f"{len(lista)}", size=11, color="white", weight="bold"),
-                            bgcolor="#1e293b",
+                            bgcolor=COR_CARD,
+                            border=ft.Border(all=ft.BorderSide(1, COR_BORDA)),
                             padding=ft.Padding(5, 2, 5, 2),
                             border_radius=8
                         )
@@ -1046,7 +1091,7 @@ def main(page: ft.Page):
                         mapa["Sem streaming no BR"].append((mid, tit, ano, p_url, nota, cat))
 
             for servico in ordem_secoes:
-                cor = "#a78bfa" if servico == "Stremio" else ("#94a3b8" if servico == "Sem streaming no BR" else "#38bdf8")
+                cor = "#a78bfa" if servico == "Stremio" else ("#94a3b8" if servico == "Sem streaming no BR" else COR_TEXTO_CLARO)
                 ico = "🎬" if servico == "Stremio" else ("❌" if servico == "Sem streaming no BR" else "📺")
                 renderizar_secao(servico, ico, cor, mapa[servico])
 
@@ -1066,7 +1111,7 @@ def main(page: ft.Page):
                 letras_ordenadas.append("#")
 
             for letra in letras_ordenadas:
-                renderizar_secao(f"Letra {letra}", "🔤", "#38bdf8", mapa_alfabetico[letra])
+                renderizar_secao(f"Letra {letra}", "🔤", COR_TEXTO_CLARO, mapa_alfabetico[letra])
 
         # ---------------- MODO 3: GÊNEROS ----------------
         elif modo_atual == "genero":
@@ -1121,16 +1166,17 @@ def main(page: ft.Page):
         page.update()
 
     # -------------------------------------------------------------
-    # BUSCA COM AUTOCOMPLETE (COM DELAY PARA CLIQUE)
+    # BUSCA COM AUTOCOMPLETE
     # -------------------------------------------------------------
     coluna_sugestoes = ft.Column(spacing=4)
     container_sugestoes = ft.Container(
         content=coluna_sugestoes,
-        bgcolor="#1f2937",
+        bgcolor=COR_CARD,
         border_radius=8,
+        border=ft.Border(all=ft.BorderSide(1, COR_BORDA)),
         padding=6,
         visible=False,
-        width=260
+        width=250
     )
 
     def selecionar_sugestao(mid, mtype, tit, ano, p_url):
@@ -1176,7 +1222,7 @@ def main(page: ft.Page):
                     padding=6,
                     border_radius=6,
                     ink=True,
-                    bgcolor="#111827",
+                    bgcolor=COR_FUNDO,
                     on_click=lambda e, m=mid, mt=mtype, t=tit, a=ano, p=p_url: selecionar_sugestao(m, mt, t, a, p),
                     content=ft.Row([
                         ft.Image(
@@ -1229,14 +1275,14 @@ def main(page: ft.Page):
         hint_text="Buscar filmes ou séries...",
         hint_style=ft.TextStyle(size=12, color="#64748b"),
         text_size=12,
-        bgcolor="#0f172a",
+        bgcolor="#0d1419",
         dense=True,
-        border_radius=18,
-        border_color="#1e293b",
-        focused_border_color="#0284c7",
-        width=230,
+        border_radius=10,
+        border_color=COR_BORDA,
+        focused_border_color=COR_PETROLEO,
+        width=215,
         height=38,
-        content_padding=ft.Padding(14, 0, 10, 0),
+        content_padding=ft.Padding(12, 0, 10, 0),
         on_change=ao_digitar_busca,
         on_submit=disparar_busca_manual,
         on_blur=fechar_busca_ao_perder_foco
@@ -1244,7 +1290,7 @@ def main(page: ft.Page):
 
     btn_lupa = ft.IconButton(
         icon=ft.Icons.SEARCH,
-        icon_color="#0284c7",
+        icon_color="#64748b",
         icon_size=18,
         tooltip="Buscar filme",
         on_click=disparar_busca_manual
@@ -1256,35 +1302,38 @@ def main(page: ft.Page):
     ], spacing=2, tight=True)
 
     # -------------------------------------------------------------
-    # CABEÇALHO HORIZONTAL MODERNO (IDÊNTICO À PROPOSTA)
+    # CABEÇALHO HORIZONTAL (IDÊNTICO À PROPOSTA)
     # -------------------------------------------------------------
-    logo_movie_insert = ft.Row([
-        ft.Text("MOVIE", size=26, weight="black", color="#0284c7"),
-        ft.Icon(ft.Icons.PLAY_ARROW_ROUNDED, color="#ef4444", size=24),
-        ft.Text("INSERT", size=26, weight="black", color="#e2e8f0")
-    ], spacing=4, vertical_alignment=ft.CrossAxisAlignment.CENTER)
+    componente_logo_header = criar_componente_logo(tamanho=24)
 
+    # Botões de navegação idênticos aos assets enviados
     btn_tab_inicio = ft.Button(
-        content=ft.Text("INÍCIO", color="white", size=13, weight="bold"),
-        bgcolor="#0e4b60",
-        width=130,
+        content=ft.Text("INÍCIO", color="white", size=13, weight="bold", font_family="Arial, sans-serif"),
+        bgcolor=COR_PETROLEO,
+        width=120,
         height=38,
-        style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=19)),
+        style=ft.ButtonStyle(
+            shape=ft.RoundedRectangleBorder(radius=8),
+            elevation=0
+        ),
         on_click=lambda e: alternar_tela(0)
     )
 
     btn_tab_bib = ft.Button(
-        content=ft.Text("BIBLIOTECA", color="#cbd5e1", size=13, weight="bold"),
-        bgcolor="#1e293b",
+        content=ft.Text("BIBLIOTECA", color=COR_TEXTO_CLARO, size=13, weight="bold", font_family="Arial, sans-serif"),
+        bgcolor=COR_CHUMBO,
         width=140,
         height=38,
-        style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=19)),
+        style=ft.ButtonStyle(
+            shape=ft.RoundedRectangleBorder(radius=8),
+            elevation=0
+        ),
         on_click=lambda e: alternar_tela(1)
     )
 
     linha_botoes_topo = ft.Row(controls=[btn_tab_inicio, btn_tab_bib], spacing=10)
 
-    lbl_user_tag = ft.Text("", size=11, color="#38bdf8", weight="bold")
+    lbl_user_tag = ft.Text("", size=11, color="#64748b", weight="bold")
 
     def acao_logout(e):
         try:
@@ -1316,7 +1365,7 @@ def main(page: ft.Page):
 
     btn_logout = ft.IconButton(
         icon=ft.Icons.LOGOUT,
-        icon_color="#ef4444",
+        icon_color=COR_VERMELHO_PLAY,
         icon_size=15,
         tooltip="Sair da conta",
         on_click=acao_logout
@@ -1324,16 +1373,15 @@ def main(page: ft.Page):
 
     linha_usuario_topo = ft.Row([lbl_user_tag, btn_logout], spacing=2, vertical_alignment=ft.CrossAxisAlignment.CENTER)
 
-    # Linha principal do cabeçalho horizontal (Navbar)
     cabecalho_fixo = ft.Container(
-        bgcolor="#0b0c0f",
-        padding=ft.Padding(20, 10, 20, 10),
-        border=ft.Border(bottom=ft.BorderSide(1, "#111827")),
+        bgcolor=COR_FUNDO,
+        padding=ft.Padding(24, 12, 24, 12),
+        border=ft.Border(bottom=ft.BorderSide(1, COR_BORDA)),
         content=ft.Column([
             progresso,
             ft.Row(
                 controls=[
-                    logo_movie_insert,
+                    componente_logo_header,
                     linha_botoes_topo,
                     bloco_busca,
                     linha_usuario_topo
@@ -1348,9 +1396,9 @@ def main(page: ft.Page):
     # VIEWS ROLÁVEIS INDEPENDENTES
     # -------------------------------------------------------------
     titulo_trends = ft.Container(
-        content=ft.Text("Filmes em Alta (TMDb Trends)", size=16, weight="bold", color="#e2e8f0"),
+        content=ft.Text("Filmes em Alta (TMDb Trends)", size=15, weight="bold", color=COR_TEXTO_CLARO),
         alignment=ft.Alignment(-1, 0),
-        padding=ft.Padding(20, 10, 20, 0)
+        padding=ft.Padding(24, 14, 24, 0)
     )
 
     view_inicio = ft.Container(
@@ -1393,17 +1441,17 @@ def main(page: ft.Page):
         if indice == 0:
             view_inicio.visible = True
             view_biblioteca.visible = False
-            btn_tab_inicio.bgcolor = "#0e4b60"
+            btn_tab_inicio.bgcolor = COR_PETROLEO
             btn_tab_inicio.content.color = "white"
-            btn_tab_bib.bgcolor = "#1e293b"
-            btn_tab_bib.content.color = "#cbd5e1"
+            btn_tab_bib.bgcolor = COR_CHUMBO
+            btn_tab_bib.content.color = COR_TEXTO_CLARO
         elif indice == 1:
             carregar_biblioteca()
             view_inicio.visible = False
             view_biblioteca.visible = True
-            btn_tab_inicio.bgcolor = "#1e293b"
-            btn_tab_inicio.content.color = "#cbd5e1"
-            btn_tab_bib.bgcolor = "#0e4b60"
+            btn_tab_inicio.bgcolor = COR_CHUMBO
+            btn_tab_inicio.content.color = COR_TEXTO_CLARO
+            btn_tab_bib.bgcolor = COR_PETROLEO
             btn_tab_bib.content.color = "white"
 
         page.update()
@@ -1421,42 +1469,54 @@ def main(page: ft.Page):
     )
 
     # -------------------------------------------------------------
-    # TELA DE AUTENTICAÇÃO
+    # TELA DE AUTENTICAÇÃO COM LOGO E PALETA OFICIAL
     # -------------------------------------------------------------
-    txt_auth_titulo = ft.Text("Entrar", size=22, weight="bold", color="#38bdf8")
+    componente_logo_login = criar_componente_logo(tamanho=22)
+
+    txt_auth_titulo = ft.Text("Entrar", size=18, weight="bold", color=COR_TEXTO_CLARO)
     txt_auth_erro = ft.Text("", size=12, color="#ef4444")
     
     txt_auth_user = ft.TextField(
         label="Nome de Usuário",
-        bgcolor="#1e293b",
+        label_style=ft.TextStyle(color="#94a3b8"),
+        bgcolor=COR_FUNDO,
         dense=True,
         border_radius=8,
+        border_color=COR_BORDA,
+        focused_border_color=COR_PETROLEO,
         width=300
     )
     txt_auth_pass = ft.TextField(
         label="Senha",
+        label_style=ft.TextStyle(color="#94a3b8"),
         password=True,
         can_reveal_password=True,
-        bgcolor="#1e293b",
+        bgcolor=COR_FUNDO,
         dense=True,
         border_radius=8,
+        border_color=COR_BORDA,
+        focused_border_color=COR_PETROLEO,
         width=300
     )
     txt_auth_pass_confirm = ft.TextField(
         label="Confirmar Nova Senha",
+        label_style=ft.TextStyle(color="#94a3b8"),
         password=True,
         can_reveal_password=True,
-        bgcolor="#1e293b",
+        bgcolor=COR_FUNDO,
         dense=True,
         border_radius=8,
+        border_color=COR_BORDA,
+        focused_border_color=COR_PETROLEO,
         width=300,
         visible=False
     )
 
     chk_manter_conectado = ft.Checkbox(
         label="Permanecer conectado",
+        label_style=ft.TextStyle(size=12, color=COR_TEXTO_CLARO),
         value=True,
-        fill_color="#0284c7",
+        fill_color=COR_PETROLEO,
         check_color="white"
     )
     container_chk_manter = ft.Container(
@@ -1476,47 +1536,26 @@ def main(page: ft.Page):
         
         if novo_modo == "login":
             txt_auth_titulo.value = "Entrar"
-            txt_auth_titulo.color = "#38bdf8"
-            card_interno_auth.border = ft.Border(
-                ft.BorderSide(1.5, "#0284c7"),
-                ft.BorderSide(1.5, "#0284c7"),
-                ft.BorderSide(1.5, "#0284c7"),
-                ft.BorderSide(1.5, "#0284c7")
-            )
             txt_auth_pass.label = "Senha"
-            btn_executar_auth.bgcolor = "#0284c7"
+            btn_executar_auth.bgcolor = COR_PETROLEO
             btn_executar_auth.content = ft.Text("Entrar", color="white", weight="bold")
-            btn_alternar_auth.content = ft.Text("Não tem uma conta? Cadastre-se", color="#10b981", size=12)
+            btn_alternar_auth.content = ft.Text("Não tem uma conta? Cadastre-se", color="#94a3b8", size=12)
             btn_recuperar_auth.visible = True
             
         elif novo_modo == "cadastro":
             txt_auth_titulo.value = "Criar Nova Conta"
-            txt_auth_titulo.color = "#34d399"
-            card_interno_auth.border = ft.Border(
-                ft.BorderSide(1.5, "#059669"),
-                ft.BorderSide(1.5, "#059669"),
-                ft.BorderSide(1.5, "#059669"),
-                ft.BorderSide(1.5, "#059669")
-            )
             txt_auth_pass.label = "Senha"
-            btn_executar_auth.bgcolor = "#059669"
+            btn_executar_auth.bgcolor = COR_PETROLEO
             btn_executar_auth.content = ft.Text("Cadastrar Nova Conta", color="white", weight="bold")
-            btn_alternar_auth.content = ft.Text("Já tem uma conta? Entrar", color="#38bdf8", size=12)
+            btn_alternar_auth.content = ft.Text("Já tem uma conta? Entrar", color="#94a3b8", size=12)
             btn_recuperar_auth.visible = False
             
         elif novo_modo == "recuperar":
             txt_auth_titulo.value = "Recuperar / Trocar Senha"
-            txt_auth_titulo.color = "#fbbf24"
-            card_interno_auth.border = ft.Border(
-                ft.BorderSide(1.5, "#d97706"),
-                ft.BorderSide(1.5, "#d97706"),
-                ft.BorderSide(1.5, "#d97706"),
-                ft.BorderSide(1.5, "#d97706")
-            )
             txt_auth_pass.label = "Nova Senha"
-            btn_executar_auth.bgcolor = "#d97706"
+            btn_executar_auth.bgcolor = COR_VERMELHO_PLAY
             btn_executar_auth.content = ft.Text("Salvar Nova Senha", color="white", weight="bold")
-            btn_alternar_auth.content = ft.Text("Lembrou da senha? Voltar ao Login", color="#38bdf8", size=12)
+            btn_alternar_auth.content = ft.Text("Lembrou da senha? Voltar ao Login", color="#94a3b8", size=12)
             btn_recuperar_auth.visible = False
             
         page.update()
@@ -1646,37 +1685,38 @@ def main(page: ft.Page):
 
     btn_executar_auth = ft.Button(
         content=ft.Text("Entrar", color="white", weight="bold"),
-        bgcolor="#0284c7",
+        bgcolor=COR_PETROLEO,
         width=300,
         height=40,
+        style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8)),
         on_click=processar_auth
     )
 
     btn_alternar_auth = ft.Button(
-        content=ft.Text("Não tem uma conta? Cadastre-se", color="#10b981", size=12),
+        content=ft.Text("Não tem uma conta? Cadastre-se", color="#94a3b8", size=12),
         bgcolor="transparent",
         on_click=lambda e: definir_modo_auth("cadastro" if modo_auth["modo"] == "login" else "login")
     )
 
     btn_recuperar_auth = ft.Button(
-        content=ft.Text("Esqueceu a senha?", color="#94a3b8", size=11),
+        content=ft.Text("Esqueceu a senha?", color="#64748b", size=11),
         bgcolor="transparent",
         on_click=lambda e: definir_modo_auth("recuperar")
     )
 
     card_interno_auth = ft.Container(
         width=360,
-        bgcolor="#111827",
+        bgcolor=COR_CARD,
         padding=24,
         border_radius=12,
         border=ft.Border(
-            ft.BorderSide(1.5, "#0284c7"),
-            ft.BorderSide(1.5, "#0284c7"),
-            ft.BorderSide(1.5, "#0284c7"),
-            ft.BorderSide(1.5, "#0284c7")
+            ft.BorderSide(1.5, COR_BORDA),
+            ft.BorderSide(1.5, COR_BORDA),
+            ft.BorderSide(1.5, COR_BORDA),
+            ft.BorderSide(1.5, COR_BORDA)
         ),
         content=ft.Column([
-            logo_movie_insert,
+            componente_logo_login,
             ft.Container(height=4),
             txt_auth_titulo,
             txt_auth_erro,
@@ -1701,7 +1741,7 @@ def main(page: ft.Page):
     spinner_autologin = ft.Container(
         alignment=ft.Alignment(0, 0),
         padding=ft.Padding(0, 150, 0, 0),
-        content=ft.ProgressRing(width=36, height=36, stroke_width=3, color="#0284c7"),
+        content=ft.ProgressRing(width=36, height=36, stroke_width=3, color=COR_PETROLEO),
         visible=True
     )
 
