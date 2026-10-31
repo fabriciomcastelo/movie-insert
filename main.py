@@ -1090,4 +1090,175 @@ def main(page: ft.Page):
             container_sugestoes.visible = len(coluna_sugestoes.controls) > 0
             page.update()
         except Exception:
-            
+            pass
+
+    def disparar_busca_manual(e=None):
+        termo = campo_busca.value
+        if termo and len(termo.strip()) >= 2:
+            buscar_sugestoes_api(termo)
+
+    def ao_digitar_busca(e):
+        termo = campo_busca.value
+        if timer_busca["timer"]:
+            timer_busca["timer"].cancel()
+
+        if not termo or len(termo.strip()) < 2:
+            container_sugestoes.visible = False
+            page.update()
+            return
+
+        t = threading.Timer(0.25, buscar_sugestoes_api, args=[termo])
+        timer_busca["timer"] = t
+        t.start()
+
+    campo_busca = ft.TextField(
+        hint_text="Buscar filmes ou séries...",
+        bgcolor="#0f172a",
+        dense=True,
+        border_radius=8,
+        border_color="#1e293b",
+        focused_border_color="#3b82f6",
+        expand=True,
+        on_change=ao_digitar_busca,
+        on_submit=disparar_busca_manual
+    )
+
+    btn_lupa = ft.IconButton(
+        icon=ft.Icons.SEARCH,
+        icon_color="#3b82f6",
+        tooltip="Buscar filme",
+        on_click=disparar_busca_manual
+    )
+
+    header_busca = ft.Column([
+        ft.Row([campo_busca, btn_lupa], spacing=4, alignment=ft.MainAxisAlignment.CENTER),
+        container_sugestoes
+    ], spacing=4, width=420, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
+
+    # -------------------------------------------------------------
+    # CABEÇALHO FIXO (CLIQUES 100% FUNCIONAIS)
+    # -------------------------------------------------------------
+    lbl_app_titulo = ft.Text("MOVIE INSERT", size=22, weight="bold", color="white", text_align=ft.TextAlign.CENTER)
+
+    btn_tab_inicio = ft.Container(
+        content=ft.Text("Início", color="#0b0c0f", size=15, weight="bold"),
+        bgcolor="#e2e8f0",
+        width=140,
+        height=42,
+        border_radius=21,
+        alignment=ft.Alignment(0, 0),
+        ink=True,
+        on_click=lambda e: alternar_tela(0)
+    )
+
+    btn_tab_bib = ft.Container(
+        content=ft.Text("Biblioteca", color="#ffffff", size=15, weight="bold"),
+        bgcolor="#1d4ed8",
+        width=140,
+        height=42,
+        border_radius=21,
+        alignment=ft.Alignment(0, 0),
+        ink=True,
+        on_click=lambda e: alternar_tela(1)
+    )
+
+    linha_botoes_topo = ft.Row(controls=[btn_tab_inicio, btn_tab_bib], spacing=12, alignment=ft.MainAxisAlignment.CENTER)
+
+    cabecalho_fixo = ft.Container(
+        bgcolor="#0b0c0f",
+        padding=ft.Padding(12, 10, 12, 10),
+        content=ft.Column(
+            controls=[
+                progresso,
+                lbl_app_titulo,
+                linha_botoes_topo,
+                header_busca,
+            ],
+            spacing=8,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER
+        )
+    )
+
+    # -------------------------------------------------------------
+    # VIEWS ROLÁVEIS INDEPENDENTES
+    # -------------------------------------------------------------
+    view_inicio = ft.Container(
+        expand=True,
+        padding=ft.Padding(12, 0, 12, 10),
+        content=ft.Column(
+            scroll=ft.ScrollMode.AUTO,
+            on_scroll=ao_rolar_inicio,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            spacing=14,
+            controls=[
+                ft.Container(content=ft.Text("Filmes em Alta (TMDb Trends)", size=17, weight="bold"), width=420),
+                grade_populares,
+                ft.Container(
+                    content=spinner_carregamento,
+                    alignment=ft.Alignment(0, 0),
+                    padding=ft.Padding(0, 15, 0, 35)
+                )
+            ]
+        )
+    )
+
+    view_biblioteca = ft.Container(
+        expand=True,
+        visible=False,
+        padding=ft.Padding(12, 0, 12, 10),
+        content=ft.Column(
+            scroll=ft.ScrollMode.AUTO,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            spacing=14,
+            controls=[coluna_biblioteca_itens]
+        )
+    )
+
+    def alternar_tela(indice):
+        fechar_dialogo(modal_detalhes)
+        if container_sugestoes.visible:
+            container_sugestoes.visible = False
+
+        if indice == 0:
+            view_inicio.visible = True
+            view_biblioteca.visible = False
+            btn_tab_inicio.bgcolor = "#e2e8f0"
+            btn_tab_inicio.content.color = "#0b0c0f"
+            btn_tab_bib.bgcolor = "#1d4ed8"
+            btn_tab_bib.content.color = "#ffffff"
+        elif indice == 1:
+            carregar_biblioteca()
+            view_inicio.visible = False
+            view_biblioteca.visible = True
+            btn_tab_inicio.bgcolor = "#1e293b"
+            btn_tab_inicio.content.color = "#94a3b8"
+            btn_tab_bib.bgcolor = "#e2e8f0"
+            btn_tab_bib.content.color = "#0b0c0f"
+
+        page.update()
+
+    # Layout mestre que empilha cabeçalho e corpo com suporte total a cliques
+    layout_mestre = ft.Column(
+        expand=True,
+        spacing=0,
+        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+        controls=[
+            cabecalho_fixo,
+            view_inicio,
+            view_biblioteca
+        ]
+    )
+
+    page.add(layout_mestre)
+    page.update()
+
+    def inicializar_catalogo():
+        carregar_populares()
+        threading.Timer(0.6, lambda: carregar_populares(incrementar=True)).start()
+        threading.Timer(1.4, lambda: carregar_populares(incrementar=True)).start()
+
+    inicializar_catalogo()
+
+if __name__ == "__main__":
+    porta = int(os.environ.get("PORT", 8550))
+    ft.run(main, view=ft.AppView.WEB_BROWSER, host="0.0.0.0", port=porta)
