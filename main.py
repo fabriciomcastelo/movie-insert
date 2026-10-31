@@ -39,7 +39,7 @@ def carregar_config():
     return cfg
 
 # -------------------------------------------------------------
-# SEGURANÇA E BANCO DE DADOS
+# SEGURANÇA E BASE DE DADOS
 # -------------------------------------------------------------
 def gerar_hash_senha(senha: str) -> str:
     salt = os.urandom(16).hex()
@@ -304,7 +304,7 @@ def main(page: ft.Page):
         abrir_dialogo(modal_avaliacao)
 
     # -------------------------------------------------------------
-    # JANELA DE DETALHES
+    # DETALHES DO FILME
     # -------------------------------------------------------------
     dt_img = ft.Image(
         src="https://via.placeholder.com/130x195?text=Sem+Poster",
@@ -1256,10 +1256,12 @@ def main(page: ft.Page):
     lbl_user_tag = ft.Text("", size=11, color="#94a3b8", weight="bold")
 
     def acao_logout(e):
+        # Limpa os cookies nativos e o storage
         try:
-            page.client_storage.remove("user_id")
-            page.client_storage.remove("username")
-            page.client_storage.remove("manter_conectado")
+            page.run_javascript("document.cookie = 'user_id=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';")
+            page.run_javascript("document.cookie = 'username=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';")
+            page.run_javascript("document.cookie = 'manter_conectado=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';")
+            page.client_storage.clear()
         except Exception:
             pass
         
@@ -1509,18 +1511,27 @@ def main(page: ft.Page):
         sessao_usuario["username"] = str(username)
         lbl_user_tag.value = f"👤 {username}"
         
-        try:
-            if persistir:
+        # Persistência redundante dupla (Cookies HTTP do Navegador + Client Storage)
+        if persistir:
+            try:
+                page.run_javascript(f"document.cookie = 'user_id={uid}; max-age=31536000; path=/;';")
+                page.run_javascript(f"document.cookie = 'username={username}; max-age=31536000; path=/;';")
+                page.run_javascript("document.cookie = 'manter_conectado=true; max-age=31536000; path=/;';")
                 page.client_storage.set("user_id", str(uid))
                 page.client_storage.set("username", str(username))
                 page.client_storage.set("manter_conectado", "true")
-            else:
-                page.client_storage.remove("user_id")
-                page.client_storage.remove("username")
-                page.client_storage.remove("manter_conectado")
-        except Exception:
-            pass
+            except Exception:
+                pass
+        else:
+            try:
+                page.run_javascript("document.cookie = 'user_id=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';")
+                page.run_javascript("document.cookie = 'username=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';")
+                page.run_javascript("document.cookie = 'manter_conectado=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';")
+                page.client_storage.clear()
+            except Exception:
+                pass
 
+        spinner_autologin.visible = False
         card_auth.visible = False
         layout_mestre.visible = True
         page.update()
@@ -1673,7 +1684,6 @@ def main(page: ft.Page):
         visible=False
     )
 
-    # Spinner inicial enquanto a ponte do navegador lê o client_storage
     spinner_autologin = ft.Container(
         alignment=ft.Alignment(0, 0),
         padding=ft.Padding(0, 150, 0, 0),
@@ -1685,27 +1695,37 @@ def main(page: ft.Page):
     page.update()
 
     # -------------------------------------------------------------
-    # RESTAURAÇÃO DE SESSÃO AUTOMÁTICA (ROBUSTA PARA WEB)
+    # RECUPERAÇÃO DE SESSÃO COM DUPLA VERIFICAÇÃO (CLIENT STORAGE + COOKIES)
     # -------------------------------------------------------------
     def verificar_sessao_salva():
-        # Aguarda a ponte WebSocket com o navegador sincronizar o localStorage
-        time.sleep(0.2)
+        time.sleep(0.3)
         saved_uid = None
         saved_user = None
         saved_manter = None
 
+        # 1ª Tentativa: Client Storage
         try:
             saved_uid = page.client_storage.get("user_id")
             saved_user = page.client_storage.get("username")
             saved_manter = page.client_storage.get("manter_conectado")
-        except Exception as err:
-            print(f"Erro ao ler storage: {err}")
+        except Exception:
+            pass
 
-        spinner_autologin.visible = False
+        # 2ª Tentativa: Cookies do Navegador se o storage falhar
+        if not saved_uid or str(saved_manter).lower() != "true":
+            try:
+                cookies = page.cookies
+                if cookies:
+                    saved_uid = cookies.get("user_id")
+                    saved_user = cookies.get("username")
+                    saved_manter = cookies.get("manter_conectado")
+            except Exception:
+                pass
 
-        if saved_uid and saved_user and str(saved_manter).lower() == "true":
+        if saved_uid and saved_user and (str(saved_manter).lower() == "true"):
             iniciar_sessao(saved_uid, saved_user, persistir=True)
         else:
+            spinner_autologin.visible = False
             definir_modo_auth("login")
             card_auth.visible = True
             layout_mestre.visible = False
