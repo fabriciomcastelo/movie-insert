@@ -6,6 +6,7 @@ import requests
 import threading
 import unicodedata
 import hashlib
+import time
 from urllib.parse import quote_plus
 from datetime import datetime
 
@@ -702,7 +703,7 @@ def main(page: ft.Page):
     spinner_carregamento = ft.ProgressRing(width=30, height=30, stroke_width=3, color="#3b82f6", visible=False)
 
     # -------------------------------------------------------------
-    # POPULARES E ROLAGEM INFINITA CONTÍNUA
+    # POPULARES E ROLAGEM INFINITA (FLUXO CONTÍNUO)
     # -------------------------------------------------------------
     def carregar_populares(incrementar=False):
         c = carregar_config()
@@ -1403,7 +1404,7 @@ def main(page: ft.Page):
     )
 
     # -------------------------------------------------------------
-    # TELA DE AUTENTICAÇÃO COM CAIXA DE PERMANECER CONECTADO
+    # TELA DE AUTENTICAÇÃO
     # -------------------------------------------------------------
     txt_auth_titulo = ft.Text("Entrar", size=22, weight="bold", color="#60a5fa")
     txt_auth_erro = ft.Text("", size=12, color="#ef4444")
@@ -1435,7 +1436,6 @@ def main(page: ft.Page):
         visible=False
     )
 
-    # Checkbox ajustado com container dedicado para renderização estável
     chk_manter_conectado = ft.Checkbox(
         label="Permanecer conectado",
         value=True,
@@ -1669,31 +1669,49 @@ def main(page: ft.Page):
     card_auth = ft.Container(
         alignment=ft.Alignment(0, 0),
         padding=ft.Padding(0, 60, 0, 0),
-        content=card_interno_auth
+        content=card_interno_auth,
+        visible=False
     )
 
-    page.add(card_auth, layout_mestre)
+    # Spinner inicial enquanto a ponte do navegador lê o client_storage
+    spinner_autologin = ft.Container(
+        alignment=ft.Alignment(0, 0),
+        padding=ft.Padding(0, 150, 0, 0),
+        content=ft.ProgressRing(width=36, height=36, stroke_width=3, color="#3b82f6"),
+        visible=True
+    )
+
+    page.add(spinner_autologin, card_auth, layout_mestre)
+    page.update()
 
     # -------------------------------------------------------------
-    # RESTAURAÇÃO DE SESSÃO AUTOMÁTICA
+    # RESTAURAÇÃO DE SESSÃO AUTOMÁTICA (ROBUSTA PARA WEB)
     # -------------------------------------------------------------
-    saved_uid = None
-    saved_user = None
-    saved_manter = None
-    try:
-        saved_uid = page.client_storage.get("user_id")
-        saved_user = page.client_storage.get("username")
-        saved_manter = page.client_storage.get("manter_conectado")
-    except Exception:
-        pass
+    def verificar_sessao_salva():
+        # Aguarda a ponte WebSocket com o navegador sincronizar o localStorage
+        time.sleep(0.2)
+        saved_uid = None
+        saved_user = None
+        saved_manter = None
 
-    if saved_uid and saved_user and saved_manter == "true":
-        iniciar_sessao(saved_uid, saved_user, persistir=True)
-    else:
-        definir_modo_auth("login")
-        card_auth.visible = True
-        layout_mestre.visible = False
-        page.update()
+        try:
+            saved_uid = page.client_storage.get("user_id")
+            saved_user = page.client_storage.get("username")
+            saved_manter = page.client_storage.get("manter_conectado")
+        except Exception as err:
+            print(f"Erro ao ler storage: {err}")
+
+        spinner_autologin.visible = False
+
+        if saved_uid and saved_user and str(saved_manter).lower() == "true":
+            iniciar_sessao(saved_uid, saved_user, persistir=True)
+        else:
+            definir_modo_auth("login")
+            card_auth.visible = True
+            layout_mestre.visible = False
+            page.update()
+
+    threading.Thread(target=verificar_sessao_salva, daemon=True).start()
 
 if __name__ == "__main__":
     porta = int(os.environ.get("PORT", 8550))
