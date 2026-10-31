@@ -109,10 +109,9 @@ def main(page: ft.Page):
     filme_avaliando = {"id": None, "nota": "10"}
     filme_para_remover = {"id": None, "titulo": ""}
     
-    # Estados de filtro da biblioteca
     estado_biblioteca = {
         "aba": "Para Assistir",  # "Para Assistir" ou "Assistidos"
-        "modo": "streaming"      # "streaming", "alfabetico", "genero", "nota"
+        "modo": "streaming"      # "streaming", "alfabetico", "genero", "nota" (IMDb), "nota_pessoal"
     }
 
     paginacao = {
@@ -212,7 +211,6 @@ def main(page: ft.Page):
             except Exception:
                 pass
             fechar_dialogo(modal_avaliacao)
-            # Ao marcar como visto, muda para a aba de Assistidos para visualizar
             estado_biblioteca["aba"] = "Assistidos"
             carregar_biblioteca()
 
@@ -740,10 +738,13 @@ def main(page: ft.Page):
         page.launch_url(f"file://{arq}")
 
     # -------------------------------------------------------------
-    # BIBLIOTECA COM LISTA DE ASSISTIDOS E NOTA IMDB COMO REFERÊNCIA
+    # BIBLIOTECA: AJUSTADA COM NOTA IMDB LADO A LADO E NOTA PESSOAL
     # -------------------------------------------------------------
     def mudar_aba_biblioteca(nova_aba):
         estado_biblioteca["aba"] = nova_aba
+        # Se mudar de aba e o modo atual for incompatível, volta para streaming
+        if nova_aba == "Para Assistir" and estado_biblioteca["modo"] == "nota_pessoal":
+            estado_biblioteca["modo"] = "nota"
         carregar_biblioteca()
 
     def mudar_modo_filtro(novo_modo):
@@ -762,14 +763,12 @@ def main(page: ft.Page):
         except Exception:
             pass
 
-        # Contagens para exibir nos botões das abas
         total_para_assistir = sum(1 for it in todos_itens if it[5] == "Para Assistir")
         total_assistidos = sum(1 for it in todos_itens if it[5] == "Assistidos")
 
         aba_atual = estado_biblioteca["aba"]
         modo_atual = estado_biblioteca["modo"]
 
-        # Filtra os itens de acordo com a aba selecionada ("Para Assistir" vs "Assistidos")
         itens_filtrados = [it for it in todos_itens if it[5] == aba_atual]
 
         btn_print = ft.Button(
@@ -778,7 +777,6 @@ def main(page: ft.Page):
             on_click=lambda e: imprimir_lista()
         )
 
-        # Botões de alternância entre "Para Assistir" e "Assistidos"
         btn_aba_para_assistir = ft.Container(
             content=ft.Text(f"⏳ Para Assistir ({total_para_assistir})", size=12, weight="bold", color="white" if aba_atual == "Para Assistir" else "#94a3b8"),
             bgcolor="#2563eb" if aba_atual == "Para Assistir" else "#1e293b",
@@ -819,16 +817,23 @@ def main(page: ft.Page):
                 on_click=lambda e, m=modo_alvo: mudar_modo_filtro(m)
             )
 
+        # Configuração de botões conforme a aba ativa
+        controles_filtros = [
+            ft.Text("Organizar:", size=11, color="#94a3b8", weight="bold"),
+            criar_botao_filtro("Streaming", "streaming"),
+            criar_botao_filtro("A-Z", "alfabetico"),
+            criar_botao_filtro("Gênero", "genero"),
+            criar_botao_filtro("Nota IMDb", "nota"),
+        ]
+
+        # Na aba Assistidos adiciona o botão Nota Pessoal
+        if aba_atual == "Assistidos":
+            controles_filtros.append(criar_botao_filtro("Nota Pessoal", "nota_pessoal"))
+
         barra_filtros = ft.Row(
             spacing=6,
             wrap=True,
-            controls=[
-                ft.Text("Organizar:", size=11, color="#94a3b8", weight="bold"),
-                criar_botao_filtro("Streaming", "streaming"),
-                criar_botao_filtro("A-Z", "alfabetico"),
-                criar_botao_filtro("Gênero", "genero"),
-                criar_botao_filtro("Nota IMDb", "nota"),
-            ]
+            controls=controles_filtros
         )
 
         coluna_biblioteca_itens.controls.append(
@@ -882,6 +887,35 @@ def main(page: ft.Page):
             ], spacing=6)
             coluna_biblioteca_itens.controls.append(bloco)
 
+        def renderizar_grade_lado_a_lado(lista, texto_info=None):
+            if not lista:
+                return
+            grade = ft.Row(
+                wrap=True,
+                spacing=10,
+                run_spacing=12,
+                alignment=ft.MainAxisAlignment.START,
+                controls=[
+                    criar_card_filme(mid, "movie", tit, ano, p_url, categoria=cat, nota=nota)
+                    for mid, tit, ano, p_url, nota, cat in lista
+                ]
+            )
+            elementos = []
+            if texto_info:
+                elementos.append(
+                    ft.Row([
+                        ft.Text(texto_info, size=15, weight="bold", color="#60a5fa"),
+                        ft.Container(
+                            content=ft.Text(f"{len(lista)}", size=11, color="white", weight="bold"),
+                            bgcolor="#1e293b",
+                            padding=ft.Padding(5, 2, 5, 2),
+                            border_radius=8
+                        )
+                    ], spacing=6)
+                )
+            elementos.append(grade)
+            coluna_biblioteca_itens.controls.append(ft.Column(elementos, spacing=8))
+
         # ---------------- MODO 1: STREAMING (SEM REPETIR NO STREMIO) ----------------
         if modo_atual == "streaming":
             ordem_secoes = list(STREAMINGS_PADRAO) + ["Stremio", "Sem streaming no BR"]
@@ -897,7 +931,6 @@ def main(page: ft.Page):
                         mapa[st_nome].append((mid, tit, ano, p_url, nota, cat))
                         alocado_oficial = True
 
-                # Só vai para o Stremio se NÃO estiver nos streamings oficiais acima
                 if not alocado_oficial:
                     if "stremio" in st_str.lower():
                         mapa["Stremio"].append((mid, tit, ano, p_url, nota, cat))
@@ -937,34 +970,38 @@ def main(page: ft.Page):
             for g_nome in sorted(mapa_generos.keys()):
                 renderizar_secao(g_nome, "🏷️", "#fbbf24", mapa_generos[g_nome])
 
-        # ---------------- MODO 4: AVALIAÇÃO COM BASE NA NOTA DO IMDB ----------------
+        # ---------------- MODO 4: NOTA DO IMDB (LADO A LADO) ----------------
         elif modo_atual == "nota":
-            secoes_imdb = [
-                ("IMDb 9.0 a 10.0 (Obra-Prima)", "#10b981", "🏆", lambda n: n >= 9.0),
-                ("IMDb 8.0 a 8.9 (Excelente)", "#3b82f6", "⭐", lambda n: 8.0 <= n < 9.0),
-                ("IMDb 7.0 a 7.9 (Muito Bom)", "#6366f1", "👍", lambda n: 7.0 <= n < 8.0),
-                ("IMDb 6.0 a 6.9 (Bom / Mediano)", "#f59e0b", "🍿", lambda n: 6.0 <= n < 7.0),
-                ("IMDb Menor que 6.0", "#ef4444", "📉", lambda n: 0.1 <= n < 6.0),
-                ("Sem Nota IMDb Registrada", "#94a3b8", "⏳", lambda n: n == 0.0)
-            ]
+            # Função para converter a nota do IMDb de forma segura
+            def pegar_imdb_float(it):
+                val = it[8]
+                try:
+                    return float(str(val).replace(",", ".")) if (val and val != "N/A") else 0.0
+                except Exception:
+                    return 0.0
 
-            for titulo_sec, cor_sec, ico_sec, condicao in secoes_imdb:
-                filmes_secao = []
-                for mid, tit, ano, p_url, nota, cat, _, _, imdb_val in itens_filtrados:
-                    try:
-                        val_imdb = float(str(imdb_val).replace(",", ".")) if (imdb_val and imdb_val != "N/A") else 0.0
-                    except Exception:
-                        val_imdb = 0.0
+            # Ordena decrescentemente pela nota do IMDb
+            filmes_ordenados_imdb = sorted(itens_filtrados, key=pegar_imdb_float, reverse=True)
+            renderizar_grade_lado a_lado = renderizar_grade_lado_a_lado(
+                filmes_ordenados_imdb,
+                texto_info="⭐ Ordenado por Nota do IMDb (Maior para Menor)"
+            )
 
-                    if condicao(val_imdb):
-                        filmes_secao.append((mid, tit, ano, p_url, nota, cat))
+        # ---------------- MODO 5: NOTA PESSOAL (LADO A LADO - ASSISTIDOS) ----------------
+        elif modo_atual == "nota_pessoal":
+            def pegar_nota_pessoal_float(it):
+                val = it[4]
+                try:
+                    return float(str(val).replace(",", ".")) if (val and val != "N/A") else 0.0
+                except Exception:
+                    return 0.0
 
-                # Ordena os filmes da própria seção do maior para o menor IMDb
-                filmes_secao.sort(
-                    key=lambda x: float(next((it[8] for it in itens_filtrados if it[0] == x[0] and it[8] and it[8] != "N/A"), 0.0)),
-                    reverse=True
-                )
-                renderizar_secao(titulo_sec, ico_sec, cor_sec, filmes_secao)
+            # Ordena decrescentemente pela sua nota pessoal dada ao filme
+            filmes_ordenados_pessoal = sorted(itens_filtrados, key=pegar_nota_pessoal_float, reverse=True)
+            renderizar_grade_lado_a_lado(
+                filmes_ordenados_pessoal,
+                texto_info="★ Ordenado por Sua Nota Pessoal (10 a 1)"
+            )
 
         page.update()
 
