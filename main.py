@@ -1131,7 +1131,7 @@ def main(page: ft.Page):
         page.update()
 
     # -------------------------------------------------------------
-    # BUSCA ATIVA COM AUTOCOMPLETE FLUTUANTE
+    # SUGESTÕES NO OVERLAY (FLUTUA SEM EMPURRAR O CABEÇALHO)
     # -------------------------------------------------------------
     coluna_sugestoes = ft.Column(spacing=4, scroll=ft.ScrollMode.AUTO)
 
@@ -1142,10 +1142,12 @@ def main(page: ft.Page):
         border=criar_borda(1.2, COR_PETROLEO),
         padding=6,
         visible=False,
-        width=320,
+        width=290,
         height=260,
+        top=138, # Posicionado exatamente abaixo da linha da barra de busca
         shadow=ft.BoxShadow(blur_radius=15, color="#000000")
     )
+    page.overlay.append(container_sugestoes)
 
     def selecionar_sugestao(mid, mtype, tit, ano, p_url):
         container_sugestoes.visible = False
@@ -1239,18 +1241,18 @@ def main(page: ft.Page):
                 page.update()
         threading.Timer(0.25, _ocultar).start()
 
-    # Campo de busca com tamanho otimizado (320px x 50px)
+    # Dimensões atualizadas: 45px altura e 224px largura
     campo_busca = ft.TextField(
         hint_text="Buscar filmes ou séries...",
-        hint_style=ft.TextStyle(size=13, color="#64748b"),
-        text_size=13,
+        hint_style=ft.TextStyle(size=12, color="#64748b"),
+        text_size=12,
         bgcolor="#0d1419",
         border_radius=10,
         border_color=COR_BORDA,
         focused_border_color=COR_PETROLEO,
-        width=320,
-        height=50,
-        content_padding=ft.Padding(14, 0, 10, 0),
+        width=224,
+        height=45,
+        content_padding=ft.Padding(12, 0, 8, 0),
         on_change=ao_digitar_busca,
         on_submit=disparar_busca_manual,
         on_blur=fechar_busca_ao_perder_foco
@@ -1259,19 +1261,13 @@ def main(page: ft.Page):
     btn_lupa = ft.IconButton(
         icon=ft.Icons.SEARCH,
         icon_color="#64748b",
-        icon_size=22,
+        icon_size=20,
         tooltip="Buscar filme",
         on_click=disparar_busca_manual
     )
 
-    # Bloco com a barra de busca e os resultados logo abaixo
-    bloco_busca = ft.Column([
-        ft.Row([campo_busca, btn_lupa], spacing=2, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-        container_sugestoes
-    ], spacing=4, tight=True)
-
     # -------------------------------------------------------------
-    # LOGO INTERATIVO (VOLTA AO INÍCIO)
+    # LOGO INTERATIVO (PARTE SUPERIOR CENTRALIZADA)
     # -------------------------------------------------------------
     def clicar_no_logo(e):
         btn_logo_interativo.scale = 0.94
@@ -1292,7 +1288,7 @@ def main(page: ft.Page):
     )
 
     btn_tab_bib = ft.Container(
-        content=ft.Image(src="biblioteca.png", height=56, fit="contain"),
+        content=ft.Image(src="biblioteca.png", height=45, fit="contain"),
         ink=True,
         border_radius=10,
         border=criar_borda(2, "transparent"),
@@ -1300,7 +1296,7 @@ def main(page: ft.Page):
         on_click=lambda e: alternar_tela(1)
     )
 
-    # Informações de usuário e Logout no canto superior direito
+    # Informações de usuário no canto superior direito
     lbl_user_tag = ft.Text("", size=12, color="#64748b", weight="bold")
 
     def acao_logout(e):
@@ -1346,48 +1342,58 @@ def main(page: ft.Page):
         vertical_alignment=ft.CrossAxisAlignment.CENTER
     )
 
-    # Menu central horizontal (Logo + Botão Biblioteca + Busca)
-    menu_central = ft.Row(
+    linha_busca_input = ft.Row(
+        controls=[campo_busca, btn_lupa],
+        spacing=2,
+        vertical_alignment=ft.CrossAxisAlignment.CENTER
+    )
+
+    # Linha Inferior Centralizada: Botão Biblioteca + Caixa de Pesquisa
+    linha_inferior_menu = ft.Row(
         controls=[
-            btn_logo_interativo,
             btn_tab_bib,
-            bloco_busca
+            linha_busca_input
         ],
-        spacing=18,
-        run_spacing=10,
-        wrap=True,
+        spacing=16,
         alignment=ft.MainAxisAlignment.CENTER,
         vertical_alignment=ft.CrossAxisAlignment.CENTER
     )
 
+    # Cabeçalho com logo no topo centralizado e os controles abaixo
     cabecalho_fixo = ft.Container(
         bgcolor=COR_FUNDO,
-        padding=ft.Padding(20, 6, 20, 10),
+        padding=ft.Padding(20, 6, 20, 12),
         border=ft.Border(bottom=ft.BorderSide(1, COR_BORDA)),
         content=ft.Column([
             progresso,
             bloco_usuario_topo,
-            ft.Row([menu_central], alignment=ft.MainAxisAlignment.CENTER)
-        ], spacing=4, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
+            ft.Row([btn_logo_interativo], alignment=ft.MainAxisAlignment.CENTER),
+            linha_inferior_menu
+        ], spacing=6, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
     )
 
     # -------------------------------------------------------------
-    # ADAPTAÇÃO DINÂMICA (MOBILE / DESKTOP)
+    # ADAPTAÇÃO DINÂMICA
     # -------------------------------------------------------------
     def ajustar_layout_responsivo(e=None):
         largura_janela = page.width if page.width else 1000
         if largura_janela < 720:
-            campo_busca.width = max(220, int(largura_janela - 100))
-            container_sugestoes.width = max(220, int(largura_janela - 100))
-            btn_logo_interativo.content.height = 46
-            btn_tab_bib.content.height = 42
+            campo_busca.width = max(180, int(largura_janela - 150))
+            container_sugestoes.width = max(200, int(largura_janela - 100))
+            btn_logo_interativo.content.height = 50
+            btn_tab_bib.content.height = 40
             titulo_trends.width = None
+            container_sugestoes.left = 20
+            container_sugestoes.top = 150
         else:
-            campo_busca.width = 320
-            container_sugestoes.width = 320
+            campo_busca.width = 224
+            container_sugestoes.width = 280
             btn_logo_interativo.content.height = 65
-            btn_tab_bib.content.height = 56
+            btn_tab_bib.content.height = 45
             titulo_trends.width = 1100
+            # Alinha o dropdown flutuante logo abaixo do campo no desktop
+            container_sugestoes.left = max(0, int((largura_janela / 2) - 40))
+            container_sugestoes.top = 142
         page.update()
 
     page.on_resized = ajustar_layout_responsivo
