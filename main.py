@@ -5,6 +5,7 @@ import os
 import requests
 import threading
 import unicodedata
+import hashlib
 from urllib.parse import quote_plus
 from datetime import datetime
 
@@ -36,13 +37,48 @@ def carregar_config():
         cfg["omdb_key"] = os.environ.get("OMDB_KEY", "")
     return cfg
 
+# -------------------------------------------------------------
+# SEGURANÇA E BANCO DE DADOS
+# -------------------------------------------------------------
+def gerar_hash_senha(senha: str) -> str:
+    salt = os.urandom(16).hex()
+    hash_obj = hashlib.pbkdf2_hmac(
+        'sha256', 
+        senha.encode('utf-8'), 
+        bytes.fromhex(salt), 
+        100000
+    )
+    return f"{salt}:{hash_obj.hex()}"
+
+def verificar_senha(senha_fornecida: str, hash_armazenado: str) -> bool:
+    try:
+        salt, hash_real = hash_armazenado.split(":")
+        hash_teste = hashlib.pbkdf2_hmac(
+            'sha256', 
+            senha_fornecida.encode('utf-8'), 
+            bytes.fromhex(salt), 
+            100000
+        )
+        return hash_teste.hex() == hash_real
+    except Exception:
+        return False
+
 def init_db():
     try:
         with sqlite3.connect(DB_FILE, timeout=10) as conn:
             c = conn.cursor()
+            # Tabela de Utilizadores
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS usuarios (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT UNIQUE COLLATE NOCASE,
+                    password_hash TEXT
+                )
+            """)
+            # Tabela de Filmes
             c.execute("""
                 CREATE TABLE IF NOT EXISTS filmes (
-                    id TEXT PRIMARY KEY,
+                    id TEXT,
                     titulo TEXT,
                     ano TEXT,
                     diretor TEXT,
@@ -55,11 +91,18 @@ def init_db():
                     categoria TEXT,
                     nota_usuario TEXT,
                     trailer_url TEXT,
-                    generos TEXT
+                    generos TEXT,
+                    usuario_id INTEGER,
+                    PRIMARY KEY (id, usuario_id)
                 )
             """)
+            # Migrações caso o banco já existisse
             try:
                 c.execute("ALTER TABLE filmes ADD COLUMN generos TEXT")
+            except Exception:
+                pass
+            try:
+                c.execute("ALTER TABLE filmes ADD COLUMN usuario_id INTEGER DEFAULT 1")
             except Exception:
                 pass
             conn.commit()
@@ -104,6 +147,13 @@ def main(page: ft.Page):
     page.scroll = None
 
     init_db()
+
+    # Estado de Autenticação
+    sessao_usuario = {
+        "id": None,
+        "username": ""
+    }
+
     item_ativo = {"data": None}
     timer_busca = {"timer": None}
     filme_avaliando = {"id": None, "nota": "10"}
@@ -136,11 +186,12 @@ def main(page: ft.Page):
 
     def executar_remocao(e):
         fid = filme_para_remover["id"]
-        if fid:
+        uid = sessao_usuario["id"]
+        if fid and uid:
             try:
                 with sqlite3.connect(DB_FILE, timeout=10) as conn:
                     c = conn.cursor()
-                    c.execute("DELETE FROM filmes WHERE id = ?", (fid,))
+                    c.execute("DELETE FROM filmes WHERE id = ? AND usuario_id = ?", (fid, uid))
                     conn.commit()
             except Exception:
                 pass
@@ -202,11 +253,12 @@ def main(page: ft.Page):
     def confirmar_avaliacao(e):
         fid = filme_avaliando["id"]
         nota = filme_avaliando.get("nota", "10")
-        if fid:
+        uid = sessao_usuario["id"]
+        if fid and uid:
             try:
                 with sqlite3.connect(DB_FILE, timeout=10) as conn:
                     c = conn.cursor()
-                    c.execute("UPDATE filmes SET categoria = 'Assistidos', nota_usuario = ? WHERE id = ?", (nota, fid))
+                    c.execute("UPDATE filmes SET categoria = 'Assistidos', nota_usuario = ? WHERE id = ? AND usuario_id = ?", (nota, fid, uid))
                     conn.commit()
             except Exception:
                 pass
@@ -333,22 +385,23 @@ def main(page: ft.Page):
 
     def salvar_filme_ativo(e):
         it = item_ativo["data"]
-        if not it:
+        uid = sessao_usuario["id"]
+        if not it or not uid:
             return
 
         try:
             with sqlite3.connect(DB_FILE, timeout=10) as conn:
                 c = conn.cursor()
-                c.execute("SELECT categoria FROM filmes WHERE id = ?", (it["id"],))
+                c.execute("SELECT categoria FROM filmes WHERE id = ? AND usuario_id = ?", (it["id"], uid))
                 if not c.fetchone():
                     c.execute("""
-                        INSERT INTO filmes (id, titulo, ano, diretor, elenco, sinopse, imdb, rotten, streaming, poster_url, categoria, nota_usuario, trailer_url, generos)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Para Assistir', ?, ?, ?)
+                        INSERT INTO filmes (id, titulo, ano, diretor, elenco, sinopse, imdb, rotten, streaming, poster_url, categoria, nota_usuario, trailer_url, generos, usuario_id)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Para Assistir', ?, ?, ?, ?)
                     """, (
                         it["id"], it["titulo"], it["ano"], it["diretor"], it["elenco"],
                         it["sinopse"], it["imdb"], it["rotten"], it["streaming"],
                         it["poster_url"], it.get("nota_usuario"), it.get("trailer_url"),
-                        it.get("generos", "")
+                        it.get("generos", ""), uid
                     ))
                     conn.commit()
         except Exception:
@@ -392,6 +445,7 @@ def main(page: ft.Page):
         c = carregar_config()
         tmdb_key = c.get("tmdb_key", "").strip()
         omdb_key = c.get("omdb_key", "").strip()
+        uid = sessao_usuario["id"]
 
         def _fetch():
             try:
@@ -474,16 +528,17 @@ def main(page: ft.Page):
                 nota_usr = None
                 cat_exist = None
 
-                try:
-                    with sqlite3.connect(DB_FILE, timeout=10) as conn:
-                        cur = conn.cursor()
-                        cur.execute("SELECT nota_usuario, categoria FROM filmes WHERE id = ?", (chave_id,))
-                        row = cur.fetchone()
-                        if row:
-                            nota_usr = row[0]
-                            cat_exist = row[1]
-                except Exception:
-                    pass
+                if uid:
+                    try:
+                        with sqlite3.connect(DB_FILE, timeout=10) as conn:
+                            cur = conn.cursor()
+                            cur.execute("SELECT nota_usuario, categoria FROM filmes WHERE id = ? AND usuario_id = ?", (chave_id, uid))
+                            row = cur.fetchone()
+                            if row:
+                                nota_usr = row[0]
+                                cat_exist = row[1]
+                    except Exception:
+                        pass
 
                 item_ativo["data"] = {
                     "id": chave_id, "titulo": titulo, "ano": ano, "diretor": diretor,
@@ -699,24 +754,28 @@ def main(page: ft.Page):
                 carregar_populares(incrementar=True)
 
     def remover_filme_direto(fid):
-        try:
-            with sqlite3.connect(DB_FILE, timeout=10) as conn:
-                c = conn.cursor()
-                c.execute("DELETE FROM filmes WHERE id = ?", (fid,))
-                conn.commit()
-        except Exception:
-            pass
-        carregar_biblioteca()
+        uid = sessao_usuario["id"]
+        if uid:
+            try:
+                with sqlite3.connect(DB_FILE, timeout=10) as conn:
+                    c = conn.cursor()
+                    c.execute("DELETE FROM filmes WHERE id = ? AND usuario_id = ?", (fid, uid))
+                    conn.commit()
+            except Exception:
+                pass
+            carregar_biblioteca()
 
     def imprimir_lista():
+        uid = sessao_usuario["id"]
         filmes = []
-        try:
-            with sqlite3.connect(DB_FILE, timeout=10) as conn:
-                c = conn.cursor()
-                c.execute("SELECT titulo, ano, imdb, rotten, streaming, diretor FROM filmes WHERE categoria = 'Para Assistir' ORDER BY titulo ASC")
-                filmes = c.fetchall()
-        except Exception:
-            pass
+        if uid:
+            try:
+                with sqlite3.connect(DB_FILE, timeout=10) as conn:
+                    c = conn.cursor()
+                    c.execute("SELECT titulo, ano, imdb, rotten, streaming, diretor FROM filmes WHERE categoria = 'Para Assistir' AND usuario_id = ? ORDER BY titulo ASC", (uid,))
+                    filmes = c.fetchall()
+            except Exception:
+                pass
 
         if not filmes:
             return
@@ -731,7 +790,7 @@ def main(page: ft.Page):
         page.launch_url(f"file://{arq}")
 
     # -------------------------------------------------------------
-    # BIBLIOTECA
+    # BIBLIOTECA (FILTRADA POR USUÁRIO)
     # -------------------------------------------------------------
     def mudar_aba_biblioteca(nova_aba):
         estado_biblioteca["aba"] = nova_aba
@@ -748,14 +807,21 @@ def main(page: ft.Page):
     def carregar_biblioteca():
         coluna_biblioteca_itens.controls.clear()
         todos_itens = []
+        uid = sessao_usuario["id"]
 
-        try:
-            with sqlite3.connect(DB_FILE, timeout=10) as conn:
-                c = conn.cursor()
-                c.execute("SELECT id, titulo, ano, poster_url, nota_usuario, categoria, streaming, generos, imdb FROM filmes ORDER BY rowid DESC")
-                todos_itens = c.fetchall()
-        except Exception:
-            pass
+        if uid:
+            try:
+                with sqlite3.connect(DB_FILE, timeout=10) as conn:
+                    c = conn.cursor()
+                    c.execute("""
+                        SELECT id, titulo, ano, poster_url, nota_usuario, categoria, streaming, generos, imdb 
+                        FROM filmes 
+                        WHERE usuario_id = ? 
+                        ORDER BY rowid DESC
+                    """, (uid,))
+                    todos_itens = c.fetchall()
+            except Exception:
+                pass
 
         total_para_assistir = sum(1 for it in todos_itens if it[5] == "Para Assistir")
         total_assistidos = sum(1 for it in todos_itens if it[5] == "Assistidos")
@@ -1104,7 +1170,6 @@ def main(page: ft.Page):
         timer_busca["timer"] = t
         t.start()
 
-    # Fecha a lista suspensa com delay para permitir o clique no item
     def fechar_busca_ao_perder_foco(e):
         def _ocultar():
             if container_sugestoes.visible:
@@ -1138,9 +1203,40 @@ def main(page: ft.Page):
     ], spacing=4, width=420, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
 
     # -------------------------------------------------------------
-    # CABEÇALHO FIXO
+    # CABEÇALHO FIXO COM USUÁRIO E LOGOUT
     # -------------------------------------------------------------
     lbl_app_titulo = ft.Text("MOVIE INSERT", size=22, weight="bold", color="white", text_align=ft.TextAlign.CENTER)
+    lbl_user_tag = ft.Text("", size=11, color="#94a3b8", weight="bold")
+
+    def acao_logout(e):
+        page.client_storage.remove("user_id")
+        page.client_storage.remove("username")
+        sessao_usuario["id"] = None
+        sessao_usuario["username"] = ""
+        txt_auth_user.value = ""
+        txt_auth_pass.value = ""
+        txt_auth_erro.value = ""
+        layout_mestre.visible = False
+        card_auth.visible = True
+        page.update()
+
+    btn_logout = ft.IconButton(
+        icon=ft.Icons.LOGOUT,
+        icon_color="#ef4444",
+        icon_size=16,
+        tooltip="Sair da conta",
+        on_click=acao_logout
+    )
+
+    linha_topo_titulo = ft.Row(
+        controls=[
+            ft.Container(width=40),  # Balanço visual
+            lbl_app_titulo,
+            ft.Row([lbl_user_tag, btn_logout], spacing=2, alignment=ft.MainAxisAlignment.END)
+        ],
+        alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+        width=460
+    )
 
     btn_tab_inicio = ft.Button(
         content=ft.Text("Início", color="#0b0c0f", size=15, weight="bold"),
@@ -1162,11 +1258,11 @@ def main(page: ft.Page):
 
     cabecalho_fixo = ft.Container(
         bgcolor="#0b0c0f",
-        padding=ft.Padding(12, 10, 12, 10),
+        padding=ft.Padding(12, 8, 12, 8),
         content=ft.Column(
             controls=[
                 progresso,
-                lbl_app_titulo,
+                linha_topo_titulo,
                 linha_botoes_topo,
                 header_busca,
             ],
@@ -1236,6 +1332,7 @@ def main(page: ft.Page):
     layout_mestre = ft.Column(
         expand=True,
         spacing=0,
+        visible=False,
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
         controls=[
             cabecalho_fixo,
@@ -1244,15 +1341,168 @@ def main(page: ft.Page):
         ]
     )
 
-    page.add(layout_mestre)
-    page.update()
+    # -------------------------------------------------------------
+    # TELA DE AUTENTICAÇÃO (LOGIN / REGISTRO)
+    # -------------------------------------------------------------
+    txt_auth_titulo = ft.Text("Entrar", size=22, weight="bold", color="white")
+    txt_auth_erro = ft.Text("", size=12, color="#ef4444")
+    txt_auth_user = ft.TextField(
+        label="Nome de Usuário",
+        bgcolor="#1e293b",
+        dense=True,
+        border_radius=8,
+        width=300
+    )
+    txt_auth_pass = ft.TextField(
+        label="Senha",
+        password=True,
+        can_reveal_password=True,
+        bgcolor="#1e293b",
+        dense=True,
+        border_radius=8,
+        width=300
+    )
 
-    def inicializar_catalogo():
+    modo_auth = {"modo": "login"}  # "login" ou "cadastro"
+
+    def alternar_modo_auth(e):
+        if modo_auth["modo"] == "login":
+            modo_auth["modo"] = "cadastro"
+            txt_auth_titulo.value = "Criar Nova Conta"
+            btn_executar_auth.content = ft.Text("Cadastrar", color="white", weight="bold")
+            btn_alternar_auth.content = ft.Text("Já tem uma conta? Entrar", color="#3b82f6", size=12)
+        else:
+            modo_auth["modo"] = "login"
+            txt_auth_titulo.value = "Entrar"
+            btn_executar_auth.content = ft.Text("Entrar", color="white", weight="bold")
+            btn_alternar_auth.content = ft.Text("Não tem uma conta? Cadastre-se", color="#3b82f6", size=12)
+        txt_auth_erro.value = ""
+        page.update()
+
+    def processar_auth(e):
+        usuario = txt_auth_user.value.strip()
+        senha = txt_auth_pass.value.strip()
+
+        if not usuario or not senha:
+            txt_auth_erro.value = "Preencha o usuário e a senha."
+            page.update()
+            return
+
+        if len(usuario) < 3:
+            txt_auth_erro.value = "O usuário deve ter pelo menos 3 caracteres."
+            page.update()
+            return
+
+        if len(senha) < 4:
+            txt_auth_erro.value = "A senha deve ter pelo menos 4 caracteres."
+            page.update()
+            return
+
+        try:
+            with sqlite3.connect(DB_FILE, timeout=10) as conn:
+                c = conn.cursor()
+
+                if modo_auth["modo"] == "cadastro":
+                    c.execute("SELECT id FROM usuarios WHERE username = ?", (usuario,))
+                    if c.fetchone():
+                        txt_auth_erro.value = "Este nome de usuário já está em uso."
+                        page.update()
+                        return
+
+                    p_hash = gerar_hash_senha(senha)
+                    c.execute("INSERT INTO usuarios (username, password_hash) VALUES (?, ?)", (usuario, p_hash))
+                    novo_id = c.lastrowid
+                    conn.commit()
+
+                    iniciar_sessao(novo_id, usuario)
+
+                else:  # Modo Login
+                    c.execute("SELECT id, password_hash FROM usuarios WHERE username = ?", (usuario,))
+                    user_row = c.fetchone()
+                    if not user_row or not verificar_senha(senha, user_row[1]):
+                        txt_auth_erro.value = "Usuário ou senha inválidos."
+                        page.update()
+                        return
+
+                    iniciar_sessao(user_row[0], usuario)
+
+        except Exception as err:
+            txt_auth_erro.value = "Erro no banco de dados."
+            page.update()
+
+    btn_executar_auth = ft.Button(
+        content=ft.Text("Entrar", color="white", weight="bold"),
+        bgcolor="#2563eb",
+        width=300,
+        height=40,
+        on_click=processar_auth
+    )
+
+    btn_alternar_auth = ft.Button(
+        content=ft.Text("Não tem uma conta? Cadastre-se", color="#3b82f6", size=12),
+        bgcolor="transparent",
+        on_click=alternar_modo_auth
+    )
+
+    card_auth = ft.Container(
+        alignment=ft.Alignment(0, 0),
+        padding=ft.Padding(0, 60, 0, 0),
+        content=ft.Container(
+            width=360,
+            bgcolor="#111827",
+            padding=24,
+            border_radius=12,
+            border=ft.Border(
+                ft.BorderSide(1.5, "#1f2937"),
+                ft.BorderSide(1.5, "#1f2937"),
+                ft.BorderSide(1.5, "#1f2937"),
+                ft.BorderSide(1.5, "#1f2937")
+            ),
+            content=ft.Column([
+                ft.Text("🎬 MOVIE INSERT", size=24, weight="bold", color="white", text_align=ft.TextAlign.CENTER),
+                ft.Container(height=6),
+                txt_auth_titulo,
+                txt_auth_erro,
+                txt_auth_user,
+                txt_auth_pass,
+                ft.Container(height=4),
+                btn_executar_auth,
+                btn_alternar_auth
+            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10)
+        )
+    )
+
+    def iniciar_sessao(uid, username):
+        sessao_usuario["id"] = uid
+        sessao_usuario["username"] = username
+        lbl_user_tag.value = f"👤 {username}"
+        
+        # Salva no cache do dispositivo para persistir o login
+        page.client_storage.set("user_id", uid)
+        page.client_storage.set("username", username)
+
+        card_auth.visible = False
+        layout_mestre.visible = True
+        page.update()
+
         carregar_populares()
         threading.Timer(0.6, lambda: carregar_populares(incrementar=True)).start()
         threading.Timer(1.4, lambda: carregar_populares(incrementar=True)).start()
 
-    inicializar_catalogo()
+    # -------------------------------------------------------------
+    # CHECAGEM AUTOMÁTICA DE SESSÃO SALVA
+    # -------------------------------------------------------------
+    page.add(card_auth, layout_mestre)
+
+    saved_uid = page.client_storage.get("user_id")
+    saved_user = page.client_storage.get("username")
+
+    if saved_uid and saved_user:
+        iniciar_sessao(saved_uid, saved_user)
+    else:
+        card_auth.visible = True
+        layout_mestre.visible = False
+        page.update()
 
 if __name__ == "__main__":
     porta = int(os.environ.get("PORT", 8550))
