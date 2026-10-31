@@ -541,11 +541,8 @@ def main(page: ft.Page):
         threading.Thread(target=_fetch, daemon=True).start()
 
     # -------------------------------------------------------------
-    # CARDS DOS FILMES (+20% DE TAMANHO NOS POSTERS)
+    # CARDS DOS FILMES (POSTERS COM TAMANHO AMPLIADO)
     # -------------------------------------------------------------
-    # Dimensões aumentadas em 20%:
-    # Card: 135px -> 162px
-    # Imagem: 127x180px -> 152x216px
     def criar_card_filme(mid, mtype, titulo, ano, poster_url, categoria=None, nota=None):
         acoes = []
         if categoria == "Para Assistir":
@@ -618,7 +615,12 @@ def main(page: ft.Page):
         return card_corpo
 
     grade_populares = ft.Row(wrap=True, spacing=12, run_spacing=14, alignment=ft.MainAxisAlignment.CENTER)
-    coluna_biblioteca_itens = ft.Column(spacing=16, horizontal_alignment=ft.CrossAxisAlignment.START)
+    
+    # Coluna interna da Biblioteca com alinhamento centralizado
+    coluna_biblioteca_itens = ft.Column(
+        spacing=16, 
+        horizontal_alignment=ft.CrossAxisAlignment.CENTER
+    )
 
     spinner_carregamento = ft.ProgressRing(width=30, height=30, stroke_width=3, color="#3b82f6", visible=False)
 
@@ -686,7 +688,6 @@ def main(page: ft.Page):
 
         threading.Thread(target=_fetch, daemon=True).start()
 
-    # Gatilho de rolagem com margem estendida (1000px) para disparar bem antes do fim
     def ao_rolar_pagina(e: ft.OnScrollEvent):
         if container_sugestoes.visible:
             container_sugestoes.visible = False
@@ -732,7 +733,7 @@ def main(page: ft.Page):
         page.launch_url(f"file://{arq}")
 
     # -------------------------------------------------------------
-    # BIBLIOTECA
+    # BIBLIOTECA CENTRALIZADA NA TELA
     # -------------------------------------------------------------
     def mudar_aba_biblioteca(nova_aba):
         estado_biblioteca["aba"] = nova_aba
@@ -792,6 +793,7 @@ def main(page: ft.Page):
 
         linha_abas_biblioteca = ft.Row(
             spacing=8,
+            alignment=ft.MainAxisAlignment.CENTER,
             controls=[btn_aba_para_assistir, btn_aba_assistidos]
         )
 
@@ -827,20 +829,27 @@ def main(page: ft.Page):
         barra_filtros = ft.Row(
             spacing=6,
             wrap=True,
+            alignment=ft.MainAxisAlignment.CENTER,
             controls=controles_filtros
         )
 
-        coluna_biblioteca_itens.controls.append(
-            ft.Row(
-                [
-                    ft.Text(f"Biblioteca ({len(todos_itens)})", size=20, weight="bold"),
-                    btn_print
-                ],
-                alignment=ft.MainAxisAlignment.SPACE_BETWEEN
-            )
+        # Cabeçalho da biblioteca centralizado
+        topo_biblioteca = ft.Container(
+            content=ft.Column([
+                ft.Row(
+                    [
+                        ft.Text(f"Biblioteca ({len(todos_itens)})", size=20, weight="bold"),
+                        btn_print
+                    ],
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN
+                ),
+                linha_abas_biblioteca,
+                barra_filtros
+            ], spacing=8, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+            width=1000
         )
-        coluna_biblioteca_itens.controls.append(linha_abas_biblioteca)
-        coluna_biblioteca_itens.controls.append(barra_filtros)
+
+        coluna_biblioteca_itens.controls.append(topo_biblioteca)
 
         if not itens_filtrados:
             coluna_biblioteca_itens.controls.append(
@@ -856,31 +865,37 @@ def main(page: ft.Page):
             page.update()
             return
 
+        # Renderizador de seções horizontais centralizadas
         def renderizar_secao(titulo_secao, icone, cor, lista):
             if not lista:
                 return
             linha_cards = ft.Row(
                 spacing=12,
                 scroll=ft.ScrollMode.AUTO,
+                alignment=ft.MainAxisAlignment.START,
                 controls=[
                     criar_card_filme(mid, "movie", tit, ano, p_url, categoria=cat, nota=nota)
                     for mid, tit, ano, p_url, nota, cat in lista
                 ]
             )
-            bloco = ft.Column([
-                ft.Row([
-                    ft.Text(f"{icone} {titulo_secao}", size=15, weight="bold", color=cor),
-                    ft.Container(
-                        content=ft.Text(f"{len(lista)}", size=11, color="white", weight="bold"),
-                        bgcolor="#1e293b",
-                        padding=ft.Padding(5, 2, 5, 2),
-                        border_radius=8
-                    )
+            bloco = ft.Container(
+                content=ft.Column([
+                    ft.Row([
+                        ft.Text(f"{icone} {titulo_secao}", size=15, weight="bold", color=cor),
+                        ft.Container(
+                            content=ft.Text(f"{len(lista)}", size=11, color="white", weight="bold"),
+                            bgcolor="#1e293b",
+                            padding=ft.Padding(5, 2, 5, 2),
+                            border_radius=8
+                        )
+                    ], spacing=6),
+                    linha_cards
                 ], spacing=6),
-                linha_cards
-            ], spacing=6)
+                width=1000
+            )
             coluna_biblioteca_itens.controls.append(bloco)
 
+        # Renderizador de grade lado a lado centralizada
         def renderizar_grade_lado_a_lado(lista, texto_info=None):
             if not lista:
                 return
@@ -888,7 +903,7 @@ def main(page: ft.Page):
                 wrap=True,
                 spacing=12,
                 run_spacing=14,
-                alignment=ft.MainAxisAlignment.START,
+                alignment=ft.MainAxisAlignment.CENTER,
                 controls=[
                     criar_card_filme(mid, "movie", tit, ano, p_url, categoria=cat, nota=nota)
                     for mid, tit, ano, p_url, nota, cat in lista
@@ -905,10 +920,14 @@ def main(page: ft.Page):
                             padding=ft.Padding(5, 2, 5, 2),
                             border_radius=8
                         )
-                    ], spacing=6)
+                    ], spacing=6, alignment=ft.MainAxisAlignment.CENTER)
                 )
             elementos.append(grade)
-            coluna_biblioteca_itens.controls.append(ft.Column(elementos, spacing=8))
+            bloco = ft.Container(
+                content=ft.Column(elementos, spacing=8, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                width=1000
+            )
+            coluna_biblioteca_itens.controls.append(bloco)
 
         # ---------------- MODO 1: STREAMING ----------------
         if modo_atual == "streaming":
@@ -1169,7 +1188,7 @@ def main(page: ft.Page):
     )
 
     # -------------------------------------------------------------
-    # VIEWS PRINCIPAIS (COM GATILHO INVISÍVEL NO FINAL)
+    # VIEWS PRINCIPAIS
     # -------------------------------------------------------------
     sentinela_fim = ft.Container(
         height=40,
@@ -1188,11 +1207,12 @@ def main(page: ft.Page):
         horizontal_alignment=ft.CrossAxisAlignment.CENTER
     )
 
+    # View biblioteca agora centralizada
     view_biblioteca = ft.Column(
         visible=False,
         controls=[coluna_biblioteca_itens],
         spacing=14,
-        horizontal_alignment=ft.CrossAxisAlignment.START
+        horizontal_alignment=ft.CrossAxisAlignment.CENTER
     )
 
     def alternar_tela(indice):
@@ -1225,7 +1245,6 @@ def main(page: ft.Page):
     )
     page.update()
 
-    # Carga inicial encadeada (página 1, 2 e 3) para preencher telas com folga
     def inicializar_catalogo():
         carregar_populares()
         threading.Timer(0.6, lambda: carregar_populares(incrementar=True)).start()
