@@ -167,12 +167,11 @@ def main(page: ft.Page):
         "modo": "streaming"
     }
 
-    # Controle avançado de paginação com fallback para nunca travar
     paginacao = {
         "pagina_atual": 1,
         "carregando": False,
         "fim": False,
-        "modo_api": "trending", # "trending" ou "popular"
+        "modo_api": "trending",
         "ids_carregados": set()
     }
 
@@ -703,7 +702,7 @@ def main(page: ft.Page):
     spinner_carregamento = ft.ProgressRing(width=30, height=30, stroke_width=3, color="#3b82f6", visible=False)
 
     # -------------------------------------------------------------
-    # POPULARES E ROLAGEM INFINITA CONTÍNUA (SEM TRAVAR)
+    # POPULARES E ROLAGEM INFINITA (FLUXO CONTÍNUO)
     # -------------------------------------------------------------
     def carregar_populares(incrementar=False):
         c = carregar_config()
@@ -747,7 +746,7 @@ def main(page: ft.Page):
                     itens = dados.get("results", [])
                     total_p = dados.get("total_pages", 1000)
 
-                    # Se esgotar a lista de trending, transita para os populares de forma transparente
+                    # Se a lista da semana acabar ou bater limite, alterna para popular
                     if (not itens or p >= min(total_p, 20)) and modo == "trending":
                         paginacao["modo_api"] = "popular"
                         paginacao["pagina_atual"] = 1
@@ -1256,10 +1255,12 @@ def main(page: ft.Page):
     lbl_app_titulo = ft.Text("MOVIE INSERT", size=22, weight="bold", color="white", text_align=ft.TextAlign.CENTER)
     lbl_user_tag = ft.Text("", size=11, color="#94a3b8", weight="bold")
 
+    # Logout com retorno garantido e direto à tela de Login
     def acao_logout(e):
         try:
             page.client_storage.remove("user_id")
             page.client_storage.remove("username")
+            page.client_storage.remove("manter_conectado")
         except Exception:
             pass
         
@@ -1267,9 +1268,9 @@ def main(page: ft.Page):
         sessao_usuario["username"] = ""
         txt_auth_user.value = ""
         txt_auth_pass.value = ""
+        txt_auth_pass_confirm.value = ""
         txt_auth_erro.value = ""
         
-        # Reset de paginação para evitar conflitos na volta
         paginacao["pagina_atual"] = 1
         paginacao["carregando"] = False
         paginacao["fim"] = False
@@ -1277,6 +1278,8 @@ def main(page: ft.Page):
         paginacao["ids_carregados"].clear()
         grade_populares.controls.clear()
         
+        # Garante retorno estrito à aba de Login
+        definir_modo_auth("login")
         layout_mestre.visible = False
         card_auth.visible = True
         page.update()
@@ -1403,9 +1406,9 @@ def main(page: ft.Page):
     )
 
     # -------------------------------------------------------------
-    # TELA DE AUTENTICAÇÃO (LOGIN / REGISTRO / RECUPERAR SENHA)
+    # TELA DE AUTENTICAÇÃO COM CORES DISTINTAS E PERMANECER CONECTADO
     # -------------------------------------------------------------
-    txt_auth_titulo = ft.Text("Entrar", size=22, weight="bold", color="white")
+    txt_auth_titulo = ft.Text("Entrar", size=22, weight="bold", color="#60a5fa")
     txt_auth_erro = ft.Text("", size=12, color="#ef4444")
     
     txt_auth_user = ft.TextField(
@@ -1435,42 +1438,86 @@ def main(page: ft.Page):
         visible=False
     )
 
-    modo_auth = {"modo": "login"}  # "login", "cadastro", "recuperar"
+    # Opção: Manter-se conectado
+    chk_manter_conectado = ft.Checkbox(
+        label="Permanecer conectado",
+        value=True,
+        fill_color="#2563eb",
+        check_color="white",
+        visible=True
+    )
+
+    modo_auth = {"modo": "login"}
 
     def definir_modo_auth(novo_modo):
         modo_auth["modo"] = novo_modo
         txt_auth_erro.value = ""
         txt_auth_pass_confirm.visible = (novo_modo == "recuperar")
+        chk_manter_conectado.visible = (novo_modo == "login")
         
+        # DIFERENCIAÇÃO VISUAL CLARA POR CORES
         if novo_modo == "login":
             txt_auth_titulo.value = "Entrar"
+            txt_auth_titulo.color = "#60a5fa"  # Azul
+            card_interno_auth.border = ft.Border(
+                ft.BorderSide(1.5, "#2563eb"),
+                ft.BorderSide(1.5, "#2563eb"),
+                ft.BorderSide(1.5, "#2563eb"),
+                ft.BorderSide(1.5, "#2563eb")
+            )
             txt_auth_pass.label = "Senha"
+            btn_executar_auth.bgcolor = "#2563eb"
             btn_executar_auth.content = ft.Text("Entrar", color="white", weight="bold")
-            btn_alternar_auth.content = ft.Text("Não tem uma conta? Cadastre-se", color="#3b82f6", size=12)
+            btn_alternar_auth.content = ft.Text("Não tem uma conta? Cadastre-se", color="#10b981", size=12)
             btn_recuperar_auth.visible = True
+            
         elif novo_modo == "cadastro":
             txt_auth_titulo.value = "Criar Nova Conta"
+            txt_auth_titulo.color = "#34d399"  # Verde Esmeralda
+            card_interno_auth.border = ft.Border(
+                ft.BorderSide(1.5, "#059669"),
+                ft.BorderSide(1.5, "#059669"),
+                ft.BorderSide(1.5, "#059669"),
+                ft.BorderSide(1.5, "#059669")
+            )
             txt_auth_pass.label = "Senha"
-            btn_executar_auth.content = ft.Text("Cadastrar", color="white", weight="bold")
-            btn_alternar_auth.content = ft.Text("Já tem uma conta? Entrar", color="#3b82f6", size=12)
+            btn_executar_auth.bgcolor = "#059669"
+            btn_executar_auth.content = ft.Text("Cadastrar Nova Conta", color="white", weight="bold")
+            btn_alternar_auth.content = ft.Text("Já tem uma conta? Entrar", color="#60a5fa", size=12)
             btn_recuperar_auth.visible = False
+            
         elif novo_modo == "recuperar":
             txt_auth_titulo.value = "Recuperar / Trocar Senha"
+            txt_auth_titulo.color = "#fbbf24"  # Âmbar / Laranja
+            card_interno_auth.border = ft.Border(
+                ft.BorderSide(1.5, "#d97706"),
+                ft.BorderSide(1.5, "#d97706"),
+                ft.BorderSide(1.5, "#d97706"),
+                ft.BorderSide(1.5, "#d97706")
+            )
             txt_auth_pass.label = "Nova Senha"
+            btn_executar_auth.bgcolor = "#d97706"
             btn_executar_auth.content = ft.Text("Salvar Nova Senha", color="white", weight="bold")
-            btn_alternar_auth.content = ft.Text("Voltar para o Login", color="#3b82f6", size=12)
+            btn_alternar_auth.content = ft.Text("Lembrou da senha? Voltar ao Login", color="#60a5fa", size=12)
             btn_recuperar_auth.visible = False
             
         page.update()
 
-    def iniciar_sessao(uid, username):
+    def iniciar_sessao(uid, username, persistir=True):
         sessao_usuario["id"] = int(uid)
         sessao_usuario["username"] = str(username)
         lbl_user_tag.value = f"👤 {username}"
         
+        # Salva persistentemente se a opção 'Permanecer conectado' estiver marcada
         try:
-            page.client_storage.set("user_id", str(uid))
-            page.client_storage.set("username", str(username))
+            if persistir:
+                page.client_storage.set("user_id", str(uid))
+                page.client_storage.set("username", str(username))
+                page.client_storage.set("manter_conectado", "true")
+            else:
+                page.client_storage.remove("user_id")
+                page.client_storage.remove("username")
+                page.client_storage.remove("manter_conectado")
         except Exception:
             pass
 
@@ -1478,7 +1525,6 @@ def main(page: ft.Page):
         layout_mestre.visible = True
         page.update()
 
-        # Inicia o catálogo garantindo limpeza de IDs anteriores
         paginacao["pagina_atual"] = 1
         paginacao["carregando"] = False
         paginacao["fim"] = False
@@ -1511,137 +1557,4 @@ def main(page: ft.Page):
             return
 
         user_auth_id = None
-        user_auth_nome = None
-        conn = None
-
-        try:
-            conn = sqlite3.connect(DB_FILE, timeout=15)
-            c = conn.cursor()
-
-            if modo_auth["modo"] == "cadastro":
-                c.execute("SELECT id FROM usuarios WHERE username = ?", (usuario,))
-                if c.fetchone():
-                    txt_auth_erro.value = "Este nome de usuário já está em uso."
-                    page.update()
-                    return
-
-                p_hash = gerar_hash_senha(senha)
-                c.execute("INSERT INTO usuarios (username, password_hash) VALUES (?, ?)", (usuario, p_hash))
-                user_auth_id = c.lastrowid
-                user_auth_nome = usuario
-                conn.commit()
-
-            elif modo_auth["modo"] == "login":
-                c.execute("SELECT id, password_hash FROM usuarios WHERE username = ?", (usuario,))
-                user_row = c.fetchone()
-                if not user_row or not verificar_senha(senha, user_row[1]):
-                    txt_auth_erro.value = "Usuário ou senha inválidos."
-                    page.update()
-                    return
-
-                user_auth_id = user_row[0]
-                user_auth_nome = usuario
-
-            elif modo_auth["modo"] == "recuperar":
-                if senha != senha_confirm:
-                    txt_auth_erro.value = "As senhas digitadas não coincidem."
-                    page.update()
-                    return
-
-                c.execute("SELECT id FROM usuarios WHERE username = ?", (usuario,))
-                user_row = c.fetchone()
-                if not user_row:
-                    txt_auth_erro.value = "Usuário não encontrado."
-                    page.update()
-                    return
-
-                novo_hash = gerar_hash_senha(senha)
-                c.execute("UPDATE usuarios SET password_hash = ? WHERE id = ?", (novo_hash, user_row[0]))
-                conn.commit()
-                user_auth_id = user_row[0]
-                user_auth_nome = usuario
-
-        except Exception as err:
-            txt_auth_erro.value = f"Erro no banco: {err}"
-            page.update()
-            return
-        finally:
-            if conn:
-                conn.close()
-
-        if user_auth_id and user_auth_nome:
-            iniciar_sessao(user_auth_id, user_auth_nome)
-
-    btn_executar_auth = ft.Button(
-        content=ft.Text("Entrar", color="white", weight="bold"),
-        bgcolor="#2563eb",
-        width=300,
-        height=40,
-        on_click=processar_auth
-    )
-
-    btn_alternar_auth = ft.Button(
-        content=ft.Text("Não tem uma conta? Cadastre-se", color="#3b82f6", size=12),
-        bgcolor="transparent",
-        on_click=lambda e: definir_modo_auth("cadastro" if modo_auth["modo"] == "login" else "login")
-    )
-
-    btn_recuperar_auth = ft.Button(
-        content=ft.Text("Esqueceu a senha?", color="#94a3b8", size=11),
-        bgcolor="transparent",
-        on_click=lambda e: definir_modo_auth("recuperar")
-    )
-
-    card_auth = ft.Container(
-        alignment=ft.Alignment(0, 0),
-        padding=ft.Padding(0, 60, 0, 0),
-        content=ft.Container(
-            width=360,
-            bgcolor="#111827",
-            padding=24,
-            border_radius=12,
-            border=ft.Border(
-                ft.BorderSide(1.5, "#1f2937"),
-                ft.BorderSide(1.5, "#1f2937"),
-                ft.BorderSide(1.5, "#1f2937"),
-                ft.BorderSide(1.5, "#1f2937")
-            ),
-            content=ft.Column([
-                ft.Text("🎬 MOVIE INSERT", size=24, weight="bold", color="white", text_align=ft.TextAlign.CENTER),
-                ft.Container(height=4),
-                txt_auth_titulo,
-                txt_auth_erro,
-                txt_auth_user,
-                txt_auth_pass,
-                txt_auth_pass_confirm,
-                ft.Container(height=2),
-                btn_executar_auth,
-                btn_alternar_auth,
-                btn_recuperar_auth
-            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=8)
-        )
-    )
-
-    page.add(card_auth, layout_mestre)
-
-    # -------------------------------------------------------------
-    # RESTAURAÇÃO DE SESSÃO SEGURA
-    # -------------------------------------------------------------
-    saved_uid = None
-    saved_user = None
-    try:
-        saved_uid = page.client_storage.get("user_id")
-        saved_user = page.client_storage.get("username")
-    except Exception:
-        pass
-
-    if saved_uid and saved_user:
-        iniciar_sessao(saved_uid, saved_user)
-    else:
-        card_auth.visible = True
-        layout_mestre.visible = False
-        page.update()
-
-if __name__ == "__main__":
-    porta = int(os.environ.get("PORT", 8550))
-    ft.run(main, view=ft.AppView.WEB_BROWSER, host="0.0.0.0", port=porta)
+        user_
