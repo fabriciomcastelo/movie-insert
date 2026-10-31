@@ -101,7 +101,6 @@ def main(page: ft.Page):
     page.bgcolor = "#0b0c0f"
     page.padding = ft.Padding(12, 10, 12, 10)
     page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
-    # Scroll nativo global para compatibilidade com o rato no PC e toque no ecrã móvel
     page.scroll = ft.ScrollMode.AUTO
 
     init_db()
@@ -111,8 +110,8 @@ def main(page: ft.Page):
     filme_para_remover = {"id": None, "titulo": ""}
     
     estado_biblioteca = {
-        "aba": "Para Assistir",  # "Para Assistir" ou "Assistidos"
-        "modo": "streaming"      # "streaming", "alfabetico", "genero", "nota", "nota_pessoal"
+        "aba": "Para Assistir",
+        "modo": "streaming"
     }
 
     paginacao = {
@@ -646,6 +645,7 @@ def main(page: ft.Page):
             paginacao["pagina_atual"] += 1
 
         spinner_carregamento.visible = True
+        btn_carregar_manual.visible = False
         page.update()
 
         def _fetch():
@@ -680,18 +680,28 @@ def main(page: ft.Page):
             finally:
                 paginacao["carregando"] = False
                 spinner_carregamento.visible = False
+                # Botão discreto de apoio caso o navegador esteja sem rolagem
+                btn_carregar_manual.visible = not paginacao["fim"]
                 page.update()
 
         threading.Thread(target=_fetch, daemon=True).start()
 
-    # Gatilho automático ao aproximar-se do fundo da página
+    btn_carregar_manual = ft.Button(
+        content=ft.Text("⬇ Mais filmes", color="#94a3b8", size=12),
+        bgcolor="#1e293b",
+        on_click=lambda e: carregar_populares(incrementar=True),
+        visible=False
+    )
+
+    # Detetor global da página (Web e Mobile)
     def ao_rolar_pagina(e: ft.OnScrollEvent):
         if container_sugestoes.visible:
             container_sugestoes.visible = False
             page.update()
 
+        # Gatilho com margem de 800px para carregar antes do fim
         if view_inicio.visible and e.max_scroll_extent > 0:
-            if (e.pixels + 700) >= e.max_scroll_extent:
+            if (e.pixels + 800) >= e.max_scroll_extent:
                 if not paginacao["carregando"] and not paginacao["fim"]:
                     carregar_populares(incrementar=True)
 
@@ -730,7 +740,7 @@ def main(page: ft.Page):
         page.launch_url(f"file://{arq}")
 
     # -------------------------------------------------------------
-    # BIBLIOTECA: CORREÇÃO TOTAL DE DESEMPACOTAMENTO (9 COLUNAS)
+    # BIBLIOTECA
     # -------------------------------------------------------------
     def mudar_aba_biblioteca(nova_aba):
         estado_biblioteca["aba"] = nova_aba
@@ -1174,7 +1184,7 @@ def main(page: ft.Page):
             ft.Container(content=ft.Text("Filmes em Alta (TMDb Trends)", size=17, weight="bold"), width=420),
             grade_populares,
             ft.Container(
-                content=spinner_carregamento,
+                content=ft.Column([spinner_carregamento, btn_carregar_manual], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
                 alignment=ft.Alignment(0, 0),
                 padding=ft.Padding(0, 15, 0, 35)
             )
@@ -1219,7 +1229,10 @@ def main(page: ft.Page):
         view_biblioteca
     )
     page.update()
+
+    # Carga inicial dupla: carrega página 1 e página 2 para ultrapassar a altura da janela do monitor
     carregar_populares()
+    threading.Timer(0.8, lambda: carregar_populares(incrementar=True)).start()
 
 if __name__ == "__main__":
     porta = int(os.environ.get("PORT", 8550))
