@@ -242,8 +242,8 @@ def main(page: ft.Page):
     # -------------------------------------------------------------
     dt_img = ft.Image(
         src="https://via.placeholder.com/130x195?text=Sem+Poster",
-        width=120,
-        height=180,
+        width=135,
+        height=200,
         border_radius=8,
         fit="cover"
     )
@@ -541,21 +541,24 @@ def main(page: ft.Page):
         threading.Thread(target=_fetch, daemon=True).start()
 
     # -------------------------------------------------------------
-    # CARDS DOS FILMES
+    # CARDS DOS FILMES (+20% DE TAMANHO NOS POSTERS)
     # -------------------------------------------------------------
+    # Dimensões aumentadas em 20%:
+    # Card: 135px -> 162px
+    # Imagem: 127x180px -> 152x216px
     def criar_card_filme(mid, mtype, titulo, ano, poster_url, categoria=None, nota=None):
         acoes = []
         if categoria == "Para Assistir":
             acoes.append(
                 ft.Button(
-                    content=ft.Text("✓ Visto", color="white", size=9),
+                    content=ft.Text("✓ Visto", color="white", size=10),
                     bgcolor="#10b981",
                     on_click=lambda e: abrir_modal_avaliacao(mid)
                 )
             )
             acoes.append(
                 ft.Button(
-                    content=ft.Text("✕", color="red400", size=9),
+                    content=ft.Text("✕", color="red400", size=10),
                     on_click=lambda e: remover_filme_direto(mid)
                 )
             )
@@ -563,10 +566,10 @@ def main(page: ft.Page):
             bg_nota, cor_texto, borda_nota = obter_estilo_nota(nota)
             acoes.append(
                 ft.Container(
-                    content=ft.Text(f"★ {nota}" if nota else "★ Avaliar", color=cor_texto, size=10, weight="bold"),
+                    content=ft.Text(f"★ {nota}" if nota else "★ Avaliar", color=cor_texto, size=11, weight="bold"),
                     bgcolor=bg_nota,
                     border=borda_nota,
-                    padding=ft.Padding(5, 2, 5, 2),
+                    padding=ft.Padding(6, 3, 6, 3),
                     border_radius=5,
                     ink=True,
                     on_click=lambda e: abrir_modal_avaliacao(mid, nota)
@@ -574,15 +577,15 @@ def main(page: ft.Page):
             )
             acoes.append(
                 ft.Button(
-                    content=ft.Text("✕", color="red400", size=9),
+                    content=ft.Text("✕", color="red400", size=10),
                     on_click=lambda e: pedir_confirmacao_remocao(mid, titulo)
                 )
             )
 
         card_corpo = ft.Container(
-            width=135,
+            width=162,
             bgcolor="#111827",
-            padding=4,
+            padding=5,
             border_radius=8,
             ink=True,
             border=ft.Border(
@@ -593,31 +596,31 @@ def main(page: ft.Page):
             ),
             content=ft.Column([
                 ft.Image(
-                    src=poster_url if poster_url else "https://via.placeholder.com/130x180?text=Sem+Poster",
-                    width=127,
-                    height=180,
+                    src=poster_url if poster_url else "https://via.placeholder.com/152x216?text=Sem+Poster",
+                    width=152,
+                    height=216,
                     border_radius=6,
                     fit="cover"
                 ),
                 ft.Text(
                     f"{titulo}\n({ano})",
-                    size=10,
+                    size=11,
                     weight="bold",
                     max_lines=2,
                     overflow="ellipsis",
-                    width=127,
+                    width=152,
                     text_align=ft.TextAlign.CENTER
                 ),
-                ft.Row(acoes, spacing=2, alignment=ft.MainAxisAlignment.SPACE_BETWEEN, width=127) if acoes else ft.Container()
-            ], spacing=2, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                ft.Row(acoes, spacing=3, alignment=ft.MainAxisAlignment.SPACE_BETWEEN, width=152) if acoes else ft.Container()
+            ], spacing=3, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
             on_click=lambda e: abrir_detalhes(mid, mtype, titulo, ano, poster_url)
         )
         return card_corpo
 
-    grade_populares = ft.Row(wrap=True, spacing=10, run_spacing=12, alignment=ft.MainAxisAlignment.CENTER)
+    grade_populares = ft.Row(wrap=True, spacing=12, run_spacing=14, alignment=ft.MainAxisAlignment.CENTER)
     coluna_biblioteca_itens = ft.Column(spacing=16, horizontal_alignment=ft.CrossAxisAlignment.START)
 
-    spinner_carregamento = ft.ProgressRing(width=28, height=28, stroke_width=3, color="#3b82f6", visible=False)
+    spinner_carregamento = ft.ProgressRing(width=30, height=30, stroke_width=3, color="#3b82f6", visible=False)
 
     # -------------------------------------------------------------
     # POPULARES E ROLAGEM INFINITA AUTOMÁTICA
@@ -645,7 +648,6 @@ def main(page: ft.Page):
             paginacao["pagina_atual"] += 1
 
         spinner_carregamento.visible = True
-        btn_carregar_manual.visible = False
         page.update()
 
         def _fetch():
@@ -671,7 +673,7 @@ def main(page: ft.Page):
                         tit = it.get("title") or it.get("name")
                         ano = str((it.get("release_date") or it.get("first_air_date")) or "")[:4]
                         p_path = it.get("poster_path")
-                        p_url = f"https://image.tmdb.org/t/p/w200{p_path}" if p_path else None
+                        p_url = f"https://image.tmdb.org/t/p/w300{p_path}" if p_path else None
                         novos.append(criar_card_filme(mid, "movie", tit, ano, p_url))
 
                     grade_populares.controls.extend(novos)
@@ -680,28 +682,18 @@ def main(page: ft.Page):
             finally:
                 paginacao["carregando"] = False
                 spinner_carregamento.visible = False
-                # Botão discreto de apoio caso o navegador esteja sem rolagem
-                btn_carregar_manual.visible = not paginacao["fim"]
                 page.update()
 
         threading.Thread(target=_fetch, daemon=True).start()
 
-    btn_carregar_manual = ft.Button(
-        content=ft.Text("⬇ Mais filmes", color="#94a3b8", size=12),
-        bgcolor="#1e293b",
-        on_click=lambda e: carregar_populares(incrementar=True),
-        visible=False
-    )
-
-    # Detetor global da página (Web e Mobile)
+    # Gatilho de rolagem com margem estendida (1000px) para disparar bem antes do fim
     def ao_rolar_pagina(e: ft.OnScrollEvent):
         if container_sugestoes.visible:
             container_sugestoes.visible = False
             page.update()
 
-        # Gatilho com margem de 800px para carregar antes do fim
         if view_inicio.visible and e.max_scroll_extent > 0:
-            if (e.pixels + 800) >= e.max_scroll_extent:
+            if (e.pixels + 1000) >= e.max_scroll_extent:
                 if not paginacao["carregando"] and not paginacao["fim"]:
                     carregar_populares(incrementar=True)
 
@@ -868,7 +860,7 @@ def main(page: ft.Page):
             if not lista:
                 return
             linha_cards = ft.Row(
-                spacing=10,
+                spacing=12,
                 scroll=ft.ScrollMode.AUTO,
                 controls=[
                     criar_card_filme(mid, "movie", tit, ano, p_url, categoria=cat, nota=nota)
@@ -894,8 +886,8 @@ def main(page: ft.Page):
                 return
             grade = ft.Row(
                 wrap=True,
-                spacing=10,
-                run_spacing=12,
+                spacing=12,
+                run_spacing=14,
                 alignment=ft.MainAxisAlignment.START,
                 controls=[
                     criar_card_filme(mid, "movie", tit, ano, p_url, categoria=cat, nota=nota)
@@ -975,7 +967,7 @@ def main(page: ft.Page):
             for g_nome in sorted(mapa_generos.keys()):
                 renderizar_secao(g_nome, "🏷️", "#fbbf24", mapa_generos[g_nome])
 
-        # ---------------- MODO 4: NOTA DO IMDB (PARA ASSISTIR - LADO A LADO) ----------------
+        # ---------------- MODO 4: NOTA DO IMDB (LADO A LADO) ----------------
         elif modo_atual == "nota":
             def pegar_imdb_float(it):
                 val = it[8]
@@ -994,7 +986,7 @@ def main(page: ft.Page):
                 texto_info="⭐ Ordenado por Nota do IMDb (Maior para Menor)"
             )
 
-        # ---------------- MODO 5: NOTA PESSOAL (ASSISTIDOS - LADO A LADO) ----------------
+        # ---------------- MODO 5: NOTA PESSOAL (LADO A LADO) ----------------
         elif modo_atual == "nota_pessoal":
             def pegar_nota_pessoal_float(it):
                 val = it[4]
@@ -1177,17 +1169,20 @@ def main(page: ft.Page):
     )
 
     # -------------------------------------------------------------
-    # VIEWS PRINCIPAIS
+    # VIEWS PRINCIPAIS (COM GATILHO INVISÍVEL NO FINAL)
     # -------------------------------------------------------------
+    sentinela_fim = ft.Container(
+        height=40,
+        alignment=ft.Alignment(0, 0),
+        content=spinner_carregamento,
+        on_hover=lambda e: carregar_populares(incrementar=True) if not paginacao["carregando"] else None
+    )
+
     view_inicio = ft.Column(
         controls=[
             ft.Container(content=ft.Text("Filmes em Alta (TMDb Trends)", size=17, weight="bold"), width=420),
             grade_populares,
-            ft.Container(
-                content=ft.Column([spinner_carregamento, btn_carregar_manual], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-                alignment=ft.Alignment(0, 0),
-                padding=ft.Padding(0, 15, 0, 35)
-            )
+            sentinela_fim
         ],
         spacing=14,
         horizontal_alignment=ft.CrossAxisAlignment.CENTER
@@ -1230,9 +1225,13 @@ def main(page: ft.Page):
     )
     page.update()
 
-    # Carga inicial dupla: carrega página 1 e página 2 para ultrapassar a altura da janela do monitor
-    carregar_populares()
-    threading.Timer(0.8, lambda: carregar_populares(incrementar=True)).start()
+    # Carga inicial encadeada (página 1, 2 e 3) para preencher telas com folga
+    def inicializar_catalogo():
+        carregar_populares()
+        threading.Timer(0.6, lambda: carregar_populares(incrementar=True)).start()
+        threading.Timer(1.4, lambda: carregar_populares(incrementar=True)).start()
+
+    inicializar_catalogo()
 
 if __name__ == "__main__":
     porta = int(os.environ.get("PORT", 8550))
