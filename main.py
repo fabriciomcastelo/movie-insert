@@ -64,50 +64,56 @@ def verificar_senha(senha_fornecida: str, hash_armazenado: str) -> bool:
         return False
 
 def init_db():
+    conn = None
     try:
-        with sqlite3.connect(DB_FILE, timeout=10) as conn:
-            c = conn.cursor()
-            # Tabela de Utilizadores
-            c.execute("""
-                CREATE TABLE IF NOT EXISTS usuarios (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    username TEXT UNIQUE COLLATE NOCASE,
-                    password_hash TEXT
-                )
-            """)
-            # Tabela de Filmes
-            c.execute("""
-                CREATE TABLE IF NOT EXISTS filmes (
-                    id TEXT,
-                    titulo TEXT,
-                    ano TEXT,
-                    diretor TEXT,
-                    elenco TEXT,
-                    sinopse TEXT,
-                    imdb TEXT,
-                    rotten TEXT,
-                    streaming TEXT,
-                    poster_url TEXT,
-                    categoria TEXT,
-                    nota_usuario TEXT,
-                    trailer_url TEXT,
-                    generos TEXT,
-                    usuario_id INTEGER,
-                    PRIMARY KEY (id, usuario_id)
-                )
-            """)
-            # Migrações caso o banco já existisse
-            try:
-                c.execute("ALTER TABLE filmes ADD COLUMN generos TEXT")
-            except Exception:
-                pass
-            try:
-                c.execute("ALTER TABLE filmes ADD COLUMN usuario_id INTEGER DEFAULT 1")
-            except Exception:
-                pass
-            conn.commit()
-    except Exception:
-        pass
+        conn = sqlite3.connect(DB_FILE, timeout=15)
+        c = conn.cursor()
+        c.execute("PRAGMA journal_mode=WAL;")
+        
+        # Tabela de Utilizadores
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS usuarios (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE COLLATE NOCASE,
+                password_hash TEXT
+            )
+        """)
+        
+        # Tabela de Filmes
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS filmes (
+                id TEXT,
+                titulo TEXT,
+                ano TEXT,
+                diretor TEXT,
+                elenco TEXT,
+                sinopse TEXT,
+                imdb TEXT,
+                rotten TEXT,
+                streaming TEXT,
+                poster_url TEXT,
+                categoria TEXT,
+                nota_usuario TEXT,
+                trailer_url TEXT,
+                generos TEXT,
+                usuario_id INTEGER,
+                PRIMARY KEY (id, usuario_id)
+            )
+        """)
+        try:
+            c.execute("ALTER TABLE filmes ADD COLUMN generos TEXT")
+        except Exception:
+            pass
+        try:
+            c.execute("ALTER TABLE filmes ADD COLUMN usuario_id INTEGER DEFAULT 1")
+        except Exception:
+            pass
+        conn.commit()
+    except Exception as e:
+        print(f"Erro init_db: {e}")
+    finally:
+        if conn:
+            conn.close()
 
 def normalizar_texto(texto):
     if not texto:
@@ -148,7 +154,6 @@ def main(page: ft.Page):
 
     init_db()
 
-    # Estado de Autenticação
     sessao_usuario = {
         "id": None,
         "username": ""
@@ -188,13 +193,17 @@ def main(page: ft.Page):
         fid = filme_para_remover["id"]
         uid = sessao_usuario["id"]
         if fid and uid:
+            conn = None
             try:
-                with sqlite3.connect(DB_FILE, timeout=10) as conn:
-                    c = conn.cursor()
-                    c.execute("DELETE FROM filmes WHERE id = ? AND usuario_id = ?", (fid, uid))
-                    conn.commit()
+                conn = sqlite3.connect(DB_FILE, timeout=15)
+                c = conn.cursor()
+                c.execute("DELETE FROM filmes WHERE id = ? AND usuario_id = ?", (fid, uid))
+                conn.commit()
             except Exception:
                 pass
+            finally:
+                if conn:
+                    conn.close()
             fechar_dialogo(modal_confirmacao)
             carregar_biblioteca()
 
@@ -255,13 +264,17 @@ def main(page: ft.Page):
         nota = filme_avaliando.get("nota", "10")
         uid = sessao_usuario["id"]
         if fid and uid:
+            conn = None
             try:
-                with sqlite3.connect(DB_FILE, timeout=10) as conn:
-                    c = conn.cursor()
-                    c.execute("UPDATE filmes SET categoria = 'Assistidos', nota_usuario = ? WHERE id = ? AND usuario_id = ?", (nota, fid, uid))
-                    conn.commit()
+                conn = sqlite3.connect(DB_FILE, timeout=15)
+                c = conn.cursor()
+                c.execute("UPDATE filmes SET categoria = 'Assistidos', nota_usuario = ? WHERE id = ? AND usuario_id = ?", (nota, fid, uid))
+                conn.commit()
             except Exception:
                 pass
+            finally:
+                if conn:
+                    conn.close()
             fechar_dialogo(modal_avaliacao)
             carregar_biblioteca()
 
@@ -389,23 +402,27 @@ def main(page: ft.Page):
         if not it or not uid:
             return
 
+        conn = None
         try:
-            with sqlite3.connect(DB_FILE, timeout=10) as conn:
-                c = conn.cursor()
-                c.execute("SELECT categoria FROM filmes WHERE id = ? AND usuario_id = ?", (it["id"], uid))
-                if not c.fetchone():
-                    c.execute("""
-                        INSERT INTO filmes (id, titulo, ano, diretor, elenco, sinopse, imdb, rotten, streaming, poster_url, categoria, nota_usuario, trailer_url, generos, usuario_id)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Para Assistir', ?, ?, ?, ?)
-                    """, (
-                        it["id"], it["titulo"], it["ano"], it["diretor"], it["elenco"],
-                        it["sinopse"], it["imdb"], it["rotten"], it["streaming"],
-                        it["poster_url"], it.get("nota_usuario"), it.get("trailer_url"),
-                        it.get("generos", ""), uid
-                    ))
-                    conn.commit()
+            conn = sqlite3.connect(DB_FILE, timeout=15)
+            c = conn.cursor()
+            c.execute("SELECT categoria FROM filmes WHERE id = ? AND usuario_id = ?", (it["id"], uid))
+            if not c.fetchone():
+                c.execute("""
+                    INSERT INTO filmes (id, titulo, ano, diretor, elenco, sinopse, imdb, rotten, streaming, poster_url, categoria, nota_usuario, trailer_url, generos, usuario_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Para Assistir', ?, ?, ?, ?)
+                """, (
+                    it["id"], it["titulo"], it["ano"], it["diretor"], it["elenco"],
+                    it["sinopse"], it["imdb"], it["rotten"], it["streaming"],
+                    it["poster_url"], it.get("nota_usuario"), it.get("trailer_url"),
+                    it.get("generos", ""), uid
+                ))
+                conn.commit()
         except Exception:
             pass
+        finally:
+            if conn:
+                conn.close()
 
         it["categoria_existente"] = "Para Assistir"
         btn_salvar.content = ft.Text("✓ Na sua Lista", color="white", size=12)
@@ -529,16 +546,20 @@ def main(page: ft.Page):
                 cat_exist = None
 
                 if uid:
+                    conn = None
                     try:
-                        with sqlite3.connect(DB_FILE, timeout=10) as conn:
-                            cur = conn.cursor()
-                            cur.execute("SELECT nota_usuario, categoria FROM filmes WHERE id = ? AND usuario_id = ?", (chave_id, uid))
-                            row = cur.fetchone()
-                            if row:
-                                nota_usr = row[0]
-                                cat_exist = row[1]
+                        conn = sqlite3.connect(DB_FILE, timeout=15)
+                        cur = conn.cursor()
+                        cur.execute("SELECT nota_usuario, categoria FROM filmes WHERE id = ? AND usuario_id = ?", (chave_id, uid))
+                        row = cur.fetchone()
+                        if row:
+                            nota_usr = row[0]
+                            cat_exist = row[1]
                     except Exception:
                         pass
+                    finally:
+                        if conn:
+                            conn.close()
 
                 item_ativo["data"] = {
                     "id": chave_id, "titulo": titulo, "ano": ano, "diretor": diretor,
@@ -756,26 +777,34 @@ def main(page: ft.Page):
     def remover_filme_direto(fid):
         uid = sessao_usuario["id"]
         if uid:
+            conn = None
             try:
-                with sqlite3.connect(DB_FILE, timeout=10) as conn:
-                    c = conn.cursor()
-                    c.execute("DELETE FROM filmes WHERE id = ? AND usuario_id = ?", (fid, uid))
-                    conn.commit()
+                conn = sqlite3.connect(DB_FILE, timeout=15)
+                c = conn.cursor()
+                c.execute("DELETE FROM filmes WHERE id = ? AND usuario_id = ?", (fid, uid))
+                conn.commit()
             except Exception:
                 pass
+            finally:
+                if conn:
+                    conn.close()
             carregar_biblioteca()
 
     def imprimir_lista():
         uid = sessao_usuario["id"]
         filmes = []
         if uid:
+            conn = None
             try:
-                with sqlite3.connect(DB_FILE, timeout=10) as conn:
-                    c = conn.cursor()
-                    c.execute("SELECT titulo, ano, imdb, rotten, streaming, diretor FROM filmes WHERE categoria = 'Para Assistir' AND usuario_id = ? ORDER BY titulo ASC", (uid,))
-                    filmes = c.fetchall()
+                conn = sqlite3.connect(DB_FILE, timeout=15)
+                c = conn.cursor()
+                c.execute("SELECT titulo, ano, imdb, rotten, streaming, diretor FROM filmes WHERE categoria = 'Para Assistir' AND usuario_id = ? ORDER BY titulo ASC", (uid,))
+                filmes = c.fetchall()
             except Exception:
                 pass
+            finally:
+                if conn:
+                    conn.close()
 
         if not filmes:
             return
@@ -810,18 +839,22 @@ def main(page: ft.Page):
         uid = sessao_usuario["id"]
 
         if uid:
+            conn = None
             try:
-                with sqlite3.connect(DB_FILE, timeout=10) as conn:
-                    c = conn.cursor()
-                    c.execute("""
-                        SELECT id, titulo, ano, poster_url, nota_usuario, categoria, streaming, generos, imdb 
-                        FROM filmes 
-                        WHERE usuario_id = ? 
-                        ORDER BY rowid DESC
-                    """, (uid,))
-                    todos_itens = c.fetchall()
+                conn = sqlite3.connect(DB_FILE, timeout=15)
+                c = conn.cursor()
+                c.execute("""
+                    SELECT id, titulo, ano, poster_url, nota_usuario, categoria, streaming, generos, imdb 
+                    FROM filmes 
+                    WHERE usuario_id = ? 
+                    ORDER BY rowid DESC
+                """, (uid,))
+                todos_itens = c.fetchall()
             except Exception:
                 pass
+            finally:
+                if conn:
+                    conn.close()
 
         total_para_assistir = sum(1 for it in todos_itens if it[5] == "Para Assistir")
         total_assistidos = sum(1 for it in todos_itens if it[5] == "Assistidos")
@@ -1209,8 +1242,11 @@ def main(page: ft.Page):
     lbl_user_tag = ft.Text("", size=11, color="#94a3b8", weight="bold")
 
     def acao_logout(e):
-        page.client_storage.remove("user_id")
-        page.client_storage.remove("username")
+        try:
+            page.client_storage.remove("user_id")
+            page.client_storage.remove("username")
+        except Exception:
+            pass
         sessao_usuario["id"] = None
         sessao_usuario["username"] = ""
         txt_auth_user.value = ""
@@ -1230,7 +1266,7 @@ def main(page: ft.Page):
 
     linha_topo_titulo = ft.Row(
         controls=[
-            ft.Container(width=40),  # Balanço visual
+            ft.Container(width=40),
             lbl_app_titulo,
             ft.Row([lbl_user_tag, btn_logout], spacing=2, alignment=ft.MainAxisAlignment.END)
         ],
@@ -1363,7 +1399,7 @@ def main(page: ft.Page):
         width=300
     )
 
-    modo_auth = {"modo": "login"}  # "login" ou "cadastro"
+    modo_auth = {"modo": "login"}
 
     def alternar_modo_auth(e):
         if modo_auth["modo"] == "login":
@@ -1379,9 +1415,28 @@ def main(page: ft.Page):
         txt_auth_erro.value = ""
         page.update()
 
+    def iniciar_sessao(uid, username):
+        sessao_usuario["id"] = uid
+        sessao_usuario["username"] = username
+        lbl_user_tag.value = f"👤 {username}"
+        
+        try:
+            page.client_storage.set("user_id", str(uid))
+            page.client_storage.set("username", str(username))
+        except Exception:
+            pass
+
+        card_auth.visible = False
+        layout_mestre.visible = True
+        page.update()
+
+        carregar_populares()
+        threading.Timer(0.6, lambda: carregar_populares(incrementar=True)).start()
+        threading.Timer(1.4, lambda: carregar_populares(incrementar=True)).start()
+
     def processar_auth(e):
-        usuario = txt_auth_user.value.strip()
-        senha = txt_auth_pass.value.strip()
+        usuario = txt_auth_user.value.strip() if txt_auth_user.value else ""
+        senha = txt_auth_pass.value.strip() if txt_auth_pass.value else ""
 
         if not usuario or not senha:
             txt_auth_erro.value = "Preencha o usuário e a senha."
@@ -1398,37 +1453,49 @@ def main(page: ft.Page):
             page.update()
             return
 
+        user_auth_id = None
+        user_auth_nome = None
+        conn = None
+
         try:
-            with sqlite3.connect(DB_FILE, timeout=10) as conn:
-                c = conn.cursor()
+            conn = sqlite3.connect(DB_FILE, timeout=15)
+            c = conn.cursor()
 
-                if modo_auth["modo"] == "cadastro":
-                    c.execute("SELECT id FROM usuarios WHERE username = ?", (usuario,))
-                    if c.fetchone():
-                        txt_auth_erro.value = "Este nome de usuário já está em uso."
-                        page.update()
-                        return
+            if modo_auth["modo"] == "cadastro":
+                c.execute("SELECT id FROM usuarios WHERE username = ?", (usuario,))
+                if c.fetchone():
+                    txt_auth_erro.value = "Este nome de usuário já está em uso."
+                    page.update()
+                    return
 
-                    p_hash = gerar_hash_senha(senha)
-                    c.execute("INSERT INTO usuarios (username, password_hash) VALUES (?, ?)", (usuario, p_hash))
-                    novo_id = c.lastrowid
-                    conn.commit()
+                p_hash = gerar_hash_senha(senha)
+                c.execute("INSERT INTO usuarios (username, password_hash) VALUES (?, ?)", (usuario, p_hash))
+                user_auth_id = c.lastrowid
+                user_auth_nome = usuario
+                conn.commit()
 
-                    iniciar_sessao(novo_id, usuario)
+            else:  # Modo Login
+                c.execute("SELECT id, password_hash FROM usuarios WHERE username = ?", (usuario,))
+                user_row = c.fetchone()
+                if not user_row or not verificar_senha(senha, user_row[1]):
+                    txt_auth_erro.value = "Usuário ou senha inválidos."
+                    page.update()
+                    return
 
-                else:  # Modo Login
-                    c.execute("SELECT id, password_hash FROM usuarios WHERE username = ?", (usuario,))
-                    user_row = c.fetchone()
-                    if not user_row or not verificar_senha(senha, user_row[1]):
-                        txt_auth_erro.value = "Usuário ou senha inválidos."
-                        page.update()
-                        return
-
-                    iniciar_sessao(user_row[0], usuario)
+                user_auth_id = user_row[0]
+                user_auth_nome = usuario
 
         except Exception as err:
-            txt_auth_erro.value = "Erro no banco de dados."
+            txt_auth_erro.value = f"Erro: {err}"
             page.update()
+            return
+        finally:
+            if conn:
+                conn.close()
+
+        # Transição de ecrã realizada em segurança fora do bloco da BD
+        if user_auth_id and user_auth_nome:
+            iniciar_sessao(user_auth_id, user_auth_nome)
 
     btn_executar_auth = ft.Button(
         content=ft.Text("Entrar", color="white", weight="bold"),
@@ -1472,30 +1539,15 @@ def main(page: ft.Page):
         )
     )
 
-    def iniciar_sessao(uid, username):
-        sessao_usuario["id"] = uid
-        sessao_usuario["username"] = username
-        lbl_user_tag.value = f"👤 {username}"
-        
-        # Salva no cache do dispositivo para persistir o login
-        page.client_storage.set("user_id", uid)
-        page.client_storage.set("username", username)
-
-        card_auth.visible = False
-        layout_mestre.visible = True
-        page.update()
-
-        carregar_populares()
-        threading.Timer(0.6, lambda: carregar_populares(incrementar=True)).start()
-        threading.Timer(1.4, lambda: carregar_populares(incrementar=True)).start()
-
-    # -------------------------------------------------------------
-    # CHECAGEM AUTOMÁTICA DE SESSÃO SALVA
-    # -------------------------------------------------------------
     page.add(card_auth, layout_mestre)
 
-    saved_uid = page.client_storage.get("user_id")
-    saved_user = page.client_storage.get("username")
+    saved_uid = None
+    saved_user = None
+    try:
+        saved_uid = page.client_storage.get("user_id")
+        saved_user = page.client_storage.get("username")
+    except Exception:
+        pass
 
     if saved_uid and saved_user:
         iniciar_sessao(saved_uid, saved_user)
