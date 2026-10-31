@@ -70,7 +70,7 @@ def init_db():
         c = conn.cursor()
         c.execute("PRAGMA journal_mode=WAL;")
         
-        # Tabela de Utilizadores
+        # Tabela de Usuários
         c.execute("""
             CREATE TABLE IF NOT EXISTS usuarios (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1236,22 +1236,26 @@ def main(page: ft.Page):
     ], spacing=4, width=420, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
 
     # -------------------------------------------------------------
-    # CABEÇALHO FIXO COM USUÁRIO E LOGOUT
+    # CABEÇALHO FIXO COM USUÁRIO E LOGOUT (100% FUNCIONAL)
     # -------------------------------------------------------------
     lbl_app_titulo = ft.Text("MOVIE INSERT", size=22, weight="bold", color="white", text_align=ft.TextAlign.CENTER)
     lbl_user_tag = ft.Text("", size=11, color="#94a3b8", weight="bold")
 
+    # Logout com retorno garantido à tela de login
     def acao_logout(e):
         try:
             page.client_storage.remove("user_id")
             page.client_storage.remove("username")
         except Exception:
             pass
+        
         sessao_usuario["id"] = None
         sessao_usuario["username"] = ""
         txt_auth_user.value = ""
         txt_auth_pass.value = ""
         txt_auth_erro.value = ""
+        
+        # Oculta o aplicativo e volta imediatamente para o card de login
         layout_mestre.visible = False
         card_auth.visible = True
         page.update()
@@ -1415,11 +1419,13 @@ def main(page: ft.Page):
         txt_auth_erro.value = ""
         page.update()
 
+    # Função central de inicialização de sessão com persistência
     def iniciar_sessao(uid, username):
-        sessao_usuario["id"] = uid
-        sessao_usuario["username"] = username
+        sessao_usuario["id"] = int(uid)
+        sessao_usuario["username"] = str(username)
         lbl_user_tag.value = f"👤 {username}"
         
+        # Salva no navegador/celular para nunca deslogar ao atualizar ou retornar
         try:
             page.client_storage.set("user_id", str(uid))
             page.client_storage.set("username", str(username))
@@ -1486,14 +1492,14 @@ def main(page: ft.Page):
                 user_auth_nome = usuario
 
         except Exception as err:
-            txt_auth_erro.value = f"Erro: {err}"
+            txt_auth_erro.value = f"Erro ao acessar banco: {err}"
             page.update()
             return
         finally:
             if conn:
                 conn.close()
 
-        # Transição de ecrã realizada em segurança fora do bloco da BD
+        # Transição de tela 100% segura fora do bloco de banco
         if user_auth_id and user_auth_nome:
             iniciar_sessao(user_auth_id, user_auth_nome)
 
@@ -1541,6 +1547,9 @@ def main(page: ft.Page):
 
     page.add(card_auth, layout_mestre)
 
+    # -------------------------------------------------------------
+    # RESTAURAÇÃO AUTOMÁTICA DE SESSÃO SALVA (PERMANECER CONECTADO)
+    # -------------------------------------------------------------
     saved_uid = None
     saved_user = None
     try:
