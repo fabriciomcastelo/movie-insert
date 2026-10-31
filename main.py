@@ -66,11 +66,10 @@ def verificar_senha(senha_fornecida: str, hash_armazenado: str) -> bool:
 def init_db():
     conn = None
     try:
-        conn = sqlite3.connect(DB_FILE, timeout=15)
+        conn = sqlite3.connect(DB_FILE, timeout=20)
         c = conn.cursor()
         c.execute("PRAGMA journal_mode=WAL;")
         
-        # Tabela de Usuários
         c.execute("""
             CREATE TABLE IF NOT EXISTS usuarios (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -79,7 +78,6 @@ def init_db():
             )
         """)
         
-        # Tabela de Filmes
         c.execute("""
             CREATE TABLE IF NOT EXISTS filmes (
                 id TEXT,
@@ -169,10 +167,13 @@ def main(page: ft.Page):
         "modo": "streaming"
     }
 
+    # Controle avançado de paginação com fallback para nunca travar
     paginacao = {
         "pagina_atual": 1,
         "carregando": False,
-        "fim": False
+        "fim": False,
+        "modo_api": "trending", # "trending" ou "popular"
+        "ids_carregados": set()
     }
 
     progresso = ft.ProgressBar(color="#3b82f6", bgcolor="transparent", visible=False)
@@ -702,7 +703,7 @@ def main(page: ft.Page):
     spinner_carregamento = ft.ProgressRing(width=30, height=30, stroke_width=3, color="#3b82f6", visible=False)
 
     # -------------------------------------------------------------
-    # POPULARES E ROLAGEM INFINITA AUTOMÁTICA
+    # POPULARES E ROLAGEM INFINITA CONTÍNUA (SEM TRAVAR)
     # -------------------------------------------------------------
     def carregar_populares(incrementar=False):
         c = carregar_config()
@@ -732,23 +733,37 @@ def main(page: ft.Page):
         def _fetch():
             try:
                 p = paginacao["pagina_atual"]
-                url = f"https://api.themoviedb.org/3/trending/movie/week?api_key={tmdb_key}&language=pt-BR&page={p}"
-                resp = requests.get(url, timeout=5.0)
+                modo = paginacao["modo_api"]
+
+                if modo == "trending":
+                    url = f"https://api.themoviedb.org/3/trending/movie/week?api_key={tmdb_key}&language=pt-BR&page={p}"
+                else:
+                    url = f"https://api.themoviedb.org/3/movie/popular?api_key={tmdb_key}&language=pt-BR&page={p}"
+
+                resp = requests.get(url, timeout=6.0)
 
                 if resp.status_code == 200:
                     dados = resp.json()
                     itens = dados.get("results", [])
                     total_p = dados.get("total_pages", 1000)
 
-                    if not itens or p >= total_p:
-                        paginacao["fim"] = True
-
-                    if not incrementar:
-                        grade_populares.controls.clear()
+                    # Se esgotar a lista de trending, transita para os populares de forma transparente
+                    if (not itens or p >= min(total_p, 20)) and modo == "trending":
+                        paginacao["modo_api"] = "popular"
+                        paginacao["pagina_atual"] = 1
+                        url_pop = f"https://api.themoviedb.org/3/movie/popular?api_key={tmdb_key}&language=pt-BR&page=1"
+                        resp_pop = requests.get(url_pop, timeout=6.0)
+                        if resp_pop.status_code == 200:
+                            dados = resp_pop.json()
+                            itens = dados.get("results", [])
 
                     novos = []
                     for it in itens:
                         mid = it.get("id")
+                        if mid in paginacao["ids_carregados"]:
+                            continue
+                        paginacao["ids_carregados"].add(mid)
+
                         tit = it.get("title") or it.get("name")
                         ano = str((it.get("release_date") or it.get("first_air_date")) or "")[:4]
                         p_path = it.get("poster_path")
@@ -756,8 +771,8 @@ def main(page: ft.Page):
                         novos.append(criar_card_filme(mid, "movie", tit, ano, p_url))
 
                     grade_populares.controls.extend(novos)
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"Erro ao buscar filmes: {e}")
             finally:
                 paginacao["carregando"] = False
                 spinner_carregamento.visible = False
@@ -770,7 +785,7 @@ def main(page: ft.Page):
             container_sugestoes.visible = False
             page.update()
 
-        if e.max_scroll_extent > 0 and (e.pixels + 800) >= e.max_scroll_extent:
+        if e.max_scroll_extent > 0 and (e.pixels + 1000) >= e.max_scroll_extent:
             if not paginacao["carregando"] and not paginacao["fim"]:
                 carregar_populares(incrementar=True)
 
@@ -1236,12 +1251,11 @@ def main(page: ft.Page):
     ], spacing=4, width=420, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
 
     # -------------------------------------------------------------
-    # CABEÇALHO FIXO COM USUÁRIO E LOGOUT (100% FUNCIONAL)
+    # CABEÇALHO FIXO COM USUÁRIO E LOGOUT
     # -------------------------------------------------------------
     lbl_app_titulo = ft.Text("MOVIE INSERT", size=22, weight="bold", color="white", text_align=ft.TextAlign.CENTER)
     lbl_user_tag = ft.Text("", size=11, color="#94a3b8", weight="bold")
 
-    # Logout com retorno garantido à tela de login
     def acao_logout(e):
         try:
             page.client_storage.remove("user_id")
@@ -1255,7 +1269,14 @@ def main(page: ft.Page):
         txt_auth_pass.value = ""
         txt_auth_erro.value = ""
         
-        # Oculta o aplicativo e volta imediatamente para o card de login
+        # Reset de paginação para evitar conflitos na volta
+        paginacao["pagina_atual"] = 1
+        paginacao["carregando"] = False
+        paginacao["fim"] = False
+        paginacao["modo_api"] = "trending"
+        paginacao["ids_carregados"].clear()
+        grade_populares.controls.clear()
+        
         layout_mestre.visible = False
         card_auth.visible = True
         page.update()
@@ -1382,10 +1403,11 @@ def main(page: ft.Page):
     )
 
     # -------------------------------------------------------------
-    # TELA DE AUTENTICAÇÃO (LOGIN / REGISTRO)
+    # TELA DE AUTENTICAÇÃO (LOGIN / REGISTRO / RECUPERAR SENHA)
     # -------------------------------------------------------------
     txt_auth_titulo = ft.Text("Entrar", size=22, weight="bold", color="white")
     txt_auth_erro = ft.Text("", size=12, color="#ef4444")
+    
     txt_auth_user = ft.TextField(
         label="Nome de Usuário",
         bgcolor="#1e293b",
@@ -1402,30 +1424,50 @@ def main(page: ft.Page):
         border_radius=8,
         width=300
     )
+    txt_auth_pass_confirm = ft.TextField(
+        label="Confirmar Nova Senha",
+        password=True,
+        can_reveal_password=True,
+        bgcolor="#1e293b",
+        dense=True,
+        border_radius=8,
+        width=300,
+        visible=False
+    )
 
-    modo_auth = {"modo": "login"}
+    modo_auth = {"modo": "login"}  # "login", "cadastro", "recuperar"
 
-    def alternar_modo_auth(e):
-        if modo_auth["modo"] == "login":
-            modo_auth["modo"] = "cadastro"
-            txt_auth_titulo.value = "Criar Nova Conta"
-            btn_executar_auth.content = ft.Text("Cadastrar", color="white", weight="bold")
-            btn_alternar_auth.content = ft.Text("Já tem uma conta? Entrar", color="#3b82f6", size=12)
-        else:
-            modo_auth["modo"] = "login"
+    def definir_modo_auth(novo_modo):
+        modo_auth["modo"] = novo_modo
+        txt_auth_erro.value = ""
+        txt_auth_pass_confirm.visible = (novo_modo == "recuperar")
+        
+        if novo_modo == "login":
             txt_auth_titulo.value = "Entrar"
+            txt_auth_pass.label = "Senha"
             btn_executar_auth.content = ft.Text("Entrar", color="white", weight="bold")
             btn_alternar_auth.content = ft.Text("Não tem uma conta? Cadastre-se", color="#3b82f6", size=12)
-        txt_auth_erro.value = ""
+            btn_recuperar_auth.visible = True
+        elif novo_modo == "cadastro":
+            txt_auth_titulo.value = "Criar Nova Conta"
+            txt_auth_pass.label = "Senha"
+            btn_executar_auth.content = ft.Text("Cadastrar", color="white", weight="bold")
+            btn_alternar_auth.content = ft.Text("Já tem uma conta? Entrar", color="#3b82f6", size=12)
+            btn_recuperar_auth.visible = False
+        elif novo_modo == "recuperar":
+            txt_auth_titulo.value = "Recuperar / Trocar Senha"
+            txt_auth_pass.label = "Nova Senha"
+            btn_executar_auth.content = ft.Text("Salvar Nova Senha", color="white", weight="bold")
+            btn_alternar_auth.content = ft.Text("Voltar para o Login", color="#3b82f6", size=12)
+            btn_recuperar_auth.visible = False
+            
         page.update()
 
-    # Função central de inicialização de sessão com persistência
     def iniciar_sessao(uid, username):
         sessao_usuario["id"] = int(uid)
         sessao_usuario["username"] = str(username)
         lbl_user_tag.value = f"👤 {username}"
         
-        # Salva no navegador/celular para nunca deslogar ao atualizar ou retornar
         try:
             page.client_storage.set("user_id", str(uid))
             page.client_storage.set("username", str(username))
@@ -1436,6 +1478,14 @@ def main(page: ft.Page):
         layout_mestre.visible = True
         page.update()
 
+        # Inicia o catálogo garantindo limpeza de IDs anteriores
+        paginacao["pagina_atual"] = 1
+        paginacao["carregando"] = False
+        paginacao["fim"] = False
+        paginacao["modo_api"] = "trending"
+        paginacao["ids_carregados"].clear()
+        grade_populares.controls.clear()
+
         carregar_populares()
         threading.Timer(0.6, lambda: carregar_populares(incrementar=True)).start()
         threading.Timer(1.4, lambda: carregar_populares(incrementar=True)).start()
@@ -1443,9 +1493,10 @@ def main(page: ft.Page):
     def processar_auth(e):
         usuario = txt_auth_user.value.strip() if txt_auth_user.value else ""
         senha = txt_auth_pass.value.strip() if txt_auth_pass.value else ""
+        senha_confirm = txt_auth_pass_confirm.value.strip() if txt_auth_pass_confirm.value else ""
 
         if not usuario or not senha:
-            txt_auth_erro.value = "Preencha o usuário e a senha."
+            txt_auth_erro.value = "Preencha todos os campos obrigatórios."
             page.update()
             return
 
@@ -1480,7 +1531,7 @@ def main(page: ft.Page):
                 user_auth_nome = usuario
                 conn.commit()
 
-            else:  # Modo Login
+            elif modo_auth["modo"] == "login":
                 c.execute("SELECT id, password_hash FROM usuarios WHERE username = ?", (usuario,))
                 user_row = c.fetchone()
                 if not user_row or not verificar_senha(senha, user_row[1]):
@@ -1491,15 +1542,33 @@ def main(page: ft.Page):
                 user_auth_id = user_row[0]
                 user_auth_nome = usuario
 
+            elif modo_auth["modo"] == "recuperar":
+                if senha != senha_confirm:
+                    txt_auth_erro.value = "As senhas digitadas não coincidem."
+                    page.update()
+                    return
+
+                c.execute("SELECT id FROM usuarios WHERE username = ?", (usuario,))
+                user_row = c.fetchone()
+                if not user_row:
+                    txt_auth_erro.value = "Usuário não encontrado."
+                    page.update()
+                    return
+
+                novo_hash = gerar_hash_senha(senha)
+                c.execute("UPDATE usuarios SET password_hash = ? WHERE id = ?", (novo_hash, user_row[0]))
+                conn.commit()
+                user_auth_id = user_row[0]
+                user_auth_nome = usuario
+
         except Exception as err:
-            txt_auth_erro.value = f"Erro ao acessar banco: {err}"
+            txt_auth_erro.value = f"Erro no banco: {err}"
             page.update()
             return
         finally:
             if conn:
                 conn.close()
 
-        # Transição de tela 100% segura fora do bloco de banco
         if user_auth_id and user_auth_nome:
             iniciar_sessao(user_auth_id, user_auth_nome)
 
@@ -1514,7 +1583,13 @@ def main(page: ft.Page):
     btn_alternar_auth = ft.Button(
         content=ft.Text("Não tem uma conta? Cadastre-se", color="#3b82f6", size=12),
         bgcolor="transparent",
-        on_click=alternar_modo_auth
+        on_click=lambda e: definir_modo_auth("cadastro" if modo_auth["modo"] == "login" else "login")
+    )
+
+    btn_recuperar_auth = ft.Button(
+        content=ft.Text("Esqueceu a senha?", color="#94a3b8", size=11),
+        bgcolor="transparent",
+        on_click=lambda e: definir_modo_auth("recuperar")
     )
 
     card_auth = ft.Container(
@@ -1533,22 +1608,24 @@ def main(page: ft.Page):
             ),
             content=ft.Column([
                 ft.Text("🎬 MOVIE INSERT", size=24, weight="bold", color="white", text_align=ft.TextAlign.CENTER),
-                ft.Container(height=6),
+                ft.Container(height=4),
                 txt_auth_titulo,
                 txt_auth_erro,
                 txt_auth_user,
                 txt_auth_pass,
-                ft.Container(height=4),
+                txt_auth_pass_confirm,
+                ft.Container(height=2),
                 btn_executar_auth,
-                btn_alternar_auth
-            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10)
+                btn_alternar_auth,
+                btn_recuperar_auth
+            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=8)
         )
     )
 
     page.add(card_auth, layout_mestre)
 
     # -------------------------------------------------------------
-    # RESTAURAÇÃO AUTOMÁTICA DE SESSÃO SALVA (PERMANECER CONECTADO)
+    # RESTAURAÇÃO DE SESSÃO SEGURA
     # -------------------------------------------------------------
     saved_uid = None
     saved_user = None
