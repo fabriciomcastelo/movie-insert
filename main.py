@@ -20,16 +20,13 @@ COR_CHUMBO = "#48585e"          # Inativo (Biblioteca)
 COR_TEXTO_CLARO = "#e5ecf0"     # Branco gelo da tipografia
 COR_VERMELHO_PLAY = "#9e0f0f"   # Vermelho do triângulo play
 COR_FUNDO = "#070b0e"           # Fundo escuro premium
-COR_CARD = "#0d1419"            # Superfície dos cards
-COR_BORDA = "#17232b"           # Borda dos cards e inputs
+COR_CARD = "#0d1419"            # Superfície dos cartões
+COR_BORDA = "#17232b"           # Borda dos cartões e campos
 
+# Construtor de borda seguro e universal para Flet
 def criar_borda(espessura, cor):
-    return ft.Border(
-        ft.BorderSide(espessura, cor),
-        ft.BorderSide(espessura, cor),
-        ft.BorderSide(espessura, cor),
-        ft.BorderSide(espessura, cor)
-    )
+    bs = ft.BorderSide(espessura, cor)
+    return ft.Border(top=bs, right=bs, bottom=bs, left=bs)
 
 STREAMINGS_PADRAO = [
     "Netflix",
@@ -57,7 +54,7 @@ def carregar_config():
     return cfg
 
 # -------------------------------------------------------------
-# SEGURANÇA E BANCO DE DADOS
+# SEGURANÇA E BASE DE DADOS
 # -------------------------------------------------------------
 def gerar_hash_senha(senha: str) -> str:
     salt = os.urandom(16).hex()
@@ -157,7 +154,7 @@ def obter_estilo_nota(nota_str):
     return "#1e1b4b", "#a78bfa", None
 
 # -------------------------------------------------------------
-# COMPONENTE VISUAL DO LOGO
+# COMPONENTE VISUAL DO LOGÓTIPO
 # -------------------------------------------------------------
 def criar_componente_logo(tamanho=24):
     fator = tamanho / 24.0
@@ -652,7 +649,7 @@ def main(page: ft.Page):
         threading.Thread(target=_fetch, daemon=True).start()
 
     # -------------------------------------------------------------
-    # CARDS DOS FILMES (+20% DE TAMANHO)
+    # CARTÕES DOS FILMES (+20% DE TAMANHO)
     # -------------------------------------------------------------
     def criar_card_filme(mid, mtype, titulo, ano, poster_url, categoria=None, nota=None):
         acoes = []
@@ -863,7 +860,7 @@ def main(page: ft.Page):
         page.launch_url(f"file://{arq}")
 
     # -------------------------------------------------------------
-    # BIBLIOTECA (FILTRADA POR USUÁRIO)
+    # BIBLIOTECA (FILTRADA POR UTILIZADOR)
     # -------------------------------------------------------------
     def mudar_aba_biblioteca(nova_aba):
         estado_biblioteca["aba"] = nova_aba
@@ -1106,7 +1103,7 @@ def main(page: ft.Page):
             for letra in letras_ordenadas:
                 renderizar_secao(f"Letra {letra}", "🔤", COR_TEXTO_CLARO, mapa_alfabetico[letra])
 
-        # ---------------- MODO 3: GÊNEROS ----------------
+        # ---------------- MODO 3: GÉNEROS ----------------
         elif modo_atual == "genero":
             mapa_generos = {}
             for row in itens_filtrados:
@@ -1755,4 +1752,23 @@ def main(page: ft.Page):
             try:
                 cookies = page.cookies
                 if cookies:
-                    saved_uid = cookies.get("user_id
+                    saved_uid = cookies.get("user_id")
+                    saved_user = cookies.get("username")
+                    saved_manter = cookies.get("manter_conectado")
+            except Exception:
+                pass
+
+        if saved_uid and saved_user and (str(saved_manter).lower() == "true"):
+            iniciar_sessao(saved_uid, saved_user, persistir=True)
+        else:
+            spinner_autologin.visible = False
+            definir_modo_auth("login")
+            card_auth.visible = True
+            layout_mestre.visible = False
+            page.update()
+
+    threading.Thread(target=verificar_sessao_salva, daemon=True).start()
+
+if __name__ == "__main__":
+    porta = int(os.environ.get("PORT", 8550))
+    ft.run(main, view=ft.AppView.WEB_BROWSER, host="0.0.0.0", port=porta)
