@@ -101,7 +101,8 @@ def main(page: ft.Page):
     page.bgcolor = "#0b0c0f"
     page.padding = ft.Padding(12, 10, 12, 10)
     page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
-    page.scroll = ft.ScrollMode.AUTO
+    # Remove o scroll global da página para travar o cabeçalho fixo no topo
+    page.scroll = None
 
     init_db()
     item_ativo = {"data": None}
@@ -541,7 +542,7 @@ def main(page: ft.Page):
         threading.Thread(target=_fetch, daemon=True).start()
 
     # -------------------------------------------------------------
-    # CARDS DOS FILMES (POSTERS COM TAMANHO AMPLIADO)
+    # CARDS DOS FILMES (+20% DE TAMANHO)
     # -------------------------------------------------------------
     def criar_card_filme(mid, mtype, titulo, ano, poster_url, categoria=None, nota=None):
         acoes = []
@@ -615,13 +616,7 @@ def main(page: ft.Page):
         return card_corpo
 
     grade_populares = ft.Row(wrap=True, spacing=12, run_spacing=14, alignment=ft.MainAxisAlignment.CENTER)
-    
-    # Coluna interna da Biblioteca com alinhamento centralizado
-    coluna_biblioteca_itens = ft.Column(
-        spacing=16, 
-        horizontal_alignment=ft.CrossAxisAlignment.CENTER
-    )
-
+    coluna_biblioteca_itens = ft.Column(spacing=16, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
     spinner_carregamento = ft.ProgressRing(width=30, height=30, stroke_width=3, color="#3b82f6", visible=False)
 
     # -------------------------------------------------------------
@@ -688,17 +683,15 @@ def main(page: ft.Page):
 
         threading.Thread(target=_fetch, daemon=True).start()
 
-    def ao_rolar_pagina(e: ft.OnScrollEvent):
+    # Disparo de scroll ligado na coluna interna de início
+    def ao_rolar_inicio(e: ft.OnScrollEvent):
         if container_sugestoes.visible:
             container_sugestoes.visible = False
             page.update()
 
-        if view_inicio.visible and e.max_scroll_extent > 0:
-            if (e.pixels + 1000) >= e.max_scroll_extent:
-                if not paginacao["carregando"] and not paginacao["fim"]:
-                    carregar_populares(incrementar=True)
-
-    page.on_scroll = ao_rolar_pagina
+        if e.max_scroll_extent > 0 and (e.pixels + 800) >= e.max_scroll_extent:
+            if not paginacao["carregando"] and not paginacao["fim"]:
+                carregar_populares(incrementar=True)
 
     def remover_filme_direto(fid):
         try:
@@ -733,7 +726,7 @@ def main(page: ft.Page):
         page.launch_url(f"file://{arq}")
 
     # -------------------------------------------------------------
-    # BIBLIOTECA CENTRALIZADA NA TELA
+    # BIBLIOTECA
     # -------------------------------------------------------------
     def mudar_aba_biblioteca(nova_aba):
         estado_biblioteca["aba"] = nova_aba
@@ -833,7 +826,6 @@ def main(page: ft.Page):
             controls=controles_filtros
         )
 
-        # Cabeçalho da biblioteca centralizado
         topo_biblioteca = ft.Container(
             content=ft.Column([
                 ft.Row(
@@ -865,7 +857,6 @@ def main(page: ft.Page):
             page.update()
             return
 
-        # Renderizador de seções horizontais centralizadas
         def renderizar_secao(titulo_secao, icone, cor, lista):
             if not lista:
                 return
@@ -895,7 +886,6 @@ def main(page: ft.Page):
             )
             coluna_biblioteca_itens.controls.append(bloco)
 
-        # Renderizador de grade lado a lado centralizada
         def renderizar_grade_lado_a_lado(lista, texto_info=None):
             if not lista:
                 return
@@ -1148,7 +1138,7 @@ def main(page: ft.Page):
     ], spacing=4, width=420, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
 
     # -------------------------------------------------------------
-    # CABEÇALHO
+    # CABEÇALHO FIXO
     # -------------------------------------------------------------
     lbl_app_titulo = ft.Text("MOVIE INSERT", size=22, weight="bold", color="white", text_align=ft.TextAlign.CENTER)
 
@@ -1176,40 +1166,44 @@ def main(page: ft.Page):
 
     linha_botoes_topo = ft.Row(controls=[btn_tab_inicio, btn_tab_bib], spacing=12, alignment=ft.MainAxisAlignment.CENTER)
 
-    cabecalho = ft.Column(
-        controls=[
-            progresso,
-            lbl_app_titulo,
-            linha_botoes_topo,
-            header_busca,
-        ],
-        spacing=8,
-        horizontal_alignment=ft.CrossAxisAlignment.CENTER
+    cabecalho_fixo = ft.Container(
+        content=ft.Column(
+            controls=[
+                progresso,
+                lbl_app_titulo,
+                linha_botoes_topo,
+                header_busca,
+            ],
+            spacing=8,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER
+        ),
+        padding=ft.Padding(0, 0, 0, 8)
     )
 
     # -------------------------------------------------------------
-    # VIEWS PRINCIPAIS
+    # VIEWS ROLÁVEIS INDEPENDENTES (CABEÇALHO FICA FIXO NO TOPO)
     # -------------------------------------------------------------
-    sentinela_fim = ft.Container(
-        height=40,
-        alignment=ft.Alignment(0, 0),
-        content=spinner_carregamento,
-        on_hover=lambda e: carregar_populares(incrementar=True) if not paginacao["carregando"] else None
-    )
-
     view_inicio = ft.Column(
+        expand=True,
+        scroll=ft.ScrollMode.AUTO,
+        on_scroll=ao_rolar_inicio,
         controls=[
             ft.Container(content=ft.Text("Filmes em Alta (TMDb Trends)", size=17, weight="bold"), width=420),
             grade_populares,
-            sentinela_fim
+            ft.Container(
+                content=spinner_carregamento,
+                alignment=ft.Alignment(0, 0),
+                padding=ft.Padding(0, 15, 0, 35)
+            )
         ],
         spacing=14,
         horizontal_alignment=ft.CrossAxisAlignment.CENTER
     )
 
-    # View biblioteca agora centralizada
     view_biblioteca = ft.Column(
+        expand=True,
         visible=False,
+        scroll=ft.ScrollMode.AUTO,
         controls=[coluna_biblioteca_itens],
         spacing=14,
         horizontal_alignment=ft.CrossAxisAlignment.CENTER
@@ -1238,13 +1232,22 @@ def main(page: ft.Page):
 
         page.update()
 
-    page.add(
-        cabecalho,
-        view_inicio,
-        view_biblioteca
+    # Layout mestre que fixa o topo e expande a área de rolagem
+    layout_mestre = ft.Column(
+        expand=True,
+        spacing=0,
+        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+        controls=[
+            cabecalho_fixo,
+            view_inicio,
+            view_biblioteca
+        ]
     )
+
+    page.add(layout_mestre)
     page.update()
 
+    # Inicialização do catálogo com carga dupla
     def inicializar_catalogo():
         carregar_populares()
         threading.Timer(0.6, lambda: carregar_populares(incrementar=True)).start()
