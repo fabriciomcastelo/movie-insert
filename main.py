@@ -111,7 +111,7 @@ def main(page: ft.Page):
     
     estado_biblioteca = {
         "aba": "Para Assistir",  # "Para Assistir" ou "Assistidos"
-        "modo": "streaming"      # "streaming", "alfabetico", "genero", "nota" (IMDb), "nota_pessoal"
+        "modo": "streaming"      # "streaming", "alfabetico", "genero", "nota", "nota_pessoal"
     }
 
     paginacao = {
@@ -211,7 +211,6 @@ def main(page: ft.Page):
             except Exception:
                 pass
             fechar_dialogo(modal_avaliacao)
-            # Mantém na visualização atual (não redireciona obrigatoriamente para a aba Assistidos)
             carregar_biblioteca()
 
     modal_avaliacao = ft.AlertDialog(
@@ -738,11 +737,10 @@ def main(page: ft.Page):
         page.launch_url(f"file://{arq}")
 
     # -------------------------------------------------------------
-    # BIBLIOTECA
+    # BIBLIOTECA: CORREÇÃO TOTAL DE DESEMPACOTAMENTO (9 COLUNAS)
     # -------------------------------------------------------------
     def mudar_aba_biblioteca(nova_aba):
         estado_biblioteca["aba"] = nova_aba
-        # Ajusta o modo caso a opção selecionada seja exclusiva da outra aba
         if nova_aba == "Para Assistir" and estado_biblioteca["modo"] == "nota_pessoal":
             estado_biblioteca["modo"] = "nota"
         elif nova_aba == "Assistidos" and estado_biblioteca["modo"] == "nota":
@@ -760,6 +758,9 @@ def main(page: ft.Page):
         try:
             with sqlite3.connect(DB_FILE, timeout=10) as conn:
                 c = conn.cursor()
+                # 9 colunas retornadas:
+                # 0: id, 1: titulo, 2: ano, 3: poster_url, 4: nota_usuario,
+                # 5: categoria, 6: streaming, 7: generos, 8: imdb
                 c.execute("SELECT id, titulo, ano, poster_url, nota_usuario, categoria, streaming, generos, imdb FROM filmes ORDER BY rowid DESC")
                 todos_itens = c.fetchall()
         except Exception:
@@ -819,7 +820,6 @@ def main(page: ft.Page):
                 on_click=lambda e, m=modo_alvo: mudar_modo_filtro(m)
             )
 
-        # Na aba Para Assistir exibe Nota IMDb; na aba Assistidos substitui por Nota Pessoal
         controles_filtros = [
             ft.Text("Organizar:", size=11, color="#94a3b8", weight="bold"),
             criar_botao_filtro("Streaming", "streaming"),
@@ -918,12 +918,13 @@ def main(page: ft.Page):
             elementos.append(grade)
             coluna_biblioteca_itens.controls.append(ft.Column(elementos, spacing=8))
 
-        # ---------------- MODO 1: STREAMING (SEM REPETIR NO STREMIO) ----------------
+        # ---------------- MODO 1: STREAMING ----------------
         if modo_atual == "streaming":
             ordem_secoes = list(STREAMINGS_PADRAO) + ["Stremio", "Sem streaming no BR"]
             mapa = {s: [] for s in ordem_secoes}
 
-            for mid, tit, ano, p_url, nota, cat, streaming_txt, _, _ in itens_filtrados:
+            for row in itens_filtrados:
+                mid, tit, ano, p_url, nota, cat, streaming_txt = row[0], row[1], row[2], row[3], row[4], row[5], row[6]
                 st_str = streaming_txt or ""
                 alocado_oficial = False
 
@@ -948,7 +949,8 @@ def main(page: ft.Page):
         elif modo_atual == "alfabetico":
             mapa_alfabetico = {}
             itens_ordenados = sorted(itens_filtrados, key=lambda x: normalizar_texto(x[1]))
-            for mid, tit, ano, p_url, nota, cat, _, _, _ in itens_ordenados:
+            for row in itens_ordenados:
+                mid, tit, ano, p_url, nota, cat = row[0], row[1], row[2], row[3], row[4], row[5]
                 letra = normalizar_texto(tit)[:1].upper() if tit else "#"
                 if not letra.isalpha():
                     letra = "#"
@@ -964,7 +966,8 @@ def main(page: ft.Page):
         # ---------------- MODO 3: GÊNEROS ----------------
         elif modo_atual == "genero":
             mapa_generos = {}
-            for mid, tit, ano, p_url, nota, cat, _, gens, _ in itens_filtrados:
+            for row in itens_filtrados:
+                mid, tit, ano, p_url, nota, cat, gens = row[0], row[1], row[2], row[3], row[4], row[5], row[7]
                 lista_g = [g.strip() for g in gens.split(",")] if gens else ["Outros"]
                 for g in lista_g:
                     mapa_generos.setdefault(g, []).append((mid, tit, ano, p_url, nota, cat))
@@ -981,9 +984,13 @@ def main(page: ft.Page):
                 except Exception:
                     return 0.0
 
-            filmes_ordenados_imdb = sorted(itens_filtrados, key=pegar_imdb_float, reverse=True)
+            itens_ordenados_imdb = sorted(itens_filtrados, key=pegar_imdb_float, reverse=True)
+            lista_cards = [
+                (row[0], row[1], row[2], row[3], row[4], row[5])
+                for row in itens_ordenados_imdb
+            ]
             renderizar_grade_lado_a_lado(
-                filmes_ordenados_imdb,
+                lista_cards,
                 texto_info="⭐ Ordenado por Nota do IMDb (Maior para Menor)"
             )
 
@@ -996,9 +1003,13 @@ def main(page: ft.Page):
                 except Exception:
                     return 0.0
 
-            filmes_ordenados_pessoal = sorted(itens_filtrados, key=pegar_nota_pessoal_float, reverse=True)
+            itens_ordenados_pessoal = sorted(itens_filtrados, key=pegar_nota_pessoal_float, reverse=True)
+            lista_cards = [
+                (row[0], row[1], row[2], row[3], row[4], row[5])
+                for row in itens_ordenados_pessoal
+            ]
             renderizar_grade_lado_a_lado(
-                filmes_ordenados_pessoal,
+                lista_cards,
                 texto_info="★ Ordenado por Sua Nota Pessoal (10 a 1)"
             )
 
