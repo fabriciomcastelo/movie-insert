@@ -211,7 +211,7 @@ def main(page: ft.Page):
             except Exception:
                 pass
             fechar_dialogo(modal_avaliacao)
-            estado_biblioteca["aba"] = "Assistidos"
+            # Mantém na visualização atual (não redireciona obrigatoriamente para a aba Assistidos)
             carregar_biblioteca()
 
     modal_avaliacao = ft.AlertDialog(
@@ -738,13 +738,15 @@ def main(page: ft.Page):
         page.launch_url(f"file://{arq}")
 
     # -------------------------------------------------------------
-    # BIBLIOTECA: AJUSTADA COM NOTA IMDB LADO A LADO E NOTA PESSOAL
+    # BIBLIOTECA
     # -------------------------------------------------------------
     def mudar_aba_biblioteca(nova_aba):
         estado_biblioteca["aba"] = nova_aba
-        # Se mudar de aba e o modo atual for incompatível, volta para streaming
+        # Ajusta o modo caso a opção selecionada seja exclusiva da outra aba
         if nova_aba == "Para Assistir" and estado_biblioteca["modo"] == "nota_pessoal":
             estado_biblioteca["modo"] = "nota"
+        elif nova_aba == "Assistidos" and estado_biblioteca["modo"] == "nota":
+            estado_biblioteca["modo"] = "nota_pessoal"
         carregar_biblioteca()
 
     def mudar_modo_filtro(novo_modo):
@@ -817,17 +819,17 @@ def main(page: ft.Page):
                 on_click=lambda e, m=modo_alvo: mudar_modo_filtro(m)
             )
 
-        # Configuração de botões conforme a aba ativa
+        # Na aba Para Assistir exibe Nota IMDb; na aba Assistidos substitui por Nota Pessoal
         controles_filtros = [
             ft.Text("Organizar:", size=11, color="#94a3b8", weight="bold"),
             criar_botao_filtro("Streaming", "streaming"),
             criar_botao_filtro("A-Z", "alfabetico"),
             criar_botao_filtro("Gênero", "genero"),
-            criar_botao_filtro("Nota IMDb", "nota"),
         ]
 
-        # Na aba Assistidos adiciona o botão Nota Pessoal
-        if aba_atual == "Assistidos":
+        if aba_atual == "Para Assistir":
+            controles_filtros.append(criar_botao_filtro("Nota IMDb", "nota"))
+        else:
             controles_filtros.append(criar_botao_filtro("Nota Pessoal", "nota_pessoal"))
 
         barra_filtros = ft.Row(
@@ -970,9 +972,8 @@ def main(page: ft.Page):
             for g_nome in sorted(mapa_generos.keys()):
                 renderizar_secao(g_nome, "🏷️", "#fbbf24", mapa_generos[g_nome])
 
-        # ---------------- MODO 4: NOTA DO IMDB (LADO A LADO) ----------------
+        # ---------------- MODO 4: NOTA DO IMDB (PARA ASSISTIR - LADO A LADO) ----------------
         elif modo_atual == "nota":
-            # Função para converter a nota do IMDb de forma segura
             def pegar_imdb_float(it):
                 val = it[8]
                 try:
@@ -980,14 +981,13 @@ def main(page: ft.Page):
                 except Exception:
                     return 0.0
 
-            # Ordena decrescentemente pela nota do IMDb
             filmes_ordenados_imdb = sorted(itens_filtrados, key=pegar_imdb_float, reverse=True)
-            renderizar_grade_lado a_lado = renderizar_grade_lado_a_lado(
+            renderizar_grade_lado_a_lado(
                 filmes_ordenados_imdb,
                 texto_info="⭐ Ordenado por Nota do IMDb (Maior para Menor)"
             )
 
-        # ---------------- MODO 5: NOTA PESSOAL (LADO A LADO - ASSISTIDOS) ----------------
+        # ---------------- MODO 5: NOTA PESSOAL (ASSISTIDOS - LADO A LADO) ----------------
         elif modo_atual == "nota_pessoal":
             def pegar_nota_pessoal_float(it):
                 val = it[4]
@@ -996,7 +996,6 @@ def main(page: ft.Page):
                 except Exception:
                     return 0.0
 
-            # Ordena decrescentemente pela sua nota pessoal dada ao filme
             filmes_ordenados_pessoal = sorted(itens_filtrados, key=pegar_nota_pessoal_float, reverse=True)
             renderizar_grade_lado_a_lado(
                 filmes_ordenados_pessoal,
