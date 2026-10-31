@@ -101,6 +101,7 @@ def main(page: ft.Page):
     page.bgcolor = "#0b0c0f"
     page.padding = ft.Padding(12, 10, 12, 10)
     page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
+    # Scroll nativo global para compatibilidade com o rato no PC e toque no ecrã móvel
     page.scroll = ft.ScrollMode.AUTO
 
     init_db()
@@ -620,7 +621,7 @@ def main(page: ft.Page):
     spinner_carregamento = ft.ProgressRing(width=28, height=28, stroke_width=3, color="#3b82f6", visible=False)
 
     # -------------------------------------------------------------
-    # POPULARES E ROLAGEM INFINITA GLOBAL
+    # POPULARES E ROLAGEM INFINITA AUTOMÁTICA
     # -------------------------------------------------------------
     def carregar_populares(incrementar=False):
         c = carregar_config()
@@ -645,7 +646,6 @@ def main(page: ft.Page):
             paginacao["pagina_atual"] += 1
 
         spinner_carregamento.visible = True
-        btn_carregar_manual.visible = False
         page.update()
 
         def _fetch():
@@ -680,25 +680,18 @@ def main(page: ft.Page):
             finally:
                 paginacao["carregando"] = False
                 spinner_carregamento.visible = False
-                btn_carregar_manual.visible = not paginacao["fim"]
                 page.update()
 
         threading.Thread(target=_fetch, daemon=True).start()
 
-    btn_carregar_manual = ft.Button(
-        content=ft.Text("⬇ Mais filmes", color="#94a3b8", size=12),
-        bgcolor="#1e293b",
-        on_click=lambda e: carregar_populares(incrementar=True),
-        visible=False
-    )
-
+    # Gatilho automático ao aproximar-se do fundo da página
     def ao_rolar_pagina(e: ft.OnScrollEvent):
         if container_sugestoes.visible:
             container_sugestoes.visible = False
             page.update()
 
         if view_inicio.visible and e.max_scroll_extent > 0:
-            if (e.pixels + 600) >= e.max_scroll_extent:
+            if (e.pixels + 700) >= e.max_scroll_extent:
                 if not paginacao["carregando"] and not paginacao["fim"]:
                     carregar_populares(incrementar=True)
 
@@ -758,9 +751,6 @@ def main(page: ft.Page):
         try:
             with sqlite3.connect(DB_FILE, timeout=10) as conn:
                 c = conn.cursor()
-                # 9 colunas retornadas:
-                # 0: id, 1: titulo, 2: ano, 3: poster_url, 4: nota_usuario,
-                # 5: categoria, 6: streaming, 7: generos, 8: imdb
                 c.execute("SELECT id, titulo, ano, poster_url, nota_usuario, categoria, streaming, generos, imdb FROM filmes ORDER BY rowid DESC")
                 todos_itens = c.fetchall()
         except Exception:
@@ -1184,7 +1174,7 @@ def main(page: ft.Page):
             ft.Container(content=ft.Text("Filmes em Alta (TMDb Trends)", size=17, weight="bold"), width=420),
             grade_populares,
             ft.Container(
-                content=ft.Column([spinner_carregamento, btn_carregar_manual], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                content=spinner_carregamento,
                 alignment=ft.Alignment(0, 0),
                 padding=ft.Padding(0, 15, 0, 35)
             )
