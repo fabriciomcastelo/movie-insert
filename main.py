@@ -154,29 +154,13 @@ def obter_estilo_nota(nota_str):
     return "#1e1b4b", "#a78bfa", None
 
 # -------------------------------------------------------------
-# COMPONENTE VISUAL DO LOGÓTIPO
+# IMAGENS DOS ATIVOS PNG
 # -------------------------------------------------------------
-def criar_componente_logo(tamanho=24):
-    fator = tamanho / 24.0
-    return ft.Row(
-        controls=[
-            ft.Text("MOVIE", size=int(26 * fator), weight="black", color=COR_PETROLEO, font_family="Impact, sans-serif"),
-            ft.Container(
-                content=ft.Icon(ft.Icons.PLAY_ARROW_ROUNDED, color=COR_VERMELHO_PLAY, size=int(22 * fator)),
-                alignment=ft.Alignment(0, 0),
-                padding=0,
-                margin=0
-            ),
-            ft.Container(
-                content=ft.Text("INSERT", size=int(24 * fator), weight="black", color=COR_TEXTO_CLARO, font_family="Impact, sans-serif"),
-                bgcolor=COR_PETROLEO,
-                padding=ft.Padding(int(10 * fator), int(2 * fator), int(10 * fator), int(2 * fator)),
-                border_radius=int(6 * fator)
-            )
-        ],
-        spacing=int(4 * fator),
-        vertical_alignment=ft.CrossAxisAlignment.CENTER,
-        tight=True
+def obter_logo_png(altura=40):
+    return ft.Image(
+        src="/logo.png",
+        height=altura,
+        fit="contain"
     )
 
 def main(page: ft.Page):
@@ -1294,29 +1278,20 @@ def main(page: ft.Page):
     # -------------------------------------------------------------
     # CABEÇALHO HORIZONTAL
     # -------------------------------------------------------------
-    componente_logo_header = criar_componente_logo(tamanho=24)
+    logo_header = obter_logo_png(altura=40)
 
-    btn_tab_inicio = ft.Button(
-        content=ft.Text("INÍCIO", color="white", size=13, weight="bold", font_family="Arial, sans-serif"),
-        bgcolor=COR_PETROLEO,
-        width=120,
-        height=38,
-        style=ft.ButtonStyle(
-            shape=ft.RoundedRectangleBorder(radius=8),
-            elevation=0
-        ),
+    # Botões clicáveis a partir das imagens dos assets
+    btn_tab_inicio = ft.Container(
+        content=ft.Image(src="/inicio.png", height=38, fit="contain"),
+        ink=True,
+        border_radius=8,
         on_click=lambda e: alternar_tela(0)
     )
 
-    btn_tab_bib = ft.Button(
-        content=ft.Text("BIBLIOTECA", color=COR_TEXTO_CLARO, size=13, weight="bold", font_family="Arial, sans-serif"),
-        bgcolor=COR_CHUMBO,
-        width=140,
-        height=38,
-        style=ft.ButtonStyle(
-            shape=ft.RoundedRectangleBorder(radius=8),
-            elevation=0
-        ),
+    btn_tab_bib = ft.Container(
+        content=ft.Image(src="/biblioteca.png", height=38, fit="contain"),
+        ink=True,
+        border_radius=8,
         on_click=lambda e: alternar_tela(1)
     )
 
@@ -1370,7 +1345,7 @@ def main(page: ft.Page):
             progresso,
             ft.Row(
                 controls=[
-                    componente_logo_header,
+                    logo_header,
                     linha_botoes_topo,
                     bloco_busca,
                     linha_usuario_topo
@@ -1430,18 +1405,14 @@ def main(page: ft.Page):
         if indice == 0:
             view_inicio.visible = True
             view_biblioteca.visible = False
-            btn_tab_inicio.bgcolor = COR_PETROLEO
-            btn_tab_inicio.content.color = "white"
-            btn_tab_bib.bgcolor = COR_CHUMBO
-            btn_tab_bib.content.color = COR_TEXTO_CLARO
+            btn_tab_inicio.opacity = 1.0
+            btn_tab_bib.opacity = 0.7
         elif indice == 1:
             carregar_biblioteca()
             view_inicio.visible = False
             view_biblioteca.visible = True
-            btn_tab_inicio.bgcolor = COR_CHUMBO
-            btn_tab_inicio.content.color = COR_TEXTO_CLARO
-            btn_tab_bib.bgcolor = COR_PETROLEO
-            btn_tab_bib.content.color = "white"
+            btn_tab_inicio.opacity = 0.7
+            btn_tab_bib.opacity = 1.0
 
         page.update()
 
@@ -1458,9 +1429,9 @@ def main(page: ft.Page):
     )
 
     # -------------------------------------------------------------
-    # TELA DE AUTENTICAÇÃO COM LOGO E PALETA OFICIAL
+    # TELA DE AUTENTICAÇÃO COM LOGO PNG E PALETA OFICIAL
     # -------------------------------------------------------------
-    componente_logo_login = criar_componente_logo(tamanho=22)
+    logo_login = obter_logo_png(altura=48)
 
     txt_auth_titulo = ft.Text("Entrar", size=18, weight="bold", color=COR_TEXTO_CLARO)
     txt_auth_erro = ft.Text("", size=12, color="#ef4444")
@@ -1543,232 +1514,4 @@ def main(page: ft.Page):
             txt_auth_titulo.value = "Recuperar / Trocar Senha"
             txt_auth_pass.label = "Nova Senha"
             btn_executar_auth.bgcolor = COR_VERMELHO_PLAY
-            btn_executar_auth.content = ft.Text("Salvar Nova Senha", color="white", weight="bold")
-            btn_alternar_auth.content = ft.Text("Lembrou da senha? Voltar ao Login", color="#94a3b8", size=12)
-            btn_recuperar_auth.visible = False
-            
-        page.update()
-
-    def iniciar_sessao(uid, username, persistir=True):
-        sessao_usuario["id"] = int(uid)
-        sessao_usuario["username"] = str(username)
-        lbl_user_tag.value = f"👤 {username}"
-        
-        if persistir:
-            try:
-                page.run_javascript(f"document.cookie = 'user_id={uid}; max-age=31536000; path=/;';")
-                page.run_javascript(f"document.cookie = 'username={username}; max-age=31536000; path=/;';")
-                page.run_javascript("document.cookie = 'manter_conectado=true; max-age=31536000; path=/;';")
-                page.client_storage.set("user_id", str(uid))
-                page.client_storage.set("username", str(username))
-                page.client_storage.set("manter_conectado", "true")
-            except Exception:
-                pass
-        else:
-            try:
-                page.run_javascript("document.cookie = 'user_id=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';")
-                page.run_javascript("document.cookie = 'username=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';")
-                page.run_javascript("document.cookie = 'manter_conectado=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';")
-                page.client_storage.clear()
-            except Exception:
-                pass
-
-        spinner_autologin.visible = False
-        card_auth.visible = False
-        layout_mestre.visible = True
-        page.update()
-
-        paginacao["pagina_atual"] = 1
-        paginacao["carregando"] = False
-        paginacao["fim"] = False
-        paginacao["modo_api"] = "trending"
-        paginacao["ids_carregados"].clear()
-        grade_populares.controls.clear()
-
-        carregar_populares()
-        threading.Timer(0.6, lambda: carregar_populares(incrementar=True)).start()
-        threading.Timer(1.4, lambda: carregar_populares(incrementar=True)).start()
-
-    def processar_auth(e):
-        usuario = txt_auth_user.value.strip() if txt_auth_user.value else ""
-        senha = txt_auth_pass.value.strip() if txt_auth_pass.value else ""
-        senha_confirm = txt_auth_pass_confirm.value.strip() if txt_auth_pass_confirm.value else ""
-
-        if not usuario or not senha:
-            txt_auth_erro.value = "Preencha todos os campos obrigatórios."
-            page.update()
-            return
-
-        if len(usuario) < 3:
-            txt_auth_erro.value = "O usuário deve ter pelo menos 3 caracteres."
-            page.update()
-            return
-
-        if len(senha) < 4:
-            txt_auth_erro.value = "A senha deve ter pelo menos 4 caracteres."
-            page.update()
-            return
-
-        user_auth_id = None
-        user_auth_nome = None
-        conn = None
-
-        try:
-            conn = sqlite3.connect(DB_FILE, timeout=15)
-            c = conn.cursor()
-
-            if modo_auth["modo"] == "cadastro":
-                c.execute("SELECT id FROM usuarios WHERE username = ?", (usuario,))
-                if c.fetchone():
-                    txt_auth_erro.value = "Este nome de usuário já está em uso."
-                    page.update()
-                    return
-
-                p_hash = gerar_hash_senha(senha)
-                c.execute("INSERT INTO usuarios (username, password_hash) VALUES (?, ?)", (usuario, p_hash))
-                user_auth_id = c.lastrowid
-                user_auth_nome = usuario
-                conn.commit()
-
-            elif modo_auth["modo"] == "login":
-                c.execute("SELECT id, password_hash FROM usuarios WHERE username = ?", (usuario,))
-                user_row = c.fetchone()
-                if not user_row or not verificar_senha(senha, user_row[1]):
-                    txt_auth_erro.value = "Usuário ou senha inválidos."
-                    page.update()
-                    return
-
-                user_auth_id = user_row[0]
-                user_auth_nome = usuario
-
-            elif modo_auth["modo"] == "recuperar":
-                if senha != senha_confirm:
-                    txt_auth_erro.value = "As senhas digitadas não coincidem."
-                    page.update()
-                    return
-
-                c.execute("SELECT id FROM usuarios WHERE username = ?", (usuario,))
-                user_row = c.fetchone()
-                if not user_row:
-                    txt_auth_erro.value = "Usuário não encontrado."
-                    page.update()
-                    return
-
-                novo_hash = gerar_hash_senha(senha)
-                c.execute("UPDATE usuarios SET password_hash = ? WHERE id = ?", (novo_hash, user_row[0]))
-                conn.commit()
-                user_auth_id = user_row[0]
-                user_auth_nome = usuario
-
-        except Exception as err:
-            txt_auth_erro.value = f"Erro no banco: {err}"
-            page.update()
-            return
-        finally:
-            if conn:
-                conn.close()
-
-        if user_auth_id and user_auth_nome:
-            deve_manter = chk_manter_conectado.value if modo_auth["modo"] == "login" else True
-            iniciar_sessao(user_auth_id, user_auth_nome, persistir=deve_manter)
-
-    btn_executar_auth = ft.Button(
-        content=ft.Text("Entrar", color="white", weight="bold"),
-        bgcolor=COR_PETROLEO,
-        width=300,
-        height=40,
-        style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8)),
-        on_click=processar_auth
-    )
-
-    btn_alternar_auth = ft.Button(
-        content=ft.Text("Não tem uma conta? Cadastre-se", color="#94a3b8", size=12),
-        bgcolor="transparent",
-        on_click=lambda e: definir_modo_auth("cadastro" if modo_auth["modo"] == "login" else "login")
-    )
-
-    btn_recuperar_auth = ft.Button(
-        content=ft.Text("Esqueceu a senha?", color="#64748b", size=11),
-        bgcolor="transparent",
-        on_click=lambda e: definir_modo_auth("recuperar")
-    )
-
-    card_interno_auth = ft.Container(
-        width=360,
-        bgcolor=COR_CARD,
-        padding=24,
-        border_radius=12,
-        border=criar_borda(1.5, COR_BORDA),
-        content=ft.Column([
-            componente_logo_login,
-            ft.Container(height=4),
-            txt_auth_titulo,
-            txt_auth_erro,
-            txt_auth_user,
-            txt_auth_pass,
-            txt_auth_pass_confirm,
-            container_chk_manter,
-            ft.Container(height=4),
-            btn_executar_auth,
-            btn_alternar_auth,
-            btn_recuperar_auth
-        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=8)
-    )
-
-    card_auth = ft.Container(
-        alignment=ft.Alignment(0, 0),
-        padding=ft.Padding(0, 60, 0, 0),
-        content=card_interno_auth,
-        visible=False
-    )
-
-    spinner_autologin = ft.Container(
-        alignment=ft.Alignment(0, 0),
-        padding=ft.Padding(0, 150, 0, 0),
-        content=ft.ProgressRing(width=36, height=36, stroke_width=3, color=COR_PETROLEO),
-        visible=True
-    )
-
-    page.add(spinner_autologin, card_auth, layout_mestre)
-    page.update()
-
-    # -------------------------------------------------------------
-    # RECUPERAÇÃO DE SESSÃO
-    # -------------------------------------------------------------
-    def verificar_sessao_salva():
-        time.sleep(0.3)
-        saved_uid = None
-        saved_user = None
-        saved_manter = None
-
-        try:
-            saved_uid = page.client_storage.get("user_id")
-            saved_user = page.client_storage.get("username")
-            saved_manter = page.client_storage.get("manter_conectado")
-        except Exception:
-            pass
-
-        if not saved_uid or str(saved_manter).lower() != "true":
-            try:
-                cookies = page.cookies
-                if cookies:
-                    saved_uid = cookies.get("user_id")
-                    saved_user = cookies.get("username")
-                    saved_manter = cookies.get("manter_conectado")
-            except Exception:
-                pass
-
-        if saved_uid and saved_user and (str(saved_manter).lower() == "true"):
-            iniciar_sessao(saved_uid, saved_user, persistir=True)
-        else:
-            spinner_autologin.visible = False
-            definir_modo_auth("login")
-            card_auth.visible = True
-            layout_mestre.visible = False
-            page.update()
-
-    threading.Thread(target=verificar_sessao_salva, daemon=True).start()
-
-if __name__ == "__main__":
-    porta = int(os.environ.get("PORT", 8550))
-    ft.run(main, view=ft.AppView.WEB_BROWSER, host="0.0.0.0", port=porta)
+            btn_executar_
