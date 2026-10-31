@@ -1135,7 +1135,7 @@ def main(page: ft.Page):
     # -------------------------------------------------------------
     coluna_sugestoes = ft.Column(spacing=4, scroll=ft.ScrollMode.AUTO)
     
-    # Caixa suspensa flutuante
+    # Caixa suspensa flutuante corrigida com height padrão
     container_sugestoes = ft.Container(
         content=coluna_sugestoes,
         bgcolor=COR_CARD,
@@ -1144,8 +1144,8 @@ def main(page: ft.Page):
         padding=6,
         visible=False,
         width=320,
-        max_height=320,
-        top=62,     # Fica exatamente flutuando abaixo do campo de busca
+        height=300,
+        top=64,
         left=0,
         shadow=ft.BoxShadow(blur_radius=12, color="#000000")
     )
@@ -1242,7 +1242,6 @@ def main(page: ft.Page):
                 page.update()
         threading.Timer(0.25, _ocultar).start()
 
-    # Dimensões atualizadas: +20% altura (58px), -30% largura (235px)
     campo_busca = ft.TextField(
         hint_text="Buscar filmes ou séries...",
         hint_style=ft.TextStyle(size=12, color="#64748b"),
@@ -1268,7 +1267,6 @@ def main(page: ft.Page):
         on_click=disparar_busca_manual
     )
 
-    # Stack que mantém a lista flutuando sem mexer no alinhamento do menu
     bloco_busca_flutuante = ft.Stack(
         controls=[
             ft.Row([campo_busca, btn_lupa], spacing=2, vertical_alignment=ft.CrossAxisAlignment.CENTER),
@@ -1307,7 +1305,6 @@ def main(page: ft.Page):
         on_click=lambda e: alternar_tela(1)
     )
 
-    # Informações de usuário e Logout no canto superior direito
     lbl_user_tag = ft.Text("", size=12, color="#64748b", weight="bold")
 
     def acao_logout(e):
@@ -1353,7 +1350,6 @@ def main(page: ft.Page):
         vertical_alignment=ft.CrossAxisAlignment.CENTER
     )
 
-    # Menu Principal Centralizado
     menu_central = ft.Row(
         controls=[
             btn_logo_interativo,
