@@ -156,6 +156,7 @@ def obter_estilo_nota(nota_str):
 
 def main(page: ft.Page):
     page.title = "Movie Insert"
+    page.favicon = "loading.png"  # Ícone personalizado na aba do navegador
     page.theme_mode = ft.ThemeMode.DARK
     page.bgcolor = COR_FUNDO
     page.padding = 0
@@ -1131,7 +1132,7 @@ def main(page: ft.Page):
         page.update()
 
     # -------------------------------------------------------------
-    # SUGESTÕES NO OVERLAY (FLUTUAÇÃO EXATA LOGO ABAIXO DA BUSCA)
+    # SUGESTÕES NO OVERLAY (POSICIONADO LOGO ABAIXO DA BUSCA)
     # -------------------------------------------------------------
     coluna_sugestoes = ft.Column(spacing=4, scroll=ft.ScrollMode.AUTO)
 
@@ -1144,7 +1145,7 @@ def main(page: ft.Page):
         visible=False,
         width=260,
         height=260,
-        top=200,   # Posição calculada logo abaixo da caixa de busca
+        top=200,   # Posição calculada com precisão abaixo da caixa
         left=0,
         shadow=ft.BoxShadow(blur_radius=15, color="#000000")
     )
@@ -1242,7 +1243,6 @@ def main(page: ft.Page):
                 page.update()
         threading.Timer(0.25, _ocultar).start()
 
-    # Dimensões da busca: 45px altura e 224px largura
     campo_busca = ft.TextField(
         hint_text="Buscar filmes ou séries...",
         hint_style=ft.TextStyle(size=12, color="#64748b"),
@@ -1297,7 +1297,6 @@ def main(page: ft.Page):
         on_click=lambda e: alternar_tela(1)
     )
 
-    # Informações de usuário no canto superior direito
     lbl_user_tag = ft.Text("", size=12, color="#64748b", weight="bold")
 
     def acao_logout(e):
@@ -1349,7 +1348,6 @@ def main(page: ft.Page):
         vertical_alignment=ft.CrossAxisAlignment.CENTER
     )
 
-    # Linha Inferior Centralizada: Botão Biblioteca + Campo de Pesquisa
     linha_inferior_menu = ft.Row(
         controls=[
             btn_tab_bib,
@@ -1360,7 +1358,6 @@ def main(page: ft.Page):
         vertical_alignment=ft.CrossAxisAlignment.CENTER
     )
 
-    # Cabeçalho estruturado: Logo em cima e controles embaixo
     cabecalho_fixo = ft.Container(
         bgcolor=COR_FUNDO,
         padding=ft.Padding(20, 6, 20, 12),
@@ -1392,7 +1389,7 @@ def main(page: ft.Page):
             btn_logo_interativo.content.height = 65
             btn_tab_bib.content.height = 45
             titulo_trends.width = 1100
-            # Centraliza o dropdown flutuante alinhado à caixa de busca (à direita do centro)
+            # Posiciona com exatidão embaixo do campo de busca no desktop
             container_sugestoes.left = max(0, int((largura_janela / 2) - 10))
             container_sugestoes.top = 200
         page.update()
@@ -1738,10 +1735,14 @@ def main(page: ft.Page):
         visible=False
     )
 
+    # Splash screen personalizada com loading.png centralizado
     spinner_autologin = ft.Container(
         alignment=ft.Alignment(0, 0),
-        padding=ft.Padding(0, 150, 0, 0),
-        content=ft.ProgressRing(width=36, height=36, stroke_width=3, color=COR_PETROLEO),
+        padding=ft.Padding(0, 140, 0, 0),
+        content=ft.Column([
+            ft.Image(src="loading.png", width=90, height=90, fit="contain"),
+            ft.ProgressRing(width=28, height=28, stroke_width=2.5, color=COR_PETROLEO)
+        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=16),
         visible=True
     )
 
