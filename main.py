@@ -55,7 +55,7 @@ def carregar_config():
     return cfg
 
 # -------------------------------------------------------------
-# SEGURANÇA E BANCO DE DADOS
+# SEGURANÇA E BASE DE DADOS
 # -------------------------------------------------------------
 def gerar_hash_senha(senha: str) -> str:
     salt = os.urandom(16).hex()
@@ -156,7 +156,7 @@ def obter_estilo_nota(nota_str):
 
 def main(page: ft.Page):
     page.title = "Movie Insert"
-    page.favicon = "loading.png"  # Ícone personalizado na aba do navegador
+    page.favicon = "favicon.png"
     page.theme_mode = ft.ThemeMode.DARK
     page.bgcolor = COR_FUNDO
     page.padding = 0
@@ -238,7 +238,7 @@ def main(page: ft.Page):
         abrir_dialogo(modal_confirmacao)
 
     # -------------------------------------------------------------
-    # SELETOR DE NOTAS
+    # SELETOR DE AVALIAÇÃO
     # -------------------------------------------------------------
     botoes_notas = []
     linha_notas_1_5 = ft.Row(spacing=6, alignment=ft.MainAxisAlignment.CENTER)
@@ -836,7 +836,7 @@ def main(page: ft.Page):
         page.launch_url(f"file://{arq}")
 
     # -------------------------------------------------------------
-    # BIBLIOTECA (FILTRADA POR USUÁRIO)
+    # BIBLIOTECA (FILTRADA POR UTILIZADOR)
     # -------------------------------------------------------------
     def mudar_aba_biblioteca(nova_aba):
         estado_biblioteca["aba"] = nova_aba
@@ -1079,7 +1079,7 @@ def main(page: ft.Page):
             for letra in letras_ordenadas:
                 renderizar_secao(f"Letra {letra}", "🔤", COR_TEXTO_CLARO, mapa_alfabetico[letra])
 
-        # ---------------- MODO 3: GÊNEROS ----------------
+        # ---------------- MODO 3: GÉNEROS ----------------
         elif modo_atual == "genero":
             mapa_generos = {}
             for row in itens_filtrados:
@@ -1132,7 +1132,7 @@ def main(page: ft.Page):
         page.update()
 
     # -------------------------------------------------------------
-    # SUGESTÕES NO OVERLAY (POSICIONADO LOGO ABAIXO DA BUSCA)
+    # SUGESTÕES NO OVERLAY (ABAIXO DO CAMPO DE PESQUISA)
     # -------------------------------------------------------------
     coluna_sugestoes = ft.Column(spacing=4, scroll=ft.ScrollMode.AUTO)
 
@@ -1145,7 +1145,7 @@ def main(page: ft.Page):
         visible=False,
         width=260,
         height=260,
-        top=200,   # Posição calculada com precisão abaixo da caixa
+        top=200,
         left=0,
         shadow=ft.BoxShadow(blur_radius=15, color="#000000")
     )
@@ -1268,7 +1268,7 @@ def main(page: ft.Page):
     )
 
     # -------------------------------------------------------------
-    # LOGO INTERATIVO (PARTE SUPERIOR CENTRALIZADA)
+    # LOGÓTIPO INTERATIVO
     # -------------------------------------------------------------
     def clicar_no_logo(e):
         btn_logo_interativo.scale = 0.94
@@ -1389,7 +1389,6 @@ def main(page: ft.Page):
             btn_logo_interativo.content.height = 65
             btn_tab_bib.content.height = 45
             titulo_trends.width = 1100
-            # Posiciona com exatidão embaixo do campo de busca no desktop
             container_sugestoes.left = max(0, int((largura_janela / 2) - 10))
             container_sugestoes.top = 200
         page.update()
@@ -1397,7 +1396,7 @@ def main(page: ft.Page):
     page.on_resized = ajustar_layout_responsivo
 
     # -------------------------------------------------------------
-    # VIEWS ROLÁVEIS INDEPENDENTES
+    # VISTAS ROLÁVEIS INDEPENDENTES
     # -------------------------------------------------------------
     titulo_trends = ft.Container(
         content=ft.Text("Filmes em Alta (TMDb Trends)", size=15, weight="bold", color=COR_TEXTO_CLARO),
@@ -1470,7 +1469,7 @@ def main(page: ft.Page):
     )
 
     # -------------------------------------------------------------
-    # TELA DE AUTENTICAÇÃO
+    # ECRÃ DE AUTENTICAÇÃO
     # -------------------------------------------------------------
     logo_login = ft.Image(src="logo.png", height=65, fit="contain")
 
@@ -1735,7 +1734,6 @@ def main(page: ft.Page):
         visible=False
     )
 
-    # Splash screen personalizada com loading.png centralizado
     spinner_autologin = ft.Container(
         alignment=ft.Alignment(0, 0),
         padding=ft.Padding(0, 140, 0, 0),
