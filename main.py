@@ -105,6 +105,7 @@ def init_db():
                 sinopse TEXT,
                 imdb TEXT,
                 rotten TEXT,
+                metascore TEXT,
                 streaming TEXT,
                 poster_url TEXT,
                 categoria TEXT,
@@ -115,6 +116,10 @@ def init_db():
                 PRIMARY KEY (id, usuario_id)
             )
         """)
+        try:
+            c.execute("ALTER TABLE filmes ADD COLUMN metascore TEXT")
+        except Exception:
+            pass
         try:
             c.execute("ALTER TABLE filmes ADD COLUMN generos TEXT")
         except Exception:
@@ -316,7 +321,7 @@ def main(page: ft.Page):
         abrir_dialogo(modal_avaliacao)
 
     # -------------------------------------------------------------
-    # JANELA DE DETALHES
+    # JANELA DE DETALHES COM METASCORE
     # -------------------------------------------------------------
     dt_img = ft.Image(
         src="https://via.placeholder.com/130x195?text=Sem+Poster",
@@ -341,6 +346,7 @@ def main(page: ft.Page):
 
     dt_imdb = ft.Container(content=ft.Text("⭐ --", color="black", size=11, weight="bold"), bgcolor="#f59e0b", padding=ft.Padding(5, 2, 5, 2), border_radius=5)
     dt_rt = ft.Container(content=ft.Text("🍅 --", color="white", size=11, weight="bold"), bgcolor=COR_VERMELHO_PLAY, padding=ft.Padding(5, 2, 5, 2), border_radius=5)
+    dt_metascore = ft.Container(content=ft.Text("Ⓜ --", color="white", size=11, weight="bold"), bgcolor="#334155", padding=ft.Padding(5, 2, 5, 2), border_radius=5)
     dt_user = ft.Container(content=ft.Text("★ --", color="white", size=11, weight="bold"), bgcolor=COR_PETROLEO, padding=ft.Padding(5, 2, 5, 2), border_radius=5)
 
     btn_trailer = ft.Button(
@@ -370,7 +376,7 @@ def main(page: ft.Page):
         dt_titulo,
         dt_titulo_original,
         dt_meta,
-        ft.Row([dt_imdb, dt_rt, dt_user], spacing=6, wrap=True),
+        ft.Row([dt_imdb, dt_rt, dt_metascore, dt_user], spacing=6, wrap=True),
         dt_stremio_status,
         dt_stream,
     ], spacing=3, width=310)
@@ -417,13 +423,13 @@ def main(page: ft.Page):
             c.execute("SELECT categoria FROM filmes WHERE id = ? AND usuario_id = ?", (it["id"], uid))
             if not c.fetchone():
                 c.execute("""
-                    INSERT INTO filmes (id, titulo, ano, diretor, elenco, sinopse, imdb, rotten, streaming, poster_url, categoria, nota_usuario, trailer_url, generos, usuario_id)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Para Assistir', ?, ?, ?, ?)
+                    INSERT INTO filmes (id, titulo, ano, diretor, elenco, sinopse, imdb, rotten, metascore, streaming, poster_url, categoria, nota_usuario, trailer_url, generos, usuario_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Para Assistir', ?, ?, ?, ?)
                 """, (
                     it["id"], it["titulo"], it["ano"], it["diretor"], it["elenco"],
-                    it["sinopse"], it["imdb"], it["rotten"], it["streaming"],
-                    it["poster_url"], it.get("nota_usuario"), it.get("trailer_url"),
-                    it.get("generos", ""), uid
+                    it["sinopse"], it["imdb"], it["rotten"], it.get("metascore", "N/A"),
+                    it["streaming"], it["poster_url"], it.get("nota_usuario"),
+                    it.get("trailer_url"), it.get("generos", ""), uid
                 ))
                 conn.commit()
         except Exception:
@@ -456,6 +462,9 @@ def main(page: ft.Page):
         dt_stremio_status.bgcolor = "#1e293b"
         dt_imdb.content.value = "⭐ .."
         dt_rt.content.value = "🍅 .."
+        dt_metascore.content.value = "Ⓜ .."
+        dt_metascore.bgcolor = "#334155"
+        dt_metascore.content.color = "white"
         dt_user.content.value = "★ .."
         btn_salvar.disabled = True
         btn_ir_lista.visible = False
@@ -506,13 +515,17 @@ def main(page: ft.Page):
                 poster_url = f"https://image.tmdb.org/t/p/w300{poster_path}" if poster_path else poster_prev
 
                 imdb_id = res.get("imdb_id") or res.get("external_ids", {}).get("imdb_id")
-                imdb_nota, rt_nota = "N/A", "N/A"
+                imdb_nota, rt_nota, meta_nota = "N/A", "N/A", "N/A"
 
                 if omdb_key and imdb_id:
                     try:
-                        res_omdb = requests.get(f"https://www.omdbapi.com/?i={imdb_id}&apikey={omdb_key}", timeout=2.0).json()
+                        res_omdb = requests.get(f"https://www.omdbapi.com/?i={imdb_id}&apikey={omdb_key}", timeout=2.5).json()
                         if res_omdb.get("Response") == "True":
                             imdb_nota = res_omdb.get("imdbRating", "N/A")
+                            m_raw = res_omdb.get("Metascore", "N/A")
+                            if m_raw and m_raw != "N/A":
+                                meta_nota = m_raw
+
                             for val in res_omdb.get("Ratings", []):
                                 if val.get("Source") == "Rotten Tomatoes":
                                     rt_nota = val.get("Value")
@@ -572,7 +585,7 @@ def main(page: ft.Page):
                 item_ativo["data"] = {
                     "id": chave_id, "titulo": titulo, "ano": ano, "diretor": diretor,
                     "elenco": elenco, "sinopse": sinopse, "imdb": imdb_nota, "rotten": rt_nota,
-                    "streaming": streamings, "poster_url": poster_url,
+                    "metascore": meta_nota, "streaming": streamings, "poster_url": poster_url,
                     "nota_usuario": nota_usr, "trailer_url": trailer_url, "categoria_existente": cat_exist,
                     "generos": generos_txt
                 }
@@ -589,6 +602,31 @@ def main(page: ft.Page):
                 dt_meta.value = f"Direção: {diretor}\nElenco: {elenco}\nGêneros: {generos_txt}"
                 dt_imdb.content.value = f"⭐ {imdb_nota}"
                 dt_rt.content.value = f"🍅 {rt_nota}"
+                
+                # Formatação dinâmica do Metascore
+                if meta_nota != "N/A":
+                    try:
+                        val_m = int(meta_nota)
+                        if val_m >= 61:
+                            bg_meta = "#54a72a"
+                            cor_meta_txt = "white"
+                        elif val_m >= 40:
+                            bg_meta = "#ffcc33"
+                            cor_meta_txt = "black"
+                        else:
+                            bg_meta = "#dc2626"
+                            cor_meta_txt = "white"
+                    except Exception:
+                        bg_meta = "#334155"
+                        cor_meta_txt = "white"
+                    dt_metascore.content.value = f"Ⓜ {meta_nota}"
+                    dt_metascore.bgcolor = bg_meta
+                    dt_metascore.content.color = cor_meta_txt
+                else:
+                    dt_metascore.content.value = "Ⓜ --"
+                    dt_metascore.bgcolor = "#334155"
+                    dt_metascore.content.color = "white"
+
                 dt_user.content.value = f"★ {nota_usr}" if nota_usr else "★ --"
                 dt_stream.value = f"📺 {streamings}"
                 dt_sinopse.value = sinopse
@@ -1132,7 +1170,7 @@ def main(page: ft.Page):
         page.update()
 
     # -------------------------------------------------------------
-    # SUGESTÕES NO OVERLAY (ABAIXO DO CAMPO DE PESQUISA)
+    # SUGESTÕES NO OVERLAY
     # -------------------------------------------------------------
     coluna_sugestoes = ft.Column(spacing=4, scroll=ft.ScrollMode.AUTO)
 
@@ -1268,7 +1306,7 @@ def main(page: ft.Page):
     )
 
     # -------------------------------------------------------------
-    # LOGÓTIPO INTERATIVO
+    # LOGÓTIPO INTERATIVO (RETORNO AO INÍCIO)
     # -------------------------------------------------------------
     def clicar_no_logo(e):
         btn_logo_interativo.scale = 0.94
