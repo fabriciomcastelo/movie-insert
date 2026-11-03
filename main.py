@@ -784,3 +784,1166 @@ def main(page: ft.Page):
         tmdb_key = c.get("tmdb_key", "").strip()
 
         if not tmdb_key:
+            grade_populares.controls.clear()
+            grade_populares.controls.append(
+                ft.Container(
+                    content=ft.Text("⚠️ Chave do TMDb ausente. Adicione TMDB_KEY no Render.", color="#f87171", size=13, text_align=ft.TextAlign.CENTER),
+                    padding=20
+                )
+            )
+            page.update()
+            return
+
+        if paginacao["carregando"] or paginacao["fim"]:
+            return
+
+        paginacao["carregando"] = True
+        if incrementar:
+            paginacao["pagina_atual"] += 1
+
+        spinner_carregamento.visible = True
+        btn_carregar_mais.visible = False
+        page.update()
+
+        def _fetch():
+            try:
+                p = paginacao["pagina_atual"]
+                f_home = paginacao["filtro_home"]
+
+                if f_home == "movie":
+                    url = f"https://api.themoviedb.org/3/trending/movie/week?api_key={tmdb_key}&language=pt-BR&page={p}"
+                elif f_home == "tv":
+                    url = f"https://api.themoviedb.org/3/trending/tv/week?api_key={tmdb_key}&language=pt-BR&page={p}"
+                else:
+                    url = f"https://api.themoviedb.org/3/trending/all/week?api_key={tmdb_key}&language=pt-BR&page={p}"
+
+                resp = requests.get(url, timeout=4.0)
+
+                if resp.status_code == 200:
+                    dados = resp.json()
+                    itens = dados.get("results", [])
+                    total_pages = dados.get("total_pages", 1000)
+
+                    if not itens or p >= total_pages:
+                        paginacao["fim"] = True
+
+                    novos = []
+                    for it in itens:
+                        mid = it.get("id")
+                        media_t = it.get("media_type") or ("tv" if f_home == "tv" else "movie")
+                        if media_t not in ["movie", "tv"]:
+                            continue
+
+                        chave_unicidade = f"{media_t}_{mid}"
+                        if chave_unicidade in paginacao["ids_carregados"]:
+                            continue
+                        paginacao["ids_carregados"].add(chave_unicidade)
+
+                        tit = it.get("title") or it.get("name") or "Sem título"
+                        ano = str((it.get("release_date") or it.get("first_air_date")) or "")[:4]
+                        p_path = it.get("poster_path")
+                        p_url = f"https://image.tmdb.org/t/p/w300{p_path}" if p_path else None
+                        novos.append(criar_card_filme(mid, media_t, tit, ano, p_url))
+
+                    grade_populares.controls.extend(novos)
+            except Exception as e:
+                print(f"Erro ao buscar populares: {e}")
+            finally:
+                paginacao["carregando"] = False
+                spinner_carregamento.visible = False
+                btn_carregar_mais.visible = not paginacao["fim"]
+                page.update()
+
+        threading.Thread(target=_fetch, daemon=True).start()
+
+    def alternar_filtro_home(novo_filtro):
+        paginacao["carregando"] = False
+        paginacao["filtro_home"] = novo_filtro
+        paginacao["pagina_atual"] = 1
+        paginacao["fim"] = False
+        paginacao["ids_carregados"].clear()
+        grade_populares.controls.clear()
+        atualizar_botoes_filtro_home()
+        carregar_populares()
+
+    def atualizar_botoes_filtro_home():
+        atual = paginacao["filtro_home"]
+        btn_home_todos.bgcolor = COR_PETROLEO if atual == "todos" else COR_CARD
+        btn_home_todos.content.color = COR_TEXTO_CLARO if atual == "todos" else "#94a3b8"
+        btn_home_filmes.bgcolor = COR_PETROLEO if atual == "movie" else COR_CARD
+        btn_home_filmes.content.color = COR_TEXTO_CLARO if atual == "movie" else "#94a3b8"
+        btn_home_series.bgcolor = COR_PETROLEO if atual == "tv" else COR_CARD
+        btn_home_series.content.color = COR_TEXTO_CLARO if atual == "tv" else "#94a3b8"
+        page.update()
+
+    btn_home_todos = ft.Button(
+        content=ft.Text("Todos", size=11, weight="bold", color=COR_TEXTO_CLARO),
+        bgcolor=COR_PETROLEO,
+        height=32,
+        style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8)),
+        on_click=lambda e: alternar_filtro_home("todos")
+    )
+    btn_home_filmes = ft.Button(
+        content=ft.Text("🎬 Filmes", size=11, weight="bold", color="#94a3b8"),
+        bgcolor=COR_CARD,
+        height=32,
+        style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8)),
+        on_click=lambda e: alternar_filtro_home("movie")
+    )
+    btn_home_series = ft.Button(
+        content=ft.Text("📺 Séries", size=11, weight="bold", color="#94a3b8"),
+        bgcolor=COR_CARD,
+        height=32,
+        style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8)),
+        on_click=lambda e: alternar_filtro_home("tv")
+    )
+
+    linha_seletor_home = ft.Row(
+        controls=[btn_home_todos, btn_home_filmes, btn_home_series],
+        spacing=8,
+        alignment=ft.MainAxisAlignment.CENTER
+    )
+
+    def ao_rolar_inicio(e: ft.OnScrollEvent):
+        if container_sugestoes.visible:
+            container_sugestoes.visible = False
+            page.update()
+
+        distancia_do_fim = e.max_scroll_extent - e.pixels
+        percentual = (e.pixels / e.max_scroll_extent) if e.max_scroll_extent > 0 else 0
+
+        if (distancia_do_fim <= 1200 or percentual >= 0.75) and e.max_scroll_extent > 0:
+            if not paginacao["carregando"] and not paginacao["fim"]:
+                carregar_populares(incrementar=True)
+
+    def remover_filme_direto(fid):
+        uid = sessao_usuario["id"]
+        if uid:
+            conn = None
+            try:
+                conn = sqlite3.connect(DB_FILE, timeout=5)
+                c = conn.cursor()
+                c.execute("DELETE FROM filmes WHERE id = ? AND usuario_id = ?", (fid, uid))
+                conn.commit()
+            except Exception:
+                pass
+            finally:
+                if conn:
+                    conn.close()
+            carregar_biblioteca()
+
+    def imprimir_lista():
+        uid = sessao_usuario["id"]
+        filmes = []
+        if uid:
+            conn = None
+            try:
+                conn = sqlite3.connect(DB_FILE, timeout=5)
+                c = conn.cursor()
+                c.execute("SELECT titulo, ano, imdb, rotten, streaming, diretor, tipo FROM filmes WHERE categoria = 'Para Assistir' AND usuario_id = ? ORDER BY titulo ASC", (uid,))
+                filmes = c.fetchall()
+            except Exception:
+                pass
+            finally:
+                if conn:
+                    conn.close()
+
+        if not filmes:
+            return
+
+        linhas = "".join([f"<tr><td>{i}</td><td><b>{t}</b> ({a})</td><td>{'Série' if tp == 'tv' else 'Filme'}</td><td>⭐ {im}</td><td>🍅 {rt}</td><td>{st}</td><td>{dr}</td></tr>" for i, (t, a, im, rt, st, dr, tp) in enumerate(filmes, 1)])
+        html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><title>Para Assistir</title>
+        <style>body{{font-family:sans-serif;margin:20px;}}table{{width:100%;border-collapse:collapse;}}th,td{{border:1px solid #ccc;padding:8px;text-align:left;}}th{{background:#f1f5f9;}}</style>
+        </head><body><h2>🎬 Lista Para Assistir ({len(filmes)})</h2><table><thead><tr><th>#</th><th>Título</th><th>Tipo</th><th>IMDb</th><th>RT</th><th>Streaming</th><th>Direção/Criação</th></tr></thead><tbody>{linhas}</tbody></table><script>window.onload=function(){{window.print();}}</script></body></html>"""
+        arq = os.path.abspath("lista_para_assistir.html")
+        with open(arq, "w", encoding="utf-8") as f:
+            f.write(html)
+        page.launch_url(f"file://{arq}")
+
+    # -------------------------------------------------------------
+    # BIBLIOTECA
+    # -------------------------------------------------------------
+    def mudar_aba_biblioteca(nova_aba):
+        estado_biblioteca["aba"] = nova_aba
+        if nova_aba == "Para Assistir" and estado_biblioteca["modo"] == "nota_pessoal":
+            estado_biblioteca["modo"] = "nota"
+        elif nova_aba == "Assistidos" and estado_biblioteca["modo"] == "nota":
+            estado_biblioteca["modo"] = "nota_pessoal"
+        carregar_biblioteca()
+
+    def mudar_modo_filtro(novo_modo):
+        estado_biblioteca["modo"] = novo_modo
+        carregar_biblioteca()
+
+    def mudar_filtro_tipo_bib(novo_tipo):
+        estado_biblioteca["filtro_tipo"] = novo_tipo
+        carregar_biblioteca()
+
+    def carregar_biblioteca():
+        coluna_biblioteca_itens.controls.clear()
+        todos_itens = []
+        uid = sessao_usuario["id"]
+
+        if uid:
+            conn = None
+            try:
+                conn = sqlite3.connect(DB_FILE, timeout=5)
+                c = conn.cursor()
+                c.execute("""
+                    SELECT id, titulo, ano, poster_url, nota_usuario, categoria, streaming, generos, imdb, tipo 
+                    FROM filmes 
+                    WHERE usuario_id = ? 
+                    ORDER BY rowid DESC
+                """, (uid,))
+                todos_itens = c.fetchall()
+            except Exception:
+                pass
+            finally:
+                if conn:
+                    conn.close()
+
+        total_para_assistir = sum(1 for it in todos_itens if it[5] == "Para Assistir")
+        total_assistidos = sum(1 for it in todos_itens if it[5] == "Assistidos")
+
+        aba_atual = estado_biblioteca["aba"]
+        modo_atual = estado_biblioteca["modo"]
+        tipo_atual = estado_biblioteca["filtro_tipo"]
+
+        itens_aba = [it for it in todos_itens if it[5] == aba_atual]
+
+        if tipo_atual == "movie":
+            itens_filtrados = [it for it in itens_aba if (it[9] or "movie") == "movie"]
+        elif tipo_atual == "tv":
+            itens_filtrados = [it for it in itens_aba if it[9] == "tv"]
+        else:
+            itens_filtrados = itens_aba
+
+        btn_print = ft.Button(
+            content=ft.Text("🖨️ Imprimir", color="white", size=11, weight="bold"),
+            bgcolor=COR_CHUMBO,
+            on_click=lambda e: imprimir_lista()
+        )
+
+        btn_aba_para_assistir = ft.Button(
+            content=ft.Text(f"⏳ Para Assistir ({total_para_assistir})", color=COR_TEXTO_CLARO if aba_atual == "Para Assistir" else "#94a3b8", weight="bold"),
+            bgcolor=COR_PETROLEO if aba_atual == "Para Assistir" else COR_CHUMBO,
+            style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10)),
+            on_click=lambda e: mudar_aba_biblioteca("Para Assistir")
+        )
+
+        btn_aba_assistidos = ft.Button(
+            content=ft.Text(f"✓ Assistidos ({total_assistidos})", color=COR_TEXTO_CLARO if aba_atual == "Assistidos" else "#94a3b8", weight="bold"),
+            bgcolor=COR_PETROLEO if aba_atual == "Assistidos" else COR_CHUMBO,
+            style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10)),
+            on_click=lambda e: mudar_aba_biblioteca("Assistidos")
+        )
+
+        linha_abas_biblioteca = ft.Row(
+            spacing=8,
+            alignment=ft.MainAxisAlignment.CENTER,
+            controls=[btn_aba_para_assistir, btn_aba_assistidos]
+        )
+
+        def criar_botao_tipo(rotulo, valor_tipo):
+            ativo = (tipo_atual == valor_tipo)
+            return ft.Button(
+                content=ft.Text(rotulo, color=COR_TEXTO_CLARO if ativo else "#94a3b8", size=11, weight="bold"),
+                bgcolor=COR_PETROLEO if ativo else COR_CARD,
+                height=30,
+                style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8)),
+                on_click=lambda e, t=valor_tipo: mudar_filtro_tipo_bib(t)
+            )
+
+        barra_tipo = ft.Row(
+            spacing=6,
+            alignment=ft.MainAxisAlignment.CENTER,
+            controls=[
+                ft.Text("Tipo:", size=11, color="#94a3b8", weight="bold"),
+                criar_botao_tipo("Todos", "todos"),
+                criar_botao_tipo("🎬 Filmes", "movie"),
+                criar_botao_tipo("📺 Séries", "tv"),
+            ]
+        )
+
+        def criar_botao_filtro(rotulo, modo_alvo):
+            ativo = (modo_atual == modo_alvo)
+            return ft.Button(
+                content=ft.Text(rotulo, color=COR_TEXTO_CLARO if ativo else "#94a3b8", size=11, weight="bold"),
+                bgcolor=COR_PETROLEO if ativo else COR_CARD,
+                height=30,
+                style=ft.ButtonStyle(
+                    shape=ft.RoundedRectangleBorder(radius=8),
+                    side=ft.BorderSide(1, COR_PETROLEO if ativo else COR_BORDA)
+                ),
+                on_click=lambda e, m=modo_alvo: mudar_modo_filtro(m)
+            )
+
+        controles_filtros = [
+            ft.Text("Organizar:", size=11, color="#94a3b8", weight="bold"),
+            criar_botao_filtro("Streaming", "streaming"),
+            criar_botao_filtro("A-Z", "alfabetico"),
+            criar_botao_filtro("Gênero", "genero"),
+        ]
+
+        if aba_atual == "Para Assistir":
+            controles_filtros.append(criar_botao_filtro("Nota IMDb", "nota"))
+        else:
+            controles_filtros.append(criar_botao_filtro("Nota Pessoal", "nota_pessoal"))
+
+        barra_filtros = ft.Row(
+            spacing=6,
+            wrap=True,
+            alignment=ft.MainAxisAlignment.CENTER,
+            controls=controles_filtros
+        )
+
+        topo_biblioteca = ft.Container(
+            content=ft.Column([
+                ft.Row(
+                    [
+                        ft.Text(f"Biblioteca ({len(todos_itens)})", size=20, weight="bold", color=COR_TEXTO_CLARO),
+                        btn_print
+                    ],
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN
+                ),
+                linha_abas_biblioteca,
+                barra_tipo,
+                barra_filtros
+            ], spacing=8, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+            width=1000
+        )
+
+        coluna_biblioteca_itens.controls.append(topo_biblioteca)
+
+        if not itens_filtrados:
+            coluna_biblioteca_itens.controls.append(
+                ft.Container(
+                    content=ft.Text(
+                        "Nenhum título encontrado com os filtros selecionados.",
+                        color="#94a3b8",
+                        size=14
+                    ),
+                    padding=ft.Padding(10, 25, 10, 20)
+                )
+            )
+            page.update()
+            return
+
+        def renderizar_secao(titulo_secao, icone, cor, lista):
+            if not lista:
+                return
+            linha_cards = ft.Row(
+                spacing=12,
+                scroll=ft.ScrollMode.AUTO,
+                alignment=ft.MainAxisAlignment.START,
+                controls=[
+                    criar_card_filme(mid, tp, tit, ano, p_url, categoria=cat, nota=nota)
+                    for mid, tit, ano, p_url, nota, cat, tp in lista
+                ]
+            )
+            bloco = ft.Container(
+                content=ft.Column([
+                    ft.Row([
+                        ft.Text(f"{icone} {titulo_secao}", size=15, weight="bold", color=cor),
+                        ft.Container(
+                            content=ft.Text(f"{len(lista)}", size=11, color="white", weight="bold"),
+                            bgcolor=COR_CARD,
+                            border=criar_borda(1, COR_BORDA),
+                            padding=ft.Padding(5, 2, 5, 2),
+                            border_radius=8
+                        )
+                    ], spacing=6),
+                    linha_cards
+                ], spacing=6),
+                width=1000
+            )
+            coluna_biblioteca_itens.controls.append(bloco)
+
+        def renderizar_grade_lado_a_lado(lista, texto_info=None):
+            if not lista:
+                return
+            grade = ft.Row(
+                wrap=True,
+                spacing=12,
+                run_spacing=14,
+                alignment=ft.MainAxisAlignment.CENTER,
+                controls=[
+                    criar_card_filme(mid, tp, tit, ano, p_url, categoria=cat, nota=nota)
+                    for mid, tit, ano, p_url, nota, cat, tp in lista
+                ]
+            )
+            elementos = []
+            if texto_info:
+                elementos.append(
+                    ft.Row([
+                        ft.Text(texto_info, size=15, weight="bold", color=COR_TEXTO_CLARO),
+                        ft.Container(
+                            content=ft.Text(f"{len(lista)}", size=11, color="white", weight="bold"),
+                            bgcolor=COR_CARD,
+                            border=criar_borda(1, COR_BORDA),
+                            padding=ft.Padding(5, 2, 5, 2),
+                            border_radius=8
+                        )
+                    ], spacing=6, alignment=ft.MainAxisAlignment.CENTER)
+                )
+            elementos.append(grade)
+            bloco = ft.Container(
+                content=ft.Column(elementos, spacing=8, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                width=1000
+            )
+            coluna_biblioteca_itens.controls.append(bloco)
+
+        # ---------------- MODO 1: STREAMING ----------------
+        if modo_atual == "streaming":
+            ordem_secoes = list(STREAMINGS_PADRAO) + ["Stremio", "Sem streaming no BR"]
+            mapa = {s: [] for s in ordem_secoes}
+
+            for row in itens_filtrados:
+                mid, tit, ano, p_url, nota, cat, streaming_txt, tp = row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[9]
+                st_str = streaming_txt or ""
+                alocado_oficial = False
+
+                for st_nome in STREAMINGS_PADRAO:
+                    termo = st_nome.lower().replace(" plus", "").replace("+", "")
+                    if termo in st_str.lower():
+                        mapa[st_nome].append((mid, tit, ano, p_url, nota, cat, tp or "movie"))
+                        alocado_oficial = True
+
+                if not alocado_oficial:
+                    if "stremio" in st_str.lower():
+                        mapa["Stremio"].append((mid, tit, ano, p_url, nota, cat, tp or "movie"))
+                    else:
+                        mapa["Sem streaming no BR"].append((mid, tit, ano, p_url, nota, cat, tp or "movie"))
+
+            for servico in ordem_secoes:
+                cor = "#a78bfa" if servico == "Stremio" else ("#94a3b8" if servico == "Sem streaming no BR" else COR_TEXTO_CLARO)
+                ico = "🎬" if servico == "Stremio" else ("❌" if servico == "Sem streaming no BR" else "📺")
+                renderizar_secao(servico, ico, cor, mapa[servico])
+
+        # ---------------- MODO 2: ORDEM ALFABÉTICA (A-Z) ----------------
+        elif modo_atual == "alfabetico":
+            mapa_alfabetico = {}
+            itens_ordenados = sorted(itens_filtrados, key=lambda x: normalizar_texto(x[1]))
+            for row in itens_ordenados:
+                mid, tit, ano, p_url, nota, cat, tp = row[0], row[1], row[2], row[3], row[4], row[5], row[9]
+                letra = normalizar_texto(tit)[:1].upper() if tit else "#"
+                if not letra.isalpha():
+                    letra = "#"
+                mapa_alfabetico.setdefault(letra, []).append((mid, tit, ano, p_url, nota, cat, tp or "movie"))
+
+            letras_ordenadas = sorted([k for k in mapa_alfabetico.keys() if k != "#"])
+            if "#" in mapa_alfabetico:
+                letras_ordenadas.append("#")
+
+            for letra in letras_ordenadas:
+                renderizar_secao(f"Letra {letra}", "🔤", COR_TEXTO_CLARO, mapa_alfabetico[letra])
+
+        # ---------------- MODO 3: GÊNEROS ----------------
+        elif modo_atual == "genero":
+            mapa_generos = {}
+            for row in itens_filtrados:
+                mid, tit, ano, p_url, nota, cat, gens, tp = row[0], row[1], row[2], row[3], row[4], row[5], row[7], row[9]
+                lista_g = [g.strip() for g in gens.split(",")] if gens else ["Outros"]
+                for g in lista_g:
+                    mapa_generos.setdefault(g, []).append((mid, tit, ano, p_url, nota, cat, tp or "movie"))
+
+            for g_nome in sorted(mapa_generos.keys()):
+                renderizar_secao(g_nome, "🏷️", "#fbbf24", mapa_generos[g_nome])
+
+        # ---------------- MODO 4: NOTA DO IMDB ----------------
+        elif modo_atual == "nota":
+            def pegar_imdb_float(it):
+                val = it[8]
+                try:
+                    return float(str(val).replace(",", ".")) if (val and val != "N/A") else 0.0
+                except Exception:
+                    return 0.0
+
+            itens_ordenados_imdb = sorted(itens_filtrados, key=pegar_imdb_float, reverse=True)
+            lista_cards = [
+                (row[0], row[1], row[2], row[3], row[4], row[5], row[9] or "movie")
+                for row in itens_ordenados_imdb
+            ]
+            renderizar_grade_lado_a_lado(
+                lista_cards,
+                texto_info="⭐ Ordenado por Nota do IMDb (Maior para Menor)"
+            )
+
+        # ---------------- MODO 5: NOTA PESSOAL ----------------
+        elif modo_atual == "nota_pessoal":
+            def pegar_nota_pessoal_float(it):
+                val = it[4]
+                try:
+                    return float(str(val).replace(",", ".")) if (val and val != "N/A") else 0.0
+                except Exception:
+                    return 0.0
+
+            itens_ordenados_pessoal = sorted(itens_filtrados, key=pegar_nota_pessoal_float, reverse=True)
+            lista_cards = [
+                (row[0], row[1], row[2], row[3], row[4], row[5], row[9] or "movie")
+                for row in itens_ordenados_pessoal
+            ]
+            renderizar_grade_lado_a_lado(
+                lista_cards,
+                texto_info="★ Ordenado por Sua Nota Pessoal (10 a 1)"
+            )
+
+        page.update()
+
+    # -------------------------------------------------------------
+    # SUGESTÕES DE BUSCA (ISOLAMENTO SEGURO VIA OVERLAY)
+    # -------------------------------------------------------------
+    coluna_sugestoes = ft.Column(spacing=4, scroll=ft.ScrollMode.AUTO)
+
+    container_sugestoes = ft.Container(
+        content=coluna_sugestoes,
+        bgcolor="#111827",
+        border_radius=8,
+        border=criar_borda(1.2, COR_PETROLEO),
+        padding=6,
+        visible=False,
+        width=200,
+        height=220,
+        top=170,
+        left=20,
+        shadow=ft.BoxShadow(blur_radius=15, color="#000000")
+    )
+    page.overlay.append(container_sugestoes)
+
+    def ocultar_sugestoes():
+        if container_sugestoes.visible:
+            container_sugestoes.visible = False
+            page.update()
+
+    def selecionar_sugestao(mid, mtype, tit, ano, p_url):
+        ocultar_sugestoes()
+        campo_busca.value = ""
+        page.update()
+        abrir_detalhes(mid, mtype, tit, ano, p_url)
+
+    def buscar_sugestoes_api(termo):
+        c = carregar_config()
+        tmdb_key = c.get("tmdb_key", "").strip()
+        termo_limpo = termo.strip()
+        if not tmdb_key or len(termo_limpo) < 2:
+            ocultar_sugestoes()
+            return
+
+        try:
+            url = "https://api.themoviedb.org/3/search/multi"
+            params = {
+                "api_key": tmdb_key,
+                "query": termo_limpo,
+                "language": "pt-BR",
+                "include_adult": "false"
+            }
+            resp = requests.get(url, params=params, timeout=3.0)
+            if resp.status_code != 200:
+                return
+
+            itens = resp.json().get("results", [])
+            validos = [i for i in itens if i.get("media_type") in ["movie", "tv"]]
+
+            coluna_sugestoes.controls.clear()
+            for item in validos[:5]:
+                mtype = item.get("media_type", "movie")
+                mid = item.get("id")
+                tit = item.get("title") or item.get("name") or "Sem título"
+                ano = str((item.get("release_date") or item.get("first_air_date")) or "")[:4]
+                p_path = item.get("poster_path")
+                p_url = f"https://image.tmdb.org/t/p/w200{p_path}" if p_path else None
+
+                linha_item = ft.Container(
+                    padding=6,
+                    border_radius=6,
+                    ink=True,
+                    bgcolor=COR_CARD,
+                    on_click=lambda e, m=mid, mt=mtype, t=tit, a=ano, p=p_url: selecionar_sugestao(m, mt, t, a, p),
+                    content=ft.Row([
+                        ft.Image(
+                            src=p_url if p_url else "https://via.placeholder.com/40x60?text=-",
+                            width=32,
+                            height=46,
+                            border_radius=4,
+                            fit="cover"
+                        ),
+                        ft.Column([
+                            ft.Text(tit, size=12, weight="bold", color="white", max_lines=1, overflow="ellipsis"),
+                            ft.Text(f"{ano} • {'Série' if mtype == 'tv' else 'Filme'}", size=10, color="#94a3b8")
+                        ], spacing=2, expand=True)
+                    ], spacing=8)
+                )
+                coluna_sugestoes.controls.append(linha_item)
+
+            if len(coluna_sugestoes.controls) > 0:
+                largura_atual = page.width if page.width else 1000
+                container_sugestoes.visible = True
+                if largura_atual < 720:
+                    container_sugestoes.width = max(160, int(largura_atual * 0.46))
+                    container_sugestoes.left = max(10, int(largura_atual * 0.44))
+                    container_sugestoes.top = 175
+                else:
+                    container_sugestoes.width = 200
+                    container_sugestoes.left = max(0, int((largura_atual / 2) - 10))
+                    container_sugestoes.top = 175
+            else:
+                ocultar_sugestoes()
+
+            page.update()
+        except Exception:
+            pass
+
+    def disparar_busca_manual(e=None):
+        termo = campo_busca.value
+        if termo and len(termo.strip()) >= 2:
+            buscar_sugestoes_api(termo)
+
+    def ao_digitar_busca(e):
+        termo = campo_busca.value
+        if timer_busca["timer"]:
+            timer_busca["timer"].cancel()
+
+        if not termo or len(termo.strip()) < 2:
+            ocultar_sugestoes()
+            return
+
+        t = threading.Timer(0.25, buscar_sugestoes_api, args=[termo])
+        timer_busca["timer"] = t
+        t.start()
+
+    def fechar_busca_ao_perder_foco(e):
+        threading.Timer(0.3, ocultar_sugestoes).start()
+
+    campo_busca = ft.TextField(
+        hint_text="Buscar...",
+        hint_style=ft.TextStyle(size=12, color="#64748b"),
+        text_size=12,
+        bgcolor="#0d1419",
+        border_radius=10,
+        border_color=COR_BORDA,
+        focused_border_color=COR_PETROLEO,
+        width=150,
+        height=45,
+        content_padding=ft.Padding(10, 0, 8, 0),
+        on_change=ao_digitar_busca,
+        on_submit=disparar_busca_manual,
+        on_blur=fechar_busca_ao_perder_foco
+    )
+
+    btn_lupa = ft.IconButton(
+        icon=ft.Icons.SEARCH,
+        icon_color="#64748b",
+        icon_size=20,
+        tooltip="Buscar filme",
+        on_click=disparar_busca_manual
+    )
+
+    # -------------------------------------------------------------
+    # LOGO INTERATIVO
+    # -------------------------------------------------------------
+    def clicar_no_logo(e):
+        btn_logo_interativo.scale = 0.94
+        page.update()
+        time.sleep(0.06)
+        btn_logo_interativo.scale = 1.0
+        alternar_tela(0)
+
+    btn_logo_interativo = ft.Container(
+        content=ft.Image(src="logo.png", height=65, fit="contain"),
+        ink=True,
+        border_radius=8,
+        padding=4,
+        scale=1.0,
+        animate_scale=ft.Animation(100, ft.AnimationCurve.EASE_OUT),
+        tooltip="Voltar ao Início",
+        on_click=clicar_no_logo
+    )
+
+    btn_tab_bib = ft.Container(
+        content=ft.Image(src="biblioteca.png", height=45, fit="contain"),
+        ink=True,
+        border_radius=10,
+        border=criar_borda(2, "transparent"),
+        padding=2,
+        on_click=lambda e: alternar_tela(1)
+    )
+
+    lbl_user_tag = ft.Text("", size=12, color="#64748b", weight="bold")
+
+    def acao_logout(e):
+        try:
+            page.client_storage.clear()
+        except Exception:
+            pass
+        
+        sessao_usuario["id"] = None
+        sessao_usuario["username"] = ""
+        txt_auth_user.value = ""
+        txt_auth_pass.value = ""
+        txt_auth_pass_confirm.value = ""
+        txt_auth_erro.value = ""
+        
+        paginacao["pagina_atual"] = 1
+        paginacao["carregando"] = False
+        paginacao["fim"] = False
+        paginacao["filtro_home"] = "todos"
+        paginacao["ids_carregados"].clear()
+        grade_populares.controls.clear()
+        
+        definir_modo_auth("login")
+        layout_mestre.visible = False
+        card_auth.visible = True
+        page.update()
+
+    btn_logout = ft.IconButton(
+        icon=ft.Icons.LOGOUT,
+        icon_color=COR_VERMELHO_PLAY,
+        icon_size=18,
+        tooltip="Sair da conta",
+        on_click=acao_logout
+    )
+
+    bloco_usuario_topo = ft.Row(
+        controls=[lbl_user_tag, btn_logout],
+        spacing=4,
+        alignment=ft.MainAxisAlignment.END,
+        vertical_alignment=ft.CrossAxisAlignment.CENTER
+    )
+
+    linha_busca_input = ft.Row(
+        controls=[campo_busca, btn_lupa],
+        spacing=0,
+        vertical_alignment=ft.CrossAxisAlignment.CENTER
+    )
+
+    linha_inferior_menu = ft.Row(
+        controls=[
+            btn_tab_bib,
+            linha_busca_input
+        ],
+        spacing=10,
+        alignment=ft.MainAxisAlignment.CENTER,
+        vertical_alignment=ft.CrossAxisAlignment.CENTER
+    )
+
+    cabecalho_fixo = ft.Container(
+        bgcolor=COR_FUNDO,
+        padding=ft.Padding(12, 6, 12, 10),
+        border=ft.Border(bottom=ft.BorderSide(1, COR_BORDA)),
+        content=ft.Column([
+            progresso,
+            bloco_usuario_topo,
+            ft.Row([btn_logo_interativo], alignment=ft.MainAxisAlignment.CENTER),
+            linha_inferior_menu,
+            linha_seletor_home
+        ], spacing=8, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
+    )
+
+    # -------------------------------------------------------------
+    # ADAPTAÇÃO DINÂMICA
+    # -------------------------------------------------------------
+    def ajustar_layout_responsivo(e=None):
+        largura_janela = page.width if page.width else 1000
+        if largura_janela < 720:
+            campo_busca.width = max(130, int(largura_janela * 0.38))
+            btn_logo_interativo.content.height = 50
+            btn_tab_bib.content.height = 40
+            titulo_trends.width = None
+        else:
+            campo_busca.width = 180
+            btn_logo_interativo.content.height = 65
+            btn_tab_bib.content.height = 45
+            titulo_trends.width = 1100
+        page.update()
+
+    page.on_resized = ajustar_layout_responsivo
+
+    # -------------------------------------------------------------
+    # VIEWS
+    # -------------------------------------------------------------
+    titulo_trends = ft.Container(
+        content=ft.Row([
+            ft.Text("Em Alta (TMDb Trends)", size=15, weight="bold", color=COR_TEXTO_CLARO)
+        ], alignment=ft.MainAxisAlignment.START),
+        width=1100,
+        padding=ft.Padding(0, 10, 0, 0)
+    )
+
+    bloco_carregamento_fim = ft.Column(
+        controls=[
+            spinner_carregamento,
+            btn_carregar_mais
+        ],
+        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+        spacing=8
+    )
+
+    view_inicio = ft.Container(
+        expand=True,
+        padding=ft.Padding(8, 0, 8, 10),
+        content=ft.Column(
+            scroll=ft.ScrollMode.AUTO,
+            on_scroll=ao_rolar_inicio,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            spacing=14,
+            controls=[
+                titulo_trends,
+                grade_populares,
+                ft.Container(
+                    content=bloco_carregamento_fim,
+                    alignment=ft.Alignment(0, 0),
+                    padding=ft.Padding(0, 15, 0, 40)
+                )
+            ]
+        )
+    )
+
+    view_biblioteca = ft.Container(
+        expand=True,
+        visible=False,
+        padding=ft.Padding(8, 10, 8, 10),
+        content=ft.Column(
+            scroll=ft.ScrollMode.AUTO,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            spacing=14,
+            controls=[coluna_biblioteca_itens]
+        )
+    )
+
+    def alternar_tela(indice):
+        fechar_dialogo(modal_detalhes)
+        ocultar_sugestoes()
+
+        if indice == 0:
+            view_inicio.visible = True
+            view_biblioteca.visible = False
+            linha_seletor_home.visible = True
+            btn_tab_bib.border = criar_borda(2, "transparent")
+            btn_logo_interativo.border = criar_borda(2, COR_PETROLEO)
+        elif indice == 1:
+            carregar_biblioteca()
+            view_inicio.visible = False
+            view_biblioteca.visible = True
+            linha_seletor_home.visible = False
+            btn_tab_bib.border = criar_borda(2, COR_PETROLEO)
+            btn_logo_interativo.border = criar_borda(2, "transparent")
+
+        page.update()
+
+    layout_mestre = ft.Column(
+        expand=True,
+        spacing=0,
+        visible=False,
+        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+        controls=[
+            cabecalho_fixo,
+            view_inicio,
+            view_biblioteca
+        ]
+    )
+
+    # -------------------------------------------------------------
+    # AUTENTICAÇÃO
+    # -------------------------------------------------------------
+    logo_login = ft.Image(src="logo.png", height=65, fit="contain")
+
+    txt_auth_titulo = ft.Text("Entrar", size=18, weight="bold", color=COR_TEXTO_CLARO)
+    txt_auth_erro = ft.Text("", size=12, color="#ef4444")
+    
+    txt_auth_user = ft.TextField(
+        label="Nome de Usuário",
+        label_style=ft.TextStyle(color="#94a3b8"),
+        bgcolor=COR_FUNDO,
+        dense=True,
+        border_radius=8,
+        border_color=COR_BORDA,
+        focused_border_color=COR_PETROLEO,
+        width=300
+    )
+    txt_auth_pass = ft.TextField(
+        label="Senha",
+        label_style=ft.TextStyle(color="#94a3b8"),
+        password=True,
+        can_reveal_password=True,
+        bgcolor=COR_FUNDO,
+        dense=True,
+        border_radius=8,
+        border_color=COR_BORDA,
+        focused_border_color=COR_PETROLEO,
+        width=300
+    )
+    txt_auth_pass_confirm = ft.TextField(
+        label="Confirmar Nova Senha",
+        label_style=ft.TextStyle(color="#94a3b8"),
+        password=True,
+        can_reveal_password=True,
+        bgcolor=COR_FUNDO,
+        dense=True,
+        border_radius=8,
+        border_color=COR_BORDA,
+        focused_border_color=COR_PETROLEO,
+        width=300,
+        visible=False
+    )
+
+    chk_manter_conectado = ft.Checkbox(
+        label="Permanecer conectado",
+        label_style=ft.TextStyle(size=12, color=COR_TEXTO_CLARO),
+        value=True,
+        fill_color=COR_PETROLEO,
+        check_color="white"
+    )
+    container_chk_manter = ft.Container(
+        content=chk_manter_conectado,
+        width=300,
+        alignment=ft.Alignment(-1, 0),
+        visible=True
+    )
+
+    modo_auth = {"modo": "login"}
+
+    def definir_modo_auth(novo_modo):
+        modo_auth["modo"] = novo_modo
+        txt_auth_erro.value = ""
+        txt_auth_pass_confirm.visible = (novo_modo == "recuperar")
+        container_chk_manter.visible = (novo_modo == "login")
+        
+        if novo_modo == "login":
+            txt_auth_titulo.value = "Entrar"
+            txt_auth_pass.label = "Senha"
+            btn_executar_auth.bgcolor = COR_PETROLEO
+            btn_executar_auth.content = ft.Text("Entrar", color="white", weight="bold")
+            btn_alternar_auth.content = ft.Text("Não tem uma conta? Cadastre-se", color="#94a3b8", size=12)
+            btn_recuperar_auth.visible = True
+            
+        elif novo_modo == "cadastro":
+            txt_auth_titulo.value = "Criar Nova Conta"
+            txt_auth_pass.label = "Senha"
+            btn_executar_auth.bgcolor = COR_PETROLEO
+            btn_executar_auth.content = ft.Text("Cadastrar Nova Conta", color="white", weight="bold")
+            btn_alternar_auth.content = ft.Text("Já tem uma conta? Entrar", color="#94a3b8", size=12)
+            btn_recuperar_auth.visible = False
+            
+        elif novo_modo == "recuperar":
+            txt_auth_titulo.value = "Recuperar / Trocar Senha"
+            txt_auth_pass.label = "Nova Senha"
+            btn_executar_auth.bgcolor = COR_VERMELHO_PLAY
+            btn_executar_auth.content = ft.Text("Salvar Nova Senha", color="white", weight="bold")
+            btn_alternar_auth.content = ft.Text("Lembrou da senha? Voltar ao Login", color="#94a3b8", size=12)
+            btn_recuperar_auth.visible = False
+            
+        page.update()
+
+    def iniciar_sessao(uid, username, persistir=True):
+        sessao_usuario["id"] = int(uid)
+        sessao_usuario["username"] = str(username)
+        lbl_user_tag.value = f"👤 {username}"
+        
+        if persistir:
+            try:
+                page.client_storage.set("user_id", str(uid))
+                page.client_storage.set("username", str(username))
+                page.client_storage.set("manter_conectado", "true")
+            except Exception:
+                pass
+
+        spinner_autologin.visible = False
+        card_auth.visible = False
+        layout_mestre.visible = True
+        ajustar_layout_responsivo()
+        page.update()
+
+        paginacao["pagina_atual"] = 1
+        paginacao["carregando"] = False
+        paginacao["fim"] = False
+        paginacao["filtro_home"] = "todos"
+        paginacao["ids_carregados"].clear()
+        grade_populares.controls.clear()
+
+        carregar_populares()
+
+    def processar_auth(e):
+        usuario = txt_auth_user.value.strip() if txt_auth_user.value else ""
+        senha = txt_auth_pass.value.strip() if txt_auth_pass.value else ""
+        senha_confirm = txt_auth_pass_confirm.value.strip() if txt_auth_pass_confirm.value else ""
+
+        if not usuario or not senha:
+            txt_auth_erro.value = "Preencha todos os campos obrigatórios."
+            page.update()
+            return
+
+        if len(usuario) < 3:
+            txt_auth_erro.value = "O usuário deve ter pelo menos 3 caracteres."
+            page.update()
+            return
+
+        if len(senha) < 4:
+            txt_auth_erro.value = "A senha deve ter pelo menos 4 caracteres."
+            page.update()
+            return
+
+        user_auth_id = None
+        user_auth_nome = None
+        conn = None
+
+        try:
+            conn = sqlite3.connect(DB_FILE, timeout=5)
+            c = conn.cursor()
+
+            if modo_auth["modo"] == "cadastro":
+                c.execute("SELECT id FROM usuarios WHERE username = ?", (usuario,))
+                if c.fetchone():
+                    txt_auth_erro.value = "Este nome de usuário já está em uso."
+                    page.update()
+                    return
+
+                p_hash = gerar_hash_senha(senha)
+                c.execute("INSERT INTO usuarios (username, password_hash) VALUES (?, ?)", (usuario, p_hash))
+                user_auth_id = c.lastrowid
+                user_auth_nome = usuario
+                conn.commit()
+
+            elif modo_auth["modo"] == "login":
+                c.execute("SELECT id, password_hash FROM usuarios WHERE username = ?", (usuario,))
+                user_row = c.fetchone()
+                if not user_row or not verificar_senha(senha, user_row[1]):
+                    txt_auth_erro.value = "Usuário ou senha inválidos."
+                    page.update()
+                    return
+
+                user_auth_id = user_row[0]
+                user_auth_nome = usuario
+
+            elif modo_auth["modo"] == "recuperar":
+                if senha != senha_confirm:
+                    txt_auth_erro.value = "As senhas digitadas não coincidem."
+                    page.update()
+                    return
+
+                c.execute("SELECT id FROM usuarios WHERE username = ?", (usuario,))
+                user_row = c.fetchone()
+                if not user_row:
+                    txt_auth_erro.value = "Usuário não encontrado."
+                    page.update()
+                    return
+
+                novo_hash = gerar_hash_senha(senha)
+                c.execute("UPDATE usuarios SET password_hash = ? WHERE id = ?", (novo_hash, user_row[0]))
+                conn.commit()
+                user_auth_id = user_row[0]
+                user_auth_nome = usuario
+
+        except Exception as err:
+            txt_auth_erro.value = f"Erro no banco: {err}"
+            page.update()
+            return
+        finally:
+            if conn:
+                conn.close()
+
+        if user_auth_id and user_auth_nome:
+            deve_manter = chk_manter_conectado.value if modo_auth["modo"] == "login" else True
+            iniciar_sessao(user_auth_id, user_auth_nome, persistir=deve_manter)
+
+    btn_executar_auth = ft.Button(
+        content=ft.Text("Entrar", color="white", weight="bold"),
+        bgcolor=COR_PETROLEO,
+        width=300,
+        height=40,
+        style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8)),
+        on_click=processar_auth
+    )
+
+    btn_alternar_auth = ft.Button(
+        content=ft.Text("Não tem uma conta? Cadastre-se", color="#94a3b8", size=12),
+        bgcolor="transparent",
+        on_click=lambda e: definir_modo_auth("cadastro" if modo_auth["modo"] == "login" else "login")
+    )
+
+    btn_recuperar_auth = ft.Button(
+        content=ft.Text("Esqueceu a senha?", color="#64748b", size=11),
+        bgcolor="transparent",
+        on_click=lambda e: definir_modo_auth("recuperar")
+    )
+
+    card_interno_auth = ft.Container(
+        width=360,
+        bgcolor=COR_CARD,
+        padding=24,
+        border_radius=12,
+        border=criar_borda(1.5, COR_BORDA),
+        content=ft.Column([
+            logo_login,
+            ft.Container(height=4),
+            txt_auth_titulo,
+            txt_auth_erro,
+            txt_auth_user,
+            txt_auth_pass,
+            txt_auth_pass_confirm,
+            container_chk_manter,
+            ft.Container(height=4),
+            btn_executar_auth,
+            btn_alternar_auth,
+            btn_recuperar_auth
+        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=8)
+    )
+
+    card_auth = ft.Container(
+        alignment=ft.Alignment(0, 0),
+        padding=ft.Padding(0, 60, 0, 0),
+        content=card_interno_auth,
+        visible=False
+    )
+
+    spinner_autologin = ft.Container(
+        alignment=ft.Alignment(0, 0),
+        padding=ft.Padding(0, 140, 0, 0),
+        content=ft.Column([
+            ft.Image(src="loading.png", width=90, height=90, fit="contain"),
+            ft.ProgressRing(width=28, height=28, stroke_width=2.5, color=COR_PETROLEO)
+        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=16),
+        visible=True
+    )
+
+    page.add(spinner_autologin, card_auth, layout_mestre)
+    page.update()
+
+    # -------------------------------------------------------------
+    # RECUPERAÇÃO DE SESSÃO SEM BLOQUEIOS
+    # -------------------------------------------------------------
+    def verificar_sessao_salva():
+        saved_uid = None
+        saved_user = None
+
+        # Tenta ler com tolerância a resposta do navegador
+        for _ in range(4):
+            try:
+                saved_uid = page.client_storage.get("user_id")
+                saved_user = page.client_storage.get("username")
+                if saved_uid and saved_user:
+                    break
+            except Exception:
+                pass
+            time.sleep(0.12)
+
+        if saved_uid and saved_user:
+            iniciar_sessao(saved_uid, saved_user, persistir=True)
+        else:
+            spinner_autologin.visible = False
+            definir_modo_auth("login")
+            card_auth.visible = True
+            layout_mestre.visible = False
+            ajustar_layout_responsivo()
+            page.update()
+
+    threading.Thread(target=verificar_sessao_salva, daemon=True).start()
+
+if __name__ == "__main__":
+    porta = int(os.environ.get("PORT", 8550))
+    ft.run(
+        main,
+        view=ft.AppView.WEB_BROWSER,
+        host="0.0.0.0",
+        port=porta,
+        assets_dir=DIR_ASSETS
+    )
