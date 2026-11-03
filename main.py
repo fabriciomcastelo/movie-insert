@@ -451,8 +451,7 @@ def main(page: ft.Page):
     btn_salvar.on_click = salvar_filme_ativo
 
     def abrir_detalhes(mid, mtype, titulo_prev, ano_prev, poster_prev):
-        container_sugestoes.visible = False
-        coluna_sugestoes.controls.clear()
+        ocultar_sugestoes()
 
         mtype_seguro = "tv" if mtype in ["tv", "series"] else "movie"
 
@@ -905,10 +904,7 @@ def main(page: ft.Page):
     )
 
     def ao_rolar_inicio(e: ft.OnScrollEvent):
-        if container_sugestoes.visible:
-            container_sugestoes.visible = False
-            page.update()
-
+        ocultar_sugestoes()
         distancia_do_fim = e.max_scroll_extent - e.pixels
         percentual = (e.pixels / e.max_scroll_extent) if e.max_scroll_extent > 0 else 0
 
@@ -1291,7 +1287,7 @@ def main(page: ft.Page):
         page.update()
 
     # -------------------------------------------------------------
-    # SUGESTÕES DE BUSCA (ISOLAMENTO SEGURO VIA OVERLAY)
+    # SUGESTÕES DE BUSCA VIA OVERLAY
     # -------------------------------------------------------------
     coluna_sugestoes = ft.Column(spacing=4, scroll=ft.ScrollMode.AUTO)
 
@@ -1473,6 +1469,7 @@ def main(page: ft.Page):
     def acao_logout(e):
         try:
             page.client_storage.clear()
+            page.run_javascript("window.history.replaceState({}, '', '/');")
         except Exception:
             pass
         
@@ -1743,7 +1740,16 @@ def main(page: ft.Page):
             try:
                 page.client_storage.set("user_id", str(uid))
                 page.client_storage.set("username", str(username))
-                page.client_storage.set("manter_conectado", "true")
+                
+                # Gera o token de validação derivado do hash do usuário
+                conn = sqlite3.connect(DB_FILE, timeout=5)
+                c = conn.cursor()
+                c.execute("SELECT password_hash FROM usuarios WHERE id = ?", (uid,))
+                row = c.fetchone()
+                conn.close()
+                if row and row[0]:
+                    token = row[0][:16]
+                    page.run_javascript(f"window.history.replaceState({{}}, '', '/?u={username}&k={token}');")
             except Exception:
                 pass
 
@@ -1909,14 +1915,37 @@ def main(page: ft.Page):
     page.update()
 
     # -------------------------------------------------------------
-    # RECUPERAÇÃO DE SESSÃO SEM BLOQUEIOS
+    # RECUPERAÇÃO DE SESSÃO COM TOKEN DE URL E CLIENT STORAGE
     # -------------------------------------------------------------
     def verificar_sessao_salva():
+        # 1. Recupera credenciais via parâmetros da URL (?u=usuario&k=token)
+        user_url = None
+        token_url = None
+        try:
+            query_dict = getattr(page, "query", None)
+            if query_dict:
+                user_url = query_dict.get("u")
+                token_url = query_dict.get("k")
+        except Exception:
+            pass
+
+        if user_url and token_url:
+            try:
+                conn = sqlite3.connect(DB_FILE, timeout=5)
+                c = conn.cursor()
+                c.execute("SELECT id, password_hash FROM usuarios WHERE username = ?", (user_url,))
+                row = c.fetchone()
+                conn.close()
+                if row and row[1] and row[1].startswith(token_url):
+                    iniciar_sessao(row[0], user_url, persistir=True)
+                    return
+            except Exception:
+                pass
+
+        # 2. Se não houver parâmetros válidos na URL, consulta o client_storage
         saved_uid = None
         saved_user = None
-
-        # Tenta ler com tolerância a resposta do navegador
-        for _ in range(4):
+        for _ in range(3):
             try:
                 saved_uid = page.client_storage.get("user_id")
                 saved_user = page.client_storage.get("username")
