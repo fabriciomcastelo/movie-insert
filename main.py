@@ -55,7 +55,7 @@ def carregar_config():
     return cfg
 
 # -------------------------------------------------------------
-# SEGURANÇA E BASE DE DADOS
+# SEGURANÇA E BANCO DE DADOS
 # -------------------------------------------------------------
 def gerar_hash_senha(senha: str) -> str:
     salt = os.urandom(16).hex()
@@ -83,7 +83,7 @@ def verificar_senha(senha_fornecida: str, hash_armazenado: str) -> bool:
 def init_db():
     conn = None
     try:
-        conn = sqlite3.connect(DB_FILE, timeout=15)
+        conn = sqlite3.connect(DB_FILE, timeout=10)
         c = conn.cursor()
         c.execute("PRAGMA journal_mode=WAL;")
         
@@ -215,7 +215,7 @@ def main(page: ft.Page):
         if fid and uid:
             conn = None
             try:
-                conn = sqlite3.connect(DB_FILE, timeout=10)
+                conn = sqlite3.connect(DB_FILE, timeout=5)
                 c = conn.cursor()
                 c.execute("DELETE FROM filmes WHERE id = ? AND usuario_id = ?", (fid, uid))
                 conn.commit()
@@ -286,7 +286,7 @@ def main(page: ft.Page):
         if fid and uid:
             conn = None
             try:
-                conn = sqlite3.connect(DB_FILE, timeout=10)
+                conn = sqlite3.connect(DB_FILE, timeout=5)
                 c = conn.cursor()
                 c.execute("UPDATE filmes SET categoria = 'Assistidos', nota_usuario = ? WHERE id = ? AND usuario_id = ?", (nota, fid, uid))
                 conn.commit()
@@ -323,7 +323,7 @@ def main(page: ft.Page):
         abrir_dialogo(modal_avaliacao)
 
     # -------------------------------------------------------------
-    # JANELA DE DETALHES COM SUPORTE A SÉRIE E METASCORE
+    # JANELA DE DETALHES
     # -------------------------------------------------------------
     dt_img = ft.Image(
         src="https://via.placeholder.com/130x195?text=Sem+Poster",
@@ -421,7 +421,7 @@ def main(page: ft.Page):
         tipo_salvar = it.get("tipo", "movie")
         conn = None
         try:
-            conn = sqlite3.connect(DB_FILE, timeout=10)
+            conn = sqlite3.connect(DB_FILE, timeout=5)
             c = conn.cursor()
             c.execute("SELECT categoria FROM filmes WHERE id = ? AND usuario_id = ?", (it["id"], uid))
             if not c.fetchone():
@@ -451,7 +451,8 @@ def main(page: ft.Page):
     btn_salvar.on_click = salvar_filme_ativo
 
     def abrir_detalhes(mid, mtype, titulo_prev, ano_prev, poster_prev):
-        ocultar_sugestoes()
+        coluna_sugestoes.controls.clear()
+        container_sugestoes.visible = False
 
         mtype_seguro = "tv" if mtype in ["tv", "series"] else "movie"
 
@@ -488,7 +489,7 @@ def main(page: ft.Page):
         def _fetch():
             try:
                 url_tmdb = f"https://api.themoviedb.org/3/{mtype_seguro}/{mid}?api_key={tmdb_key}&language=pt-BR&append_to_response=credits,watch/providers,external_ids,videos,release_dates"
-                res = requests.get(url_tmdb, timeout=4.0).json()
+                res = requests.get(url_tmdb, timeout=3.5).json()
 
                 if mtype_seguro == "movie":
                     diretor = "N/A"
@@ -526,7 +527,7 @@ def main(page: ft.Page):
 
                 if omdb_key and imdb_id:
                     try:
-                        res_omdb = requests.get(f"https://www.omdbapi.com/?i={imdb_id}&apikey={omdb_key}", timeout=2.5).json()
+                        res_omdb = requests.get(f"https://www.omdbapi.com/?i={imdb_id}&apikey={omdb_key}", timeout=2.0).json()
                         if res_omdb.get("Response") == "True":
                             imdb_nota = res_omdb.get("imdbRating", "N/A")
                             m_raw = res_omdb.get("Metascore", "N/A")
@@ -574,7 +575,7 @@ def main(page: ft.Page):
                 if uid:
                     conn = None
                     try:
-                        conn = sqlite3.connect(DB_FILE, timeout=10)
+                        conn = sqlite3.connect(DB_FILE, timeout=5)
                         cur = conn.cursor()
                         cur.execute("SELECT nota_usuario, categoria FROM filmes WHERE id = ? AND usuario_id = ?", (chave_id, uid))
                         row = cur.fetchone()
@@ -762,7 +763,7 @@ def main(page: ft.Page):
 
     grade_populares = ft.Row(wrap=True, spacing=12, run_spacing=14, alignment=ft.MainAxisAlignment.CENTER)
     coluna_biblioteca_itens = ft.Column(spacing=16, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
-    spinner_carregamento = ft.ProgressRing(width=30, height=30, stroke_width=3, color=COR_PETROLEO, visible=False)
+    spinner_carregamento = ft.ProgressRing(width=28, height=28, stroke_width=2.5, color=COR_PETROLEO, visible=False)
 
     btn_carregar_mais = ft.Button(
         content=ft.Text("Carregar Mais Títulos", size=12, weight="bold", color=COR_TEXTO_CLARO),
@@ -776,7 +777,7 @@ def main(page: ft.Page):
     )
 
     # -------------------------------------------------------------
-    # POPULARES E ROLAGEM INFINITA
+    # POPULARES E ROLAGEM INFINITA (SEM BLOQUEIOS DE THREAD)
     # -------------------------------------------------------------
     def carregar_populares(incrementar=False):
         c = carregar_config()
@@ -816,7 +817,7 @@ def main(page: ft.Page):
                 else:
                     url = f"https://api.themoviedb.org/3/trending/all/week?api_key={tmdb_key}&language=pt-BR&page={p}"
 
-                resp = requests.get(url, timeout=5.0)
+                resp = requests.get(url, timeout=4.0)
 
                 if resp.status_code == 200:
                     dados = resp.json()
@@ -904,7 +905,6 @@ def main(page: ft.Page):
     )
 
     def ao_rolar_inicio(e: ft.OnScrollEvent):
-        ocultar_sugestoes()
         distancia_do_fim = e.max_scroll_extent - e.pixels
         percentual = (e.pixels / e.max_scroll_extent) if e.max_scroll_extent > 0 else 0
 
@@ -917,7 +917,7 @@ def main(page: ft.Page):
         if uid:
             conn = None
             try:
-                conn = sqlite3.connect(DB_FILE, timeout=10)
+                conn = sqlite3.connect(DB_FILE, timeout=5)
                 c = conn.cursor()
                 c.execute("DELETE FROM filmes WHERE id = ? AND usuario_id = ?", (fid, uid))
                 conn.commit()
@@ -934,7 +934,7 @@ def main(page: ft.Page):
         if uid:
             conn = None
             try:
-                conn = sqlite3.connect(DB_FILE, timeout=10)
+                conn = sqlite3.connect(DB_FILE, timeout=5)
                 c = conn.cursor()
                 c.execute("SELECT titulo, ano, imdb, rotten, streaming, diretor, tipo FROM filmes WHERE categoria = 'Para Assistir' AND usuario_id = ? ORDER BY titulo ASC", (uid,))
                 filmes = c.fetchall()
@@ -983,7 +983,7 @@ def main(page: ft.Page):
         if uid:
             conn = None
             try:
-                conn = sqlite3.connect(DB_FILE, timeout=10)
+                conn = sqlite3.connect(DB_FILE, timeout=5)
                 c = conn.cursor()
                 c.execute("""
                     SELECT id, titulo, ano, poster_url, nota_usuario, categoria, streaming, generos, imdb, tipo 
@@ -1234,7 +1234,7 @@ def main(page: ft.Page):
             for letra in letras_ordenadas:
                 renderizar_secao(f"Letra {letra}", "🔤", COR_TEXTO_CLARO, mapa_alfabetico[letra])
 
-        # ---------------- MODO 3: GÉNEROS ----------------
+        # ---------------- MODO 3: GÊNEROS ----------------
         elif modo_atual == "genero":
             mapa_generos = {}
             for row in itens_filtrados:
@@ -1287,7 +1287,7 @@ def main(page: ft.Page):
         page.update()
 
     # -------------------------------------------------------------
-    # SUGESTÕES NO OVERLAY
+    # SUGESTÕES DE BUSCA (INLINE, SEM OVERLAY BLOQUEANTE)
     # -------------------------------------------------------------
     coluna_sugestoes = ft.Column(spacing=4, scroll=ft.ScrollMode.AUTO)
 
@@ -1298,23 +1298,13 @@ def main(page: ft.Page):
         border=criar_borda(1.2, COR_PETROLEO),
         padding=6,
         visible=False,
-        width=0,
-        height=0,
-        top=175,
-        left=20,
-        shadow=ft.BoxShadow(blur_radius=15, color="#000000")
+        width=224,
+        max_height=240,
+        shadow=ft.BoxShadow(blur_radius=12, color="#000000")
     )
-    page.overlay.append(container_sugestoes)
-
-    def ocultar_sugestoes():
-        if container_sugestoes.visible:
-            container_sugestoes.visible = False
-            container_sugestoes.width = 0
-            container_sugestoes.height = 0
-            page.update()
 
     def selecionar_sugestao(mid, mtype, tit, ano, p_url):
-        ocultar_sugestoes()
+        container_sugestoes.visible = False
         campo_busca.value = ""
         page.update()
         abrir_detalhes(mid, mtype, tit, ano, p_url)
@@ -1324,7 +1314,8 @@ def main(page: ft.Page):
         tmdb_key = c.get("tmdb_key", "").strip()
         termo_limpo = termo.strip()
         if not tmdb_key or len(termo_limpo) < 2:
-            ocultar_sugestoes()
+            container_sugestoes.visible = False
+            page.update()
             return
 
         try:
@@ -1335,7 +1326,7 @@ def main(page: ft.Page):
                 "language": "pt-BR",
                 "include_adult": "false"
             }
-            resp = requests.get(url, params=params, timeout=3.5)
+            resp = requests.get(url, params=params, timeout=3.0)
             if resp.status_code != 200:
                 return
 
@@ -1343,7 +1334,7 @@ def main(page: ft.Page):
             validos = [i for i in itens if i.get("media_type") in ["movie", "tv"]]
 
             coluna_sugestoes.controls.clear()
-            for item in validos[:6]:
+            for item in validos[:5]:
                 mtype = item.get("media_type", "movie")
                 mid = item.get("id")
                 tit = item.get("title") or item.get("name") or "Sem título"
@@ -1360,35 +1351,20 @@ def main(page: ft.Page):
                     content=ft.Row([
                         ft.Image(
                             src=p_url if p_url else "https://via.placeholder.com/40x60?text=-",
-                            width=35,
-                            height=50,
+                            width=32,
+                            height=46,
                             border_radius=4,
                             fit="cover"
                         ),
                         ft.Column([
-                            ft.Text(tit, size=13, weight="bold", color="white", max_lines=1, overflow="ellipsis"),
-                            ft.Text(f"{ano} • {'Série' if mtype == 'tv' else 'Filme'}", size=11, color="#94a3b8")
+                            ft.Text(tit, size=12, weight="bold", color="white", max_lines=1, overflow="ellipsis"),
+                            ft.Text(f"{ano} • {'Série' if mtype == 'tv' else 'Filme'}", size=10, color="#94a3b8")
                         ], spacing=2, expand=True)
-                    ], spacing=10)
+                    ], spacing=8)
                 )
                 coluna_sugestoes.controls.append(linha_item)
 
-            if len(coluna_sugestoes.controls) > 0:
-                largura_atual = page.width if page.width else 1000
-                container_sugestoes.visible = True
-                if largura_atual < 720:
-                    container_sugestoes.width = max(180, int(largura_atual - 140))
-                    container_sugestoes.height = 240
-                    container_sugestoes.left = 135
-                    container_sugestoes.top = 160
-                else:
-                    container_sugestoes.width = 240
-                    container_sugestoes.height = 260
-                    container_sugestoes.left = max(0, int((largura_atual / 2) - 30))
-                    container_sugestoes.top = 160
-            else:
-                ocultar_sugestoes()
-
+            container_sugestoes.visible = len(coluna_sugestoes.controls) > 0
             page.update()
         except Exception:
             pass
@@ -1404,7 +1380,8 @@ def main(page: ft.Page):
             timer_busca["timer"].cancel()
 
         if not termo or len(termo.strip()) < 2:
-            ocultar_sugestoes()
+            container_sugestoes.visible = False
+            page.update()
             return
 
         t = threading.Timer(0.25, buscar_sugestoes_api, args=[termo])
@@ -1412,8 +1389,13 @@ def main(page: ft.Page):
         t.start()
 
     def fechar_busca_ao_perder_foco(e):
-        threading.Timer(0.25, ocultar_sugestoes).start()
+        def _ocultar():
+            if container_sugestoes.visible:
+                container_sugestoes.visible = False
+                page.update()
+        threading.Timer(0.3, _ocultar).start()
 
+    # Largura adaptada para não cortar em telemóveis
     campo_busca = ft.TextField(
         hint_text="Buscar...",
         hint_style=ft.TextStyle(size=12, color="#64748b"),
@@ -1439,12 +1421,12 @@ def main(page: ft.Page):
     )
 
     # -------------------------------------------------------------
-    # LOGÓTIPO INTERATIVO
+    # LOGO INTERATIVO
     # -------------------------------------------------------------
     def clicar_no_logo(e):
         btn_logo_interativo.scale = 0.94
         page.update()
-        time.sleep(0.08)
+        time.sleep(0.06)
         btn_logo_interativo.scale = 1.0
         alternar_tela(0)
 
@@ -1454,7 +1436,7 @@ def main(page: ft.Page):
         border_radius=8,
         padding=4,
         scale=1.0,
-        animate_scale=ft.Animation(120, ft.AnimationCurve.EASE_OUT),
+        animate_scale=ft.Animation(100, ft.AnimationCurve.EASE_OUT),
         tooltip="Voltar ao Início",
         on_click=clicar_no_logo
     )
@@ -1518,14 +1500,19 @@ def main(page: ft.Page):
         vertical_alignment=ft.CrossAxisAlignment.CENTER
     )
 
+    coluna_busca_integrada = ft.Column([
+        linha_busca_input,
+        container_sugestoes
+    ], spacing=4, tight=True)
+
     linha_inferior_menu = ft.Row(
         controls=[
             btn_tab_bib,
-            linha_busca_input
+            coluna_busca_integrada
         ],
         spacing=10,
         alignment=ft.MainAxisAlignment.CENTER,
-        vertical_alignment=ft.CrossAxisAlignment.CENTER
+        vertical_alignment=ft.CrossAxisAlignment.START
     )
 
     cabecalho_fixo = ft.Container(
@@ -1547,12 +1534,14 @@ def main(page: ft.Page):
     def ajustar_layout_responsivo(e=None):
         largura_janela = page.width if page.width else 1000
         if largura_janela < 720:
-            campo_busca.width = max(130, int(largura_janela * 0.42))
+            campo_busca.width = max(130, int(largura_janela * 0.38))
+            container_sugestoes.width = max(130, int(largura_janela * 0.38)) + 35
             btn_logo_interativo.content.height = 50
             btn_tab_bib.content.height = 40
             titulo_trends.width = None
         else:
-            campo_busca.width = 200
+            campo_busca.width = 180
+            container_sugestoes.width = 224
             btn_logo_interativo.content.height = 65
             btn_tab_bib.content.height = 45
             titulo_trends.width = 1100
@@ -1614,7 +1603,7 @@ def main(page: ft.Page):
 
     def alternar_tela(indice):
         fechar_dialogo(modal_detalhes)
-        ocultar_sugestoes()
+        container_sugestoes.visible = False
 
         if indice == 0:
             view_inicio.visible = True
@@ -1789,7 +1778,7 @@ def main(page: ft.Page):
         conn = None
 
         try:
-            conn = sqlite3.connect(DB_FILE, timeout=10)
+            conn = sqlite3.connect(DB_FILE, timeout=5)
             c = conn.cursor()
 
             if modo_auth["modo"] == "cadastro":
@@ -1911,10 +1900,9 @@ def main(page: ft.Page):
     page.update()
 
     # -------------------------------------------------------------
-    # RECUPERAÇÃO DE SESSÃO COM TOLERÂNCIA
+    # RECUPERAÇÃO DE SESSÃO SEM BLOQUEIO
     # -------------------------------------------------------------
     def verificar_sessao_salva():
-        time.sleep(0.3)
         saved_uid = None
         saved_user = None
         saved_manter = None
