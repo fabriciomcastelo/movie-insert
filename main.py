@@ -7,7 +7,7 @@ import threading
 import unicodedata
 import hashlib
 import time
-from urllib.parse import quote_plus, parse_qs, urlparse
+from urllib.parse import quote_plus
 from datetime import datetime
 
 CONFIG_FILE = "config.json"
@@ -55,7 +55,7 @@ def carregar_config():
     return cfg
 
 # -------------------------------------------------------------
-# SEGURANÇA E BANCO DE DADOS
+# SEGURANÇA E BASE DE DADOS
 # -------------------------------------------------------------
 def gerar_hash_senha(senha: str) -> str:
     salt = os.urandom(16).hex()
@@ -1287,7 +1287,7 @@ def main(page: ft.Page):
         page.update()
 
     # -------------------------------------------------------------
-    # SUGESTÕES DE BUSCA (OVERLAY)
+    # SUGESTÕES DE BUSCA
     # -------------------------------------------------------------
     coluna_sugestoes = ft.Column(spacing=4, scroll=ft.ScrollMode.AUTO)
 
@@ -1468,8 +1468,8 @@ def main(page: ft.Page):
 
     def acao_logout(e):
         try:
+            page.run_javascript("localStorage.removeItem('mi_auth');")
             page.client_storage.clear()
-            page.go("/")
         except Exception:
             pass
         
@@ -1738,20 +1738,18 @@ def main(page: ft.Page):
         
         if persistir:
             try:
-                page.client_storage.set("user_id", str(uid))
-                page.client_storage.set("username", str(username))
-                
-                # Gera o token de URL seguro e atualiza a rota do Flet nativamente
                 conn = sqlite3.connect(DB_FILE, timeout=5)
                 c = conn.cursor()
                 c.execute("SELECT password_hash FROM usuarios WHERE id = ?", (uid,))
                 row = c.fetchone()
                 conn.close()
-                if row and row[0]:
-                    token = row[0][:16]
-                    nova_rota = f"/?u={username}&k={token}"
-                    if page.route != nova_rota:
-                        page.go(nova_rota)
+                token = row[0][:16] if row and row[0] else "authtoken"
+                
+                # Guarda diretamente no localStorage do browser com persistência real
+                dados_storage = json.dumps({"uid": str(uid), "user": str(username), "tok": token})
+                page.run_javascript(f"localStorage.setItem('mi_auth', '{dados_storage}');")
+                page.client_storage.set("user_id", str(uid))
+                page.client_storage.set("username", str(username))
             except Exception:
                 pass
 
@@ -1917,46 +1915,69 @@ def main(page: ft.Page):
     page.update()
 
     # -------------------------------------------------------------
-    # RECUPERAÇÃO DE SESSÃO ROBUSTA VIA ROTA (PAGE.ROUTE)
+    # RESPOSTA DO LOCALSTORAGE NATIVO DO BROWSER
     # -------------------------------------------------------------
-    def verificar_sessao_salva():
-        # 1. Tenta extrair credenciais diretamente da URL (page.route)
-        try:
-            rota_completa = page.route or "/"
-            parsed = urlparse(rota_completa)
-            qs = parse_qs(parsed.query)
-            
-            user_url = qs.get("u", [None])[0]
-            token_url = qs.get("k", [None])[0]
+    autologin_resolvido = {"ok": False}
 
-            if user_url and token_url:
-                conn = sqlite3.connect(DB_FILE, timeout=5)
-                c = conn.cursor()
-                c.execute("SELECT id, password_hash FROM usuarios WHERE username = ?", (user_url,))
-                row = c.fetchone()
-                conn.close()
-                if row and row[1] and row[1].startswith(token_url):
-                    iniciar_sessao(row[0], user_url, persistir=True)
-                    return
-        except Exception as e:
-            print(f"Erro ao verificar rota de sessão: {e}")
-
-        # 2. Se a rota não tiver token, tenta ler com tolerância o client_storage
-        saved_uid = None
-        saved_user = None
-        for _ in range(3):
+    def receber_storage_browser(e):
+        if autologin_resolvido["ok"]:
+            return
+        
+        raw_val = e.data
+        if raw_val and raw_val != "null" and raw_val != "undefined":
             try:
-                saved_uid = page.client_storage.get("user_id")
-                saved_user = page.client_storage.get("username")
-                if saved_uid and saved_user:
-                    break
+                dados = json.loads(raw_val)
+                uid = dados.get("uid")
+                user = dados.get("user")
+                tok = dados.get("tok")
+
+                if uid and user and tok:
+                    conn = sqlite3.connect(DB_FILE, timeout=5)
+                    c = conn.cursor()
+                    c.execute("SELECT password_hash FROM usuarios WHERE id = ? AND username = ?", (uid, user))
+                    row = c.fetchone()
+                    conn.close()
+
+                    if row and row[0] and row[0].startswith(tok):
+                        autologin_resolvido["ok"] = True
+                        iniciar_sessao(uid, user, persistir=True)
+                        return
             except Exception:
                 pass
-            time.sleep(0.12)
 
-        if saved_uid and saved_user:
-            iniciar_sessao(saved_uid, saved_user, persistir=True)
-        else:
+        autologin_resolvido["ok"] = True
+        spinner_autologin.visible = False
+        definir_modo_auth("login")
+        card_auth.visible = True
+        layout_mestre.visible = False
+        ajustar_layout_responsivo()
+        page.update()
+
+    page.pubsub.subscribe_topic("storage_handshake", receber_storage_browser)
+
+    def iniciar_handshake():
+        time.sleep(0.15)
+        # Injeta JS que lê o localStorage e envia o resultado de volta ao Python
+        script_js = """
+        (function() {
+            try {
+                var s = localStorage.getItem('mi_auth');
+                if (window.flet_publishTopic) {
+                    window.flet_publishTopic("storage_handshake", s ? s : "");
+                }
+            } catch(e) {
+                if (window.flet_publishTopic) {
+                    window.flet_publishTopic("storage_handshake", "");
+                }
+            }
+        })();
+        """
+        page.run_javascript(script_js)
+
+        # Timeout de segurança: se o browser não responder em 1.5s, exibe a tela de login
+        time.sleep(1.5)
+        if not autologin_resolvido["ok"]:
+            autologin_resolvido["ok"] = True
             spinner_autologin.visible = False
             definir_modo_auth("login")
             card_auth.visible = True
@@ -1964,7 +1985,7 @@ def main(page: ft.Page):
             ajustar_layout_responsivo()
             page.update()
 
-    threading.Thread(target=verificar_sessao_salva, daemon=True).start()
+    threading.Thread(target=iniciar_handshake, daemon=True).start()
 
 if __name__ == "__main__":
     porta = int(os.environ.get("PORT", 8550))
