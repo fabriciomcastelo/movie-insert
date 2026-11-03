@@ -96,6 +96,13 @@ def init_db():
         """)
         
         c.execute("""
+            CREATE TABLE IF NOT EXISTS configuracoes_locais (
+                chave TEXT PRIMARY KEY,
+                valor TEXT
+            )
+        """)
+        
+        c.execute("""
             CREATE TABLE IF NOT EXISTS filmes (
                 id TEXT,
                 titulo TEXT,
@@ -139,6 +146,27 @@ def init_db():
     finally:
         if conn:
             conn.close()
+
+def salvar_param_db(chave, valor):
+    try:
+        conn = sqlite3.connect(DB_FILE, timeout=5)
+        c = conn.cursor()
+        c.execute("INSERT OR REPLACE INTO configuracoes_locais (chave, valor) VALUES (?, ?)", (chave, str(valor)))
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+def obter_param_db(chave):
+    try:
+        conn = sqlite3.connect(DB_FILE, timeout=5)
+        c = conn.cursor()
+        c.execute("SELECT valor FROM configuracoes_locais WHERE chave = ?", (chave,))
+        row = c.fetchone()
+        conn.close()
+        return row[0] if row else None
+    except Exception:
+        return None
 
 def normalizar_texto(texto):
     if not texto:
@@ -323,7 +351,7 @@ def main(page: ft.Page):
         abrir_dialogo(modal_avaliacao)
 
     # -------------------------------------------------------------
-    # JANELA DE DETALHES
+    # JANELA DE DETALHES COM TEXTOS ATUALIZADOS
     # -------------------------------------------------------------
     dt_img = ft.Image(
         src="https://via.placeholder.com/130x195?text=Sem+Poster",
@@ -1298,7 +1326,7 @@ def main(page: ft.Page):
         border=criar_borda(1.2, COR_PETROLEO),
         padding=6,
         visible=False,
-        width=200,
+        width=180,
         height=220,
         top=170,
         left=20,
@@ -1379,7 +1407,7 @@ def main(page: ft.Page):
                     container_sugestoes.left = 18
                     container_sugestoes.top = 175
                 else:
-                    container_sugestoes.width = 200
+                    container_sugestoes.width = 180
                     container_sugestoes.left = max(0, int((largura_atual / 2) - 170))
                     container_sugestoes.top = 175
             else:
@@ -1478,6 +1506,7 @@ def main(page: ft.Page):
             page.client_storage.remove("user_id")
             page.client_storage.remove("username")
             page.client_storage.remove("manter_conectado")
+            salvar_param_db("lembrar_usuario", "")
         except Exception:
             pass
         
@@ -1521,7 +1550,7 @@ def main(page: ft.Page):
         vertical_alignment=ft.CrossAxisAlignment.CENTER
     )
 
-    # Inversão solicitada: Busca à esquerda, Biblioteca à direita
+    # Inversão: Caixa de Busca à esquerda e Botão da Biblioteca à direita
     linha_inferior_menu = ft.Row(
         controls=[
             linha_busca_input,
@@ -1649,15 +1678,19 @@ def main(page: ft.Page):
     )
 
     # -------------------------------------------------------------
-    # AUTENTICAÇÃO
+    # AUTENTICAÇÃO COM PREENCHIMENTO E FLUXO DE CADASTRO
     # -------------------------------------------------------------
     logo_login = ft.Image(src="logo.png", height=65, fit="contain")
 
     txt_auth_titulo = ft.Text("Entrar", size=18, weight="bold", color=COR_TEXTO_CLARO)
     txt_auth_erro = ft.Text("", size=12, color="#ef4444")
     
+    # Recupera o usuário salvo previamente na base local
+    user_lembrado_inicial = obter_param_db("lembrar_usuario") or ""
+
     txt_auth_user = ft.TextField(
         label="Nome de Usuário",
+        value=user_lembrado_inicial,
         label_style=ft.TextStyle(color="#94a3b8"),
         bgcolor=COR_FUNDO,
         dense=True,
@@ -1750,15 +1783,11 @@ def main(page: ft.Page):
                 page.client_storage.set("user_id", str(uid))
                 page.client_storage.set("username", str(username))
                 page.client_storage.set("manter_conectado", "true")
+                salvar_param_db("lembrar_usuario", str(username))
             except Exception:
                 pass
         else:
-            try:
-                page.client_storage.remove("user_id")
-                page.client_storage.remove("username")
-                page.client_storage.remove("manter_conectado")
-            except Exception:
-                pass
+            salvar_param_db("lembrar_usuario", "")
 
         spinner_autologin.visible = False
         card_auth.visible = False
@@ -1781,16 +1810,19 @@ def main(page: ft.Page):
         senha_confirm = txt_auth_pass_confirm.value.strip() if txt_auth_pass_confirm.value else ""
 
         if not usuario or not senha:
+            txt_auth_erro.color = "#ef4444"
             txt_auth_erro.value = "Preencha todos os campos obrigatórios."
             page.update()
             return
 
         if len(usuario) < 3:
+            txt_auth_erro.color = "#ef4444"
             txt_auth_erro.value = "O usuário deve ter pelo menos 3 caracteres."
             page.update()
             return
 
         if len(senha) < 4:
+            txt_auth_erro.color = "#ef4444"
             txt_auth_erro.value = "A senha deve ter pelo menos 4 caracteres."
             page.update()
             return
@@ -1803,23 +1835,33 @@ def main(page: ft.Page):
             conn = sqlite3.connect(DB_FILE, timeout=5)
             c = conn.cursor()
 
+            # FLUXO DE CADASTRO: salva no banco e retorna para a tela de login
             if modo_auth["modo"] == "cadastro":
                 c.execute("SELECT id FROM usuarios WHERE username = ?", (usuario,))
                 if c.fetchone():
+                    txt_auth_erro.color = "#ef4444"
                     txt_auth_erro.value = "Este nome de usuário já está em uso."
                     page.update()
                     return
 
                 p_hash = gerar_hash_senha(senha)
                 c.execute("INSERT INTO usuarios (username, password_hash) VALUES (?, ?)", (usuario, p_hash))
-                user_auth_id = c.lastrowid
-                user_auth_nome = usuario
                 conn.commit()
+
+                # Retorna para o modo de login com o usuário preenchido e mensagem de sucesso
+                definir_modo_auth("login")
+                txt_auth_user.value = usuario
+                txt_auth_pass.value = ""
+                txt_auth_erro.color = "#10b981"
+                txt_auth_erro.value = "✓ Conta criada com sucesso! Faça login para entrar."
+                page.update()
+                return
 
             elif modo_auth["modo"] == "login":
                 c.execute("SELECT id, password_hash FROM usuarios WHERE username = ?", (usuario,))
                 user_row = c.fetchone()
                 if not user_row or not verificar_senha(senha, user_row[1]):
+                    txt_auth_erro.color = "#ef4444"
                     txt_auth_erro.value = "Usuário ou senha inválidos."
                     page.update()
                     return
@@ -1829,6 +1871,7 @@ def main(page: ft.Page):
 
             elif modo_auth["modo"] == "recuperar":
                 if senha != senha_confirm:
+                    txt_auth_erro.color = "#ef4444"
                     txt_auth_erro.value = "As senhas digitadas não coincidem."
                     page.update()
                     return
@@ -1836,6 +1879,7 @@ def main(page: ft.Page):
                 c.execute("SELECT id FROM usuarios WHERE username = ?", (usuario,))
                 user_row = c.fetchone()
                 if not user_row:
+                    txt_auth_erro.color = "#ef4444"
                     txt_auth_erro.value = "Usuário não encontrado."
                     page.update()
                     return
@@ -1847,6 +1891,7 @@ def main(page: ft.Page):
                 user_auth_nome = usuario
 
         except Exception as err:
+            txt_auth_erro.color = "#ef4444"
             txt_auth_erro.value = f"Erro no banco: {err}"
             page.update()
             return
@@ -1922,51 +1967,37 @@ def main(page: ft.Page):
     page.update()
 
     # -------------------------------------------------------------
-    # RECUPERAÇÃO DE SESSÃO COM ESPERA ATIVA SEGURA
+    # SESSÃO E PRÉ-PREENCHIMENTO
     # -------------------------------------------------------------
     def verificar_sessao_salva():
         saved_uid = None
         saved_user = None
-        saved_manter = None
 
-        # Aguarda a comunicação WebSocket entregar o armazenamento local
-        for _ in range(8):
+        for _ in range(5):
             try:
                 saved_uid = page.client_storage.get("user_id")
                 saved_user = page.client_storage.get("username")
-                saved_manter = page.client_storage.get("manter_conectado")
-                if saved_uid and saved_user and str(saved_manter).lower() == "true":
+                if saved_uid and saved_user:
                     break
             except Exception:
                 pass
-            time.sleep(0.12)
+            time.sleep(0.08)
 
-        if saved_uid and saved_user and str(saved_manter).lower() == "true":
-            # Confirma se o usuário ainda existe no banco
-            conn = None
-            usuario_valido = False
-            try:
-                conn = sqlite3.connect(DB_FILE, timeout=5)
-                c = conn.cursor()
-                c.execute("SELECT id FROM usuarios WHERE id = ? AND username = ?", (saved_uid, saved_user))
-                if c.fetchone():
-                    usuario_valido = True
-            except Exception:
-                pass
-            finally:
-                if conn:
-                    conn.close()
+        if saved_uid and saved_user:
+            iniciar_sessao(saved_uid, saved_user, persistir=True)
+        else:
+            # Recupera o usuário memorizado se a sessão não entrar direto
+            lembrado = obter_param_db("lembrar_usuario")
+            if lembrado:
+                txt_auth_user.value = lembrado
+                chk_manter_conectado.value = True
 
-            if usuario_valido:
-                iniciar_sessao(saved_uid, saved_user, persistir=True)
-                return
-
-        spinner_autologin.visible = False
-        definir_modo_auth("login")
-        card_auth.visible = True
-        layout_mestre.visible = False
-        ajustar_layout_responsivo()
-        page.update()
+            spinner_autologin.visible = False
+            definir_modo_auth("login")
+            card_auth.visible = True
+            layout_mestre.visible = False
+            ajustar_layout_responsivo()
+            page.update()
 
     threading.Thread(target=verificar_sessao_salva, daemon=True).start()
 
