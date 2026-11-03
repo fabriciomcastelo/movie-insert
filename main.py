@@ -5,7 +5,6 @@ import os
 import requests
 import threading
 import unicodedata
-import hashlib
 import time
 from urllib.parse import quote_plus
 from datetime import datetime
@@ -24,6 +23,11 @@ COR_VERMELHO_PLAY = "#9e0f0f"
 COR_FUNDO = "#070b0e"
 COR_CARD = "#0d1419"
 COR_BORDA = "#17232b"
+
+CORES_AVATAR = [
+    "#0284c7", "#0d9488", "#16a34a", "#ca8a04", 
+    "#dc2626", "#9333ea", "#c026d3", "#4f46e5"
+]
 
 def criar_borda(espessura, cor):
     bs = ft.BorderSide(espessura, cor)
@@ -55,35 +59,12 @@ def carregar_config():
     return cfg
 
 # -------------------------------------------------------------
-# SEGURANÇA E BANCO DE DADOS
+# BANCO DE DADOS
 # -------------------------------------------------------------
-def gerar_hash_senha(senha: str) -> str:
-    salt = os.urandom(16).hex()
-    hash_obj = hashlib.pbkdf2_hmac(
-        'sha256', 
-        senha.encode('utf-8'), 
-        bytes.fromhex(salt), 
-        100000
-    )
-    return f"{salt}:{hash_obj.hex()}"
-
-def verificar_senha(senha_fornecida: str, hash_armazenado: str) -> bool:
-    try:
-        salt, hash_real = hash_armazenado.split(":")
-        hash_teste = hashlib.pbkdf2_hmac(
-            'sha256', 
-            senha_fornecida.encode('utf-8'), 
-            bytes.fromhex(salt), 
-            100000
-        )
-        return hash_teste.hex() == hash_real
-    except Exception:
-        return False
-
 def init_db():
     conn = None
     try:
-        conn = sqlite3.connect(DB_FILE, timeout=10)
+        conn = sqlite3.connect(DB_FILE, timeout=15)
         c = conn.cursor()
         c.execute("PRAGMA journal_mode=WAL;")
         
@@ -91,14 +72,7 @@ def init_db():
             CREATE TABLE IF NOT EXISTS usuarios (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT UNIQUE COLLATE NOCASE,
-                password_hash TEXT
-            )
-        """)
-        
-        c.execute("""
-            CREATE TABLE IF NOT EXISTS configuracoes_locais (
-                chave TEXT PRIMARY KEY,
-                valor TEXT
+                cor_avatar TEXT DEFAULT '#03434d'
             )
         """)
         
@@ -140,33 +114,16 @@ def init_db():
             c.execute("ALTER TABLE filmes ADD COLUMN tipo TEXT DEFAULT 'movie'")
         except Exception:
             pass
+        try:
+            c.execute("ALTER TABLE usuarios ADD COLUMN cor_avatar TEXT DEFAULT '#03434d'")
+        except Exception:
+            pass
         conn.commit()
     except Exception as e:
         print(f"Erro init_db: {e}")
     finally:
         if conn:
             conn.close()
-
-def salvar_param_db(chave, valor):
-    try:
-        conn = sqlite3.connect(DB_FILE, timeout=5)
-        c = conn.cursor()
-        c.execute("INSERT OR REPLACE INTO configuracoes_locais (chave, valor) VALUES (?, ?)", (chave, str(valor)))
-        conn.commit()
-        conn.close()
-    except Exception:
-        pass
-
-def obter_param_db(chave):
-    try:
-        conn = sqlite3.connect(DB_FILE, timeout=5)
-        c = conn.cursor()
-        c.execute("SELECT valor FROM configuracoes_locais WHERE chave = ?", (chave,))
-        row = c.fetchone()
-        conn.close()
-        return row[0] if row else None
-    except Exception:
-        return None
 
 def normalizar_texto(texto):
     if not texto:
@@ -203,7 +160,7 @@ def main(page: ft.Page):
 
     init_db()
 
-    sessao_usuario = {"id": None, "username": ""}
+    sessao_usuario = {"id": None, "username": "", "cor": COR_PETROLEO}
     item_ativo = {"data": None}
     timer_busca = {"timer": None}
     filme_avaliando = {"id": None, "nota": "10"}
@@ -351,7 +308,7 @@ def main(page: ft.Page):
         abrir_dialogo(modal_avaliacao)
 
     # -------------------------------------------------------------
-    # JANELA DE DETALHES COM TEXTOS ATUALIZADOS
+    # JANELA DE DETALHES
     # -------------------------------------------------------------
     dt_img = ft.Image(
         src="https://via.placeholder.com/130x195?text=Sem+Poster",
@@ -1501,21 +1458,9 @@ def main(page: ft.Page):
 
     lbl_user_tag = ft.Text("", size=12, color="#64748b", weight="bold")
 
-    def acao_logout(e):
-        try:
-            page.client_storage.remove("user_id")
-            page.client_storage.remove("username")
-            page.client_storage.remove("manter_conectado")
-            salvar_param_db("lembrar_usuario", "")
-        except Exception:
-            pass
-        
+    def acao_trocar_perfil(e):
         sessao_usuario["id"] = None
         sessao_usuario["username"] = ""
-        txt_auth_user.value = ""
-        txt_auth_pass.value = ""
-        txt_auth_pass_confirm.value = ""
-        txt_auth_erro.value = ""
         
         paginacao["pagina_atual"] = 1
         paginacao["carregando"] = False
@@ -1524,21 +1469,21 @@ def main(page: ft.Page):
         paginacao["ids_carregados"].clear()
         grade_populares.controls.clear()
         
-        definir_modo_auth("login")
         layout_mestre.visible = False
-        card_auth.visible = True
+        carregar_perfis_tela()
+        tela_perfis.visible = True
         page.update()
 
-    btn_logout = ft.IconButton(
-        icon=ft.Icons.LOGOUT,
-        icon_color=COR_VERMELHO_PLAY,
-        icon_size=18,
-        tooltip="Sair da conta",
-        on_click=acao_logout
+    btn_trocar_perfil = ft.IconButton(
+        icon=ft.Icons.SWITCH_ACCOUNT_ROUNDED,
+        icon_color=COR_TEXTO_CLARO,
+        icon_size=20,
+        tooltip="Trocar Perfil",
+        on_click=acao_trocar_perfil
     )
 
     bloco_usuario_topo = ft.Row(
-        controls=[lbl_user_tag, btn_logout],
+        controls=[lbl_user_tag, btn_trocar_perfil],
         spacing=4,
         alignment=ft.MainAxisAlignment.END,
         vertical_alignment=ft.CrossAxisAlignment.CENTER
@@ -1550,7 +1495,7 @@ def main(page: ft.Page):
         vertical_alignment=ft.CrossAxisAlignment.CENTER
     )
 
-    # Inversão: Caixa de Busca à esquerda e Botão da Biblioteca à direita
+    # Inversão consolidada: Busca à esquerda, Biblioteca à direita
     linha_inferior_menu = ft.Row(
         controls=[
             linha_busca_input,
@@ -1678,119 +1623,23 @@ def main(page: ft.Page):
     )
 
     # -------------------------------------------------------------
-    # AUTENTICAÇÃO COM PREENCHIMENTO E FLUXO DE CADASTRO
+    # SELEÇÃO DE PERFIL ESTILO NETFLIX
     # -------------------------------------------------------------
-    logo_login = ft.Image(src="logo.png", height=65, fit="contain")
-
-    txt_auth_titulo = ft.Text("Entrar", size=18, weight="bold", color=COR_TEXTO_CLARO)
-    txt_auth_erro = ft.Text("", size=12, color="#ef4444")
-    
-    # Recupera o usuário salvo previamente na base local
-    user_lembrado_inicial = obter_param_db("lembrar_usuario") or ""
-
-    txt_auth_user = ft.TextField(
-        label="Nome de Usuário",
-        value=user_lembrado_inicial,
-        label_style=ft.TextStyle(color="#94a3b8"),
-        bgcolor=COR_FUNDO,
-        dense=True,
-        border_radius=8,
-        border_color=COR_BORDA,
-        focused_border_color=COR_PETROLEO,
-        width=300
-    )
-    txt_auth_pass = ft.TextField(
-        label="Senha",
-        label_style=ft.TextStyle(color="#94a3b8"),
-        password=True,
-        can_reveal_password=True,
-        bgcolor=COR_FUNDO,
-        dense=True,
-        border_radius=8,
-        border_color=COR_BORDA,
-        focused_border_color=COR_PETROLEO,
-        width=300
-    )
-    txt_auth_pass_confirm = ft.TextField(
-        label="Confirmar Nova Senha",
-        label_style=ft.TextStyle(color="#94a3b8"),
-        password=True,
-        can_reveal_password=True,
-        bgcolor=COR_FUNDO,
-        dense=True,
-        border_radius=8,
-        border_color=COR_BORDA,
-        focused_border_color=COR_PETROLEO,
-        width=300,
-        visible=False
+    linha_cards_perfis = ft.Row(
+        wrap=True,
+        spacing=24,
+        run_spacing=24,
+        alignment=ft.MainAxisAlignment.CENTER,
+        vertical_alignment=ft.CrossAxisAlignment.CENTER
     )
 
-    chk_manter_conectado = ft.Checkbox(
-        label="Permanecer conectado",
-        label_style=ft.TextStyle(size=12, color=COR_TEXTO_CLARO),
-        value=True,
-        fill_color=COR_PETROLEO,
-        check_color="white"
-    )
-    container_chk_manter = ft.Container(
-        content=chk_manter_conectado,
-        width=300,
-        alignment=ft.Alignment(-1, 0),
-        visible=True
-    )
-
-    modo_auth = {"modo": "login"}
-
-    def definir_modo_auth(novo_modo):
-        modo_auth["modo"] = novo_modo
-        txt_auth_erro.value = ""
-        txt_auth_pass_confirm.visible = (novo_modo == "recuperar")
-        container_chk_manter.visible = (novo_modo == "login")
-        
-        if novo_modo == "login":
-            txt_auth_titulo.value = "Entrar"
-            txt_auth_pass.label = "Senha"
-            btn_executar_auth.bgcolor = COR_PETROLEO
-            btn_executar_auth.content = ft.Text("Entrar", color="white", weight="bold")
-            btn_alternar_auth.content = ft.Text("Não tem uma conta? Cadastre-se", color="#94a3b8", size=12)
-            btn_recuperar_auth.visible = True
-            
-        elif novo_modo == "cadastro":
-            txt_auth_titulo.value = "Criar Nova Conta"
-            txt_auth_pass.label = "Senha"
-            btn_executar_auth.bgcolor = COR_PETROLEO
-            btn_executar_auth.content = ft.Text("Cadastrar Nova Conta", color="white", weight="bold")
-            btn_alternar_auth.content = ft.Text("Já tem uma conta? Entrar", color="#94a3b8", size=12)
-            btn_recuperar_auth.visible = False
-            
-        elif novo_modo == "recuperar":
-            txt_auth_titulo.value = "Recuperar / Trocar Senha"
-            txt_auth_pass.label = "Nova Senha"
-            btn_executar_auth.bgcolor = COR_VERMELHO_PLAY
-            btn_executar_auth.content = ft.Text("Salvar Nova Senha", color="white", weight="bold")
-            btn_alternar_auth.content = ft.Text("Lembrou da senha? Voltar ao Login", color="#94a3b8", size=12)
-            btn_recuperar_auth.visible = False
-            
-        page.update()
-
-    def iniciar_sessao(uid, username, persistir=True):
+    def entrar_com_perfil(uid, nome, cor):
         sessao_usuario["id"] = int(uid)
-        sessao_usuario["username"] = str(username)
-        lbl_user_tag.value = f"👤 {username}"
+        sessao_usuario["username"] = str(nome)
+        sessao_usuario["cor"] = cor
+        lbl_user_tag.value = f"👤 {nome}"
         
-        if persistir:
-            try:
-                page.client_storage.set("user_id", str(uid))
-                page.client_storage.set("username", str(username))
-                page.client_storage.set("manter_conectado", "true")
-                salvar_param_db("lembrar_usuario", str(username))
-            except Exception:
-                pass
-        else:
-            salvar_param_db("lembrar_usuario", "")
-
-        spinner_autologin.visible = False
-        card_auth.visible = False
+        tela_perfis.visible = False
         layout_mestre.visible = True
         ajustar_layout_responsivo()
         page.update()
@@ -1804,202 +1653,185 @@ def main(page: ft.Page):
 
         carregar_populares()
 
-    def processar_auth(e):
-        usuario = txt_auth_user.value.strip() if txt_auth_user.value else ""
-        senha = txt_auth_pass.value.strip() if txt_auth_pass.value else ""
-        senha_confirm = txt_auth_pass_confirm.value.strip() if txt_auth_pass_confirm.value else ""
+    # Modal para criar novo perfil
+    txt_novo_perfil_nome = ft.TextField(
+        label="Nome do Perfil",
+        label_style=ft.TextStyle(color="#94a3b8"),
+        bgcolor=COR_FUNDO,
+        dense=True,
+        border_radius=8,
+        border_color=COR_BORDA,
+        focused_border_color=COR_PETROLEO,
+        width=280
+    )
+    txt_novo_perfil_erro = ft.Text("", size=12, color="#ef4444")
 
-        if not usuario or not senha:
-            txt_auth_erro.color = "#ef4444"
-            txt_auth_erro.value = "Preencha todos os campos obrigatórios."
+    def salvar_novo_perfil(e):
+        nome = txt_novo_perfil_nome.value.strip() if txt_novo_perfil_nome.value else ""
+        if len(nome) < 2:
+            txt_novo_perfil_erro.value = "Digite pelo menos 2 caracteres."
             page.update()
             return
 
-        if len(usuario) < 3:
-            txt_auth_erro.color = "#ef4444"
-            txt_auth_erro.value = "O usuário deve ter pelo menos 3 caracteres."
-            page.update()
-            return
-
-        if len(senha) < 4:
-            txt_auth_erro.color = "#ef4444"
-            txt_auth_erro.value = "A senha deve ter pelo menos 4 caracteres."
-            page.update()
-            return
-
-        user_auth_id = None
-        user_auth_nome = None
         conn = None
-
         try:
             conn = sqlite3.connect(DB_FILE, timeout=5)
             c = conn.cursor()
-
-            # FLUXO DE CADASTRO: salva no banco e retorna para a tela de login
-            if modo_auth["modo"] == "cadastro":
-                c.execute("SELECT id FROM usuarios WHERE username = ?", (usuario,))
-                if c.fetchone():
-                    txt_auth_erro.color = "#ef4444"
-                    txt_auth_erro.value = "Este nome de usuário já está em uso."
-                    page.update()
-                    return
-
-                p_hash = gerar_hash_senha(senha)
-                c.execute("INSERT INTO usuarios (username, password_hash) VALUES (?, ?)", (usuario, p_hash))
-                conn.commit()
-
-                # Retorna para o modo de login com o usuário preenchido e mensagem de sucesso
-                definir_modo_auth("login")
-                txt_auth_user.value = usuario
-                txt_auth_pass.value = ""
-                txt_auth_erro.color = "#10b981"
-                txt_auth_erro.value = "✓ Conta criada com sucesso! Faça login para entrar."
+            c.execute("SELECT id FROM usuarios WHERE username = ?", (nome,))
+            if c.fetchone():
+                txt_novo_perfil_erro.value = "Este perfil já existe."
                 page.update()
                 return
 
-            elif modo_auth["modo"] == "login":
-                c.execute("SELECT id, password_hash FROM usuarios WHERE username = ?", (usuario,))
-                user_row = c.fetchone()
-                if not user_row or not verificar_senha(senha, user_row[1]):
-                    txt_auth_erro.color = "#ef4444"
-                    txt_auth_erro.value = "Usuário ou senha inválidos."
-                    page.update()
-                    return
+            c.execute("SELECT COUNT(*) FROM usuarios")
+            qtd = c.fetchone()[0]
+            cor_escolhida = CORES_AVATAR[qtd % len(CORES_AVATAR)]
 
-                user_auth_id = user_row[0]
-                user_auth_nome = usuario
+            c.execute("INSERT INTO usuarios (username, cor_avatar) VALUES (?, ?)", (nome, cor_escolhida))
+            novo_id = c.lastrowid
+            conn.commit()
 
-            elif modo_auth["modo"] == "recuperar":
-                if senha != senha_confirm:
-                    txt_auth_erro.color = "#ef4444"
-                    txt_auth_erro.value = "As senhas digitadas não coincidem."
-                    page.update()
-                    return
+            fechar_dialogo(modal_novo_perfil)
+            txt_novo_perfil_nome.value = ""
+            txt_novo_perfil_erro.value = ""
 
-                c.execute("SELECT id FROM usuarios WHERE username = ?", (usuario,))
-                user_row = c.fetchone()
-                if not user_row:
-                    txt_auth_erro.color = "#ef4444"
-                    txt_auth_erro.value = "Usuário não encontrado."
-                    page.update()
-                    return
-
-                novo_hash = gerar_hash_senha(senha)
-                c.execute("UPDATE usuarios SET password_hash = ? WHERE id = ?", (novo_hash, user_row[0]))
-                conn.commit()
-                user_auth_id = user_row[0]
-                user_auth_nome = usuario
-
+            # Entra direto com o perfil recém-criado
+            entrar_com_perfil(novo_id, nome, cor_escolhida)
         except Exception as err:
-            txt_auth_erro.color = "#ef4444"
-            txt_auth_erro.value = f"Erro no banco: {err}"
+            txt_novo_perfil_erro.value = f"Erro: {err}"
             page.update()
-            return
         finally:
             if conn:
                 conn.close()
 
-        if user_auth_id and user_auth_nome:
-            deve_manter = chk_manter_conectado.value if modo_auth["modo"] == "login" else True
-            iniciar_sessao(user_auth_id, user_auth_nome, persistir=deve_manter)
-
-    btn_executar_auth = ft.Button(
-        content=ft.Text("Entrar", color="white", weight="bold"),
-        bgcolor=COR_PETROLEO,
-        width=300,
-        height=40,
-        style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8)),
-        on_click=processar_auth
-    )
-
-    btn_alternar_auth = ft.Button(
-        content=ft.Text("Não tem uma conta? Cadastre-se", color="#94a3b8", size=12),
-        bgcolor="transparent",
-        on_click=lambda e: definir_modo_auth("cadastro" if modo_auth["modo"] == "login" else "login")
-    )
-
-    btn_recuperar_auth = ft.Button(
-        content=ft.Text("Esqueceu a senha?", color="#64748b", size=11),
-        bgcolor="transparent",
-        on_click=lambda e: definir_modo_auth("recuperar")
-    )
-
-    card_interno_auth = ft.Container(
-        width=360,
-        bgcolor=COR_CARD,
-        padding=24,
-        border_radius=12,
-        border=criar_borda(1.5, COR_BORDA),
+    modal_novo_perfil = ft.AlertDialog(
+        modal=False,
+        title=ft.Text("Adicionar Novo Perfil", size=16, weight="bold", color="white"),
         content=ft.Column([
-            logo_login,
-            ft.Container(height=4),
-            txt_auth_titulo,
-            txt_auth_erro,
-            txt_auth_user,
-            txt_auth_pass,
-            txt_auth_pass_confirm,
-            container_chk_manter,
-            ft.Container(height=4),
-            btn_executar_auth,
-            btn_alternar_auth,
-            btn_recuperar_auth
-        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=8)
+            ft.Text("Como deseja chamar este perfil?", size=13, color="#94a3b8"),
+            txt_novo_perfil_erro,
+            txt_novo_perfil_nome
+        ], tight=True, spacing=10),
+        actions=[
+            ft.Button(content=ft.Text("Cancelar", color="#94a3b8"), on_click=lambda e: fechar_dialogo(modal_novo_perfil)),
+            ft.Button(content=ft.Text("Salvar Perfil", color="white"), bgcolor=COR_PETROLEO, on_click=salvar_novo_perfil)
+        ],
+        actions_alignment=ft.MainAxisAlignment.END
     )
 
-    card_auth = ft.Container(
-        alignment=ft.Alignment(0, 0),
-        padding=ft.Padding(0, 60, 0, 0),
-        content=card_interno_auth,
-        visible=False
-    )
+    def abrir_modal_novo_perfil(e=None):
+        txt_novo_perfil_nome.value = ""
+        txt_novo_perfil_erro.value = ""
+        abrir_dialogo(modal_novo_perfil)
 
-    spinner_autologin = ft.Container(
+    def criar_card_avatar(uid, nome, cor):
+        iniciais = (nome[:2] if len(nome) >= 2 else nome).upper()
+        
+        avatar_box = ft.Container(
+            content=ft.Text(iniciais, size=32, weight="bold", color="white"),
+            alignment=ft.Alignment(0, 0),
+            width=110,
+            height=110,
+            border_radius=12,
+            bgcolor=cor,
+            border=criar_borda(2, "transparent"),
+            animate=ft.Animation(150, ft.AnimationCurve.EASE_OUT)
+        )
+
+        def on_hover_card(e):
+            avatar_box.border = criar_borda(2, "white" if e.data == "true" else "transparent")
+            card_item.scale = 1.05 if e.data == "true" else 1.0
+            page.update()
+
+        card_item = ft.Container(
+            content=ft.Column([
+                avatar_box,
+                ft.Text(nome, size=14, weight="bold", color="#94a3b8", text_align=ft.TextAlign.CENTER, width=110)
+            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10),
+            ink=True,
+            border_radius=12,
+            padding=4,
+            scale=1.0,
+            animate_scale=ft.Animation(150, ft.AnimationCurve.EASE_OUT),
+            on_hover=on_hover_card,
+            on_click=lambda e, u=uid, n=nome, c=cor: entrar_com_perfil(u, n, c)
+        )
+        return card_item
+
+    def criar_card_adicionar():
+        box_add = ft.Container(
+            content=ft.Icon(ft.Icons.ADD_ROUNDED, size=48, color="#64748b"),
+            alignment=ft.Alignment(0, 0),
+            width=110,
+            height=110,
+            border_radius=12,
+            bgcolor="#0d1419",
+            border=criar_borda(1.5, "#334155")
+        )
+
+        def on_hover_add(e):
+            box_add.border = criar_borda(1.5, "white" if e.data == "true" else "#334155")
+            box_add.content.color = "white" if e.data == "true" else "#64748b"
+            card_add.scale = 1.05 if e.data == "true" else 1.0
+            page.update()
+
+        card_add = ft.Container(
+            content=ft.Column([
+                box_add,
+                ft.Text("Adicionar Perfil", size=13, color="#64748b", text_align=ft.TextAlign.CENTER, width=110)
+            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10),
+            ink=True,
+            border_radius=12,
+            padding=4,
+            scale=1.0,
+            animate_scale=ft.Animation(150, ft.AnimationCurve.EASE_OUT),
+            on_hover=on_hover_add,
+            on_click=abrir_modal_novo_perfil
+        )
+        return card_add
+
+    def carregar_perfis_tela():
+        linha_cards_perfis.controls.clear()
+        perfis = []
+        conn = None
+        try:
+            conn = sqlite3.connect(DB_FILE, timeout=5)
+            c = conn.cursor()
+            c.execute("SELECT id, username, cor_avatar FROM usuarios ORDER BY id ASC")
+            perfis = c.fetchall()
+        except Exception as e:
+            print(f"Erro ao buscar perfis: {e}")
+        finally:
+            if conn:
+                conn.close()
+
+        if not perfis:
+            # Caso não exista perfil nenhum (primeiro uso), abre logo o cadastro
+            abrir_modal_novo_perfil()
+
+        for pid, pnome, pcor in perfis:
+            cor_final = pcor if pcor else COR_PETROLEO
+            linha_cards_perfis.controls.append(criar_card_avatar(pid, pnome, cor_final))
+
+        linha_cards_perfis.controls.append(criar_card_adicionar())
+
+    tela_perfis = ft.Container(
+        expand=True,
         alignment=ft.Alignment(0, 0),
-        padding=ft.Padding(0, 140, 0, 0),
+        padding=ft.Padding(20, 40, 20, 40),
         content=ft.Column([
-            ft.Image(src="loading.png", width=90, height=90, fit="contain"),
-            ft.ProgressRing(width=28, height=28, stroke_width=2.5, color=COR_PETROLEO)
-        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=16),
+            ft.Image(src="logo.png", height=75, fit="contain"),
+            ft.Container(height=10),
+            ft.Text("Quem está assistindo?", size=26, weight="bold", color="white", text_align=ft.TextAlign.CENTER),
+            ft.Container(height=15),
+            linha_cards_perfis
+        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, alignment=ft.MainAxisAlignment.CENTER, spacing=12),
         visible=True
     )
 
-    page.add(spinner_autologin, card_auth, layout_mestre)
+    page.add(tela_perfis, layout_mestre)
+    carregar_perfis_tela()
     page.update()
-
-    # -------------------------------------------------------------
-    # SESSÃO E PRÉ-PREENCHIMENTO
-    # -------------------------------------------------------------
-    def verificar_sessao_salva():
-        saved_uid = None
-        saved_user = None
-
-        for _ in range(5):
-            try:
-                saved_uid = page.client_storage.get("user_id")
-                saved_user = page.client_storage.get("username")
-                if saved_uid and saved_user:
-                    break
-            except Exception:
-                pass
-            time.sleep(0.08)
-
-        if saved_uid and saved_user:
-            iniciar_sessao(saved_uid, saved_user, persistir=True)
-        else:
-            # Recupera o usuário memorizado se a sessão não entrar direto
-            lembrado = obter_param_db("lembrar_usuario")
-            if lembrado:
-                txt_auth_user.value = lembrado
-                chk_manter_conectado.value = True
-
-            spinner_autologin.visible = False
-            definir_modo_auth("login")
-            card_auth.visible = True
-            layout_mestre.visible = False
-            ajustar_layout_responsivo()
-            page.update()
-
-    threading.Thread(target=verificar_sessao_salva, daemon=True).start()
 
 if __name__ == "__main__":
     porta = int(os.environ.get("PORT", 8550))
