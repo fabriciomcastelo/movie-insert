@@ -7,7 +7,7 @@ import threading
 import unicodedata
 import hashlib
 import time
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, parse_qs, urlparse
 from datetime import datetime
 
 CONFIG_FILE = "config.json"
@@ -1287,7 +1287,7 @@ def main(page: ft.Page):
         page.update()
 
     # -------------------------------------------------------------
-    # SUGESTÕES DE BUSCA VIA OVERLAY
+    # SUGESTÕES DE BUSCA (OVERLAY)
     # -------------------------------------------------------------
     coluna_sugestoes = ft.Column(spacing=4, scroll=ft.ScrollMode.AUTO)
 
@@ -1469,7 +1469,7 @@ def main(page: ft.Page):
     def acao_logout(e):
         try:
             page.client_storage.clear()
-            page.run_javascript("window.history.replaceState({}, '', '/');")
+            page.go("/")
         except Exception:
             pass
         
@@ -1741,7 +1741,7 @@ def main(page: ft.Page):
                 page.client_storage.set("user_id", str(uid))
                 page.client_storage.set("username", str(username))
                 
-                # Gera o token de validação derivado do hash do usuário
+                # Gera o token de URL seguro e atualiza a rota do Flet nativamente
                 conn = sqlite3.connect(DB_FILE, timeout=5)
                 c = conn.cursor()
                 c.execute("SELECT password_hash FROM usuarios WHERE id = ?", (uid,))
@@ -1749,7 +1749,9 @@ def main(page: ft.Page):
                 conn.close()
                 if row and row[0]:
                     token = row[0][:16]
-                    page.run_javascript(f"window.history.replaceState({{}}, '', '/?u={username}&k={token}');")
+                    nova_rota = f"/?u={username}&k={token}"
+                    if page.route != nova_rota:
+                        page.go(nova_rota)
             except Exception:
                 pass
 
@@ -1915,22 +1917,19 @@ def main(page: ft.Page):
     page.update()
 
     # -------------------------------------------------------------
-    # RECUPERAÇÃO DE SESSÃO COM TOKEN DE URL E CLIENT STORAGE
+    # RECUPERAÇÃO DE SESSÃO ROBUSTA VIA ROTA (PAGE.ROUTE)
     # -------------------------------------------------------------
     def verificar_sessao_salva():
-        # 1. Recupera credenciais via parâmetros da URL (?u=usuario&k=token)
-        user_url = None
-        token_url = None
+        # 1. Tenta extrair credenciais diretamente da URL (page.route)
         try:
-            query_dict = getattr(page, "query", None)
-            if query_dict:
-                user_url = query_dict.get("u")
-                token_url = query_dict.get("k")
-        except Exception:
-            pass
+            rota_completa = page.route or "/"
+            parsed = urlparse(rota_completa)
+            qs = parse_qs(parsed.query)
+            
+            user_url = qs.get("u", [None])[0]
+            token_url = qs.get("k", [None])[0]
 
-        if user_url and token_url:
-            try:
+            if user_url and token_url:
                 conn = sqlite3.connect(DB_FILE, timeout=5)
                 c = conn.cursor()
                 c.execute("SELECT id, password_hash FROM usuarios WHERE username = ?", (user_url,))
@@ -1939,10 +1938,10 @@ def main(page: ft.Page):
                 if row and row[1] and row[1].startswith(token_url):
                     iniciar_sessao(row[0], user_url, persistir=True)
                     return
-            except Exception:
-                pass
+        except Exception as e:
+            print(f"Erro ao verificar rota de sessão: {e}")
 
-        # 2. Se não houver parâmetros válidos na URL, consulta o client_storage
+        # 2. Se a rota não tiver token, tenta ler com tolerância o client_storage
         saved_uid = None
         saved_user = None
         for _ in range(3):
