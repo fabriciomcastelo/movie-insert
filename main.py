@@ -55,7 +55,7 @@ def carregar_config():
     return cfg
 
 # -------------------------------------------------------------
-# SEGURANÇA E BASE DE DADOS
+# SEGURANÇA E BANCO DE DADOS
 # -------------------------------------------------------------
 def gerar_hash_senha(senha: str) -> str:
     salt = os.urandom(16).hex()
@@ -327,7 +327,7 @@ def main(page: ft.Page):
         abrir_dialogo(modal_avaliacao)
 
     # -------------------------------------------------------------
-    # JANELA DE DETALHES COM SUPORTE A SÉRIE E METASCORE
+    # JANELA DE DETALHES
     # -------------------------------------------------------------
     dt_img = ft.Image(
         src="https://via.placeholder.com/130x195?text=Sem+Poster",
@@ -508,7 +508,7 @@ def main(page: ft.Page):
                     info_criacao = f"Criador(es): {', '.join(criadores) if criadores else 'Não informado'} • {temporadas} Temporada(s)"
                     diretor = info_criacao
 
-                elenco_list = [a.get("name") for a in credits_data.get("cast", [])[:4]] if (credits_data := res.get("credits", {})) else []
+                elenco_list = [a.get("name") for a in res.get("credits", {}).get("cast", [])[:4]]
                 elenco = ", ".join(elenco_list) if elenco_list else "Não informado"
 
                 titulo = res.get("title") or res.get("name") or titulo_prev
@@ -662,8 +662,8 @@ def main(page: ft.Page):
                     btn_salvar.disabled = False
                     btn_ir_lista.visible = False
 
-            except Exception:
-                pass
+            except Exception as ex:
+                print(f"Erro ao obter detalhes: {ex}")
             finally:
                 progresso.visible = False
                 conteudo_modal.update()
@@ -769,7 +769,7 @@ def main(page: ft.Page):
     spinner_carregamento = ft.ProgressRing(width=30, height=30, stroke_width=3, color=COR_PETROLEO, visible=False)
 
     # -------------------------------------------------------------
-    # POPULARES (FILMES, SÉRIES OU TODOS)
+    # POPULARES COM DESTRAVAMENTO DE CONCORRÊNCIA
     # -------------------------------------------------------------
     def carregar_populares(incrementar=False):
         c = carregar_config()
@@ -808,11 +808,14 @@ def main(page: ft.Page):
                 else:
                     url = f"https://api.themoviedb.org/3/trending/all/week?api_key={tmdb_key}&language=pt-BR&page={p}"
 
-                resp = requests.get(url, timeout=6.0)
+                resp = requests.get(url, timeout=5.0)
 
                 if resp.status_code == 200:
                     dados = resp.json()
                     itens = dados.get("results", [])
+
+                    if not itens:
+                        paginacao["fim"] = True
 
                     novos = []
                     for it in itens:
@@ -843,6 +846,7 @@ def main(page: ft.Page):
         threading.Thread(target=_fetch, daemon=True).start()
 
     def alternar_filtro_home(novo_filtro):
+        paginacao["carregando"] = False  # Destrava requisições anteriores presas
         paginacao["filtro_home"] = novo_filtro
         paginacao["pagina_atual"] = 1
         paginacao["fim"] = False
@@ -883,7 +887,6 @@ def main(page: ft.Page):
         on_click=lambda e: alternar_filtro_home("tv")
     )
 
-    # Linha dos seletores fixa no cabeçalho
     linha_seletor_home = ft.Row(
         controls=[btn_home_todos, btn_home_filmes, btn_home_series],
         spacing=8,
@@ -895,7 +898,7 @@ def main(page: ft.Page):
             container_sugestoes.visible = False
             page.update()
 
-        if e.max_scroll_extent > 0 and (e.pixels + 1000) >= e.max_scroll_extent:
+        if e.max_scroll_extent > 0 and (e.pixels + 900) >= e.max_scroll_extent:
             if not paginacao["carregando"] and not paginacao["fim"]:
                 carregar_populares(incrementar=True)
 
@@ -944,7 +947,7 @@ def main(page: ft.Page):
         page.launch_url(f"file://{arq}")
 
     # -------------------------------------------------------------
-    # BIBLIOTECA (FILTRADA POR TIPO: FILMES E SÉRIES)
+    # BIBLIOTECA COM CORREÇÃO DE ESTADO
     # -------------------------------------------------------------
     def mudar_aba_biblioteca(nova_aba):
         estado_biblioteca["aba"] = nova_aba
@@ -1102,7 +1105,7 @@ def main(page: ft.Page):
             coluna_biblioteca_itens.controls.append(
                 ft.Container(
                     content=ft.Text(
-                        f"Nenhum título encontrado com os filtros selecionados.",
+                        "Nenhum título encontrado com os filtros selecionados.",
                         color="#94a3b8",
                         size=14
                     ),
@@ -1221,7 +1224,7 @@ def main(page: ft.Page):
             for letra in letras_ordenadas:
                 renderizar_secao(f"Letra {letra}", "🔤", COR_TEXTO_CLARO, mapa_alfabetico[letra])
 
-        # ---------------- MODO 3: GÉNEROS ----------------
+        # ---------------- MODO 3: GÊNEROS ----------------
         elif modo_atual == "genero":
             mapa_generos = {}
             for row in itens_filtrados:
@@ -1410,7 +1413,7 @@ def main(page: ft.Page):
     )
 
     # -------------------------------------------------------------
-    # LOGÓTIPO INTERATIVO
+    # LOGO INTERATIVO
     # -------------------------------------------------------------
     def clicar_no_logo(e):
         btn_logo_interativo.scale = 0.94
@@ -1443,10 +1446,9 @@ def main(page: ft.Page):
 
     def acao_logout(e):
         try:
-            page.run_javascript("document.cookie = 'user_id=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';")
-            page.run_javascript("document.cookie = 'username=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';")
-            page.run_javascript("document.cookie = 'manter_conectado=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';")
-            page.client_storage.clear()
+            page.client_storage.remove("user_id")
+            page.client_storage.remove("username")
+            page.client_storage.remove("manter_conectado")
         except Exception:
             pass
         
@@ -1500,7 +1502,6 @@ def main(page: ft.Page):
         vertical_alignment=ft.CrossAxisAlignment.CENTER
     )
 
-    # Cabeçalho com: Logo -> Biblioteca/Busca -> Seletores Fixos (Todos/Filmes/Séries)
     cabecalho_fixo = ft.Container(
         bgcolor=COR_FUNDO,
         padding=ft.Padding(20, 6, 20, 10),
@@ -1510,7 +1511,7 @@ def main(page: ft.Page):
             bloco_usuario_topo,
             ft.Row([btn_logo_interativo], alignment=ft.MainAxisAlignment.CENTER),
             linha_inferior_menu,
-            linha_seletor_home  # Agora fixo no cabeçalho
+            linha_seletor_home
         ], spacing=8, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
     )
 
@@ -1540,7 +1541,7 @@ def main(page: ft.Page):
     page.on_resized = ajustar_layout_responsivo
 
     # -------------------------------------------------------------
-    # VISTAS ROLÁVEIS INDEPENDENTES
+    # VIEWS
     # -------------------------------------------------------------
     titulo_trends = ft.Container(
         content=ft.Row([
@@ -1616,7 +1617,7 @@ def main(page: ft.Page):
     )
 
     # -------------------------------------------------------------
-    # ECRÃ DE AUTENTICAÇÃO
+    # AUTENTICAÇÃO
     # -------------------------------------------------------------
     logo_login = ft.Image(src="logo.png", height=65, fit="contain")
 
@@ -1714,20 +1715,9 @@ def main(page: ft.Page):
         
         if persistir:
             try:
-                page.run_javascript(f"document.cookie = 'user_id={uid}; max-age=31536000; path=/;';")
-                page.run_javascript(f"document.cookie = 'username={username}; max-age=31536000; path=/;';")
-                page.run_javascript("document.cookie = 'manter_conectado=true; max-age=31536000; path=/;';")
                 page.client_storage.set("user_id", str(uid))
                 page.client_storage.set("username", str(username))
                 page.client_storage.set("manter_conectado", "true")
-            except Exception:
-                pass
-        else:
-            try:
-                page.run_javascript("document.cookie = 'user_id=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';")
-                page.run_javascript("document.cookie = 'username=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';")
-                page.run_javascript("document.cookie = 'manter_conectado=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';")
-                page.client_storage.clear()
             except Exception:
                 pass
 
@@ -1745,8 +1735,6 @@ def main(page: ft.Page):
         grade_populares.controls.clear()
 
         carregar_populares()
-        threading.Timer(0.6, lambda: carregar_populares(incrementar=True)).start()
-        threading.Timer(1.4, lambda: carregar_populares(incrementar=True)).start()
 
     def processar_auth(e):
         usuario = txt_auth_user.value.strip() if txt_auth_user.value else ""
@@ -1895,10 +1883,9 @@ def main(page: ft.Page):
     page.update()
 
     # -------------------------------------------------------------
-    # RECUPERAÇÃO DE SESSÃO
+    # RECUPERAÇÃO DE SESSÃO SEM BLOQUEIO
     # -------------------------------------------------------------
     def verificar_sessao_salva():
-        time.sleep(0.3)
         saved_uid = None
         saved_user = None
         saved_manter = None
@@ -1909,16 +1896,6 @@ def main(page: ft.Page):
             saved_manter = page.client_storage.get("manter_conectado")
         except Exception:
             pass
-
-        if not saved_uid or str(saved_manter).lower() != "true":
-            try:
-                cookies = page.cookies
-                if cookies:
-                    saved_uid = cookies.get("user_id")
-                    saved_user = cookies.get("username")
-                    saved_manter = cookies.get("manter_conectado")
-            except Exception:
-                pass
 
         if saved_uid and saved_user and (str(saved_manter).lower() == "true"):
             iniciar_sessao(saved_uid, saved_user, persistir=True)
