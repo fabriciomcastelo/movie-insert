@@ -1287,7 +1287,7 @@ def main(page: ft.Page):
         page.update()
 
     # -------------------------------------------------------------
-    # SUGESTÕES DE BUSCA (ESTRUTURA LIMPA, SEM OVERLAY BLOQUEANTE)
+    # SUGESTÕES DE BUSCA (POSICIONAMENTO FLUTUANTE EM STACK)
     # -------------------------------------------------------------
     coluna_sugestoes = ft.Column(spacing=4, scroll=ft.ScrollMode.AUTO)
 
@@ -1299,12 +1299,15 @@ def main(page: ft.Page):
         padding=6,
         visible=False,
         width=200,
-        height=220,
+        height=0,
+        top=50,   # Flutua exatamente abaixo do campo de busca sem empurrar a linha
+        left=0,
         shadow=ft.BoxShadow(blur_radius=12, color="#000000")
     )
 
     def selecionar_sugestao(mid, mtype, tit, ano, p_url):
         container_sugestoes.visible = False
+        container_sugestoes.height = 0
         campo_busca.value = ""
         page.update()
         abrir_detalhes(mid, mtype, tit, ano, p_url)
@@ -1315,6 +1318,7 @@ def main(page: ft.Page):
         termo_limpo = termo.strip()
         if not tmdb_key or len(termo_limpo) < 2:
             container_sugestoes.visible = False
+            container_sugestoes.height = 0
             page.update()
             return
 
@@ -1364,7 +1368,12 @@ def main(page: ft.Page):
                 )
                 coluna_sugestoes.controls.append(linha_item)
 
-            container_sugestoes.visible = len(coluna_sugestoes.controls) > 0
+            if len(coluna_sugestoes.controls) > 0:
+                container_sugestoes.height = 240
+                container_sugestoes.visible = True
+            else:
+                container_sugestoes.height = 0
+                container_sugestoes.visible = False
             page.update()
         except Exception:
             pass
@@ -1381,6 +1390,7 @@ def main(page: ft.Page):
 
         if not termo or len(termo.strip()) < 2:
             container_sugestoes.visible = False
+            container_sugestoes.height = 0
             page.update()
             return
 
@@ -1392,6 +1402,7 @@ def main(page: ft.Page):
         def _ocultar():
             if container_sugestoes.visible:
                 container_sugestoes.visible = False
+                container_sugestoes.height = 0
                 page.update()
         threading.Timer(0.3, _ocultar).start()
 
@@ -1453,6 +1464,9 @@ def main(page: ft.Page):
 
     def acao_logout(e):
         try:
+            page.run_javascript("localStorage.removeItem('user_id');")
+            page.run_javascript("localStorage.removeItem('username');")
+            page.run_javascript("localStorage.removeItem('manter_conectado');")
             page.client_storage.remove("user_id")
             page.client_storage.remove("username")
             page.client_storage.remove("manter_conectado")
@@ -1499,23 +1513,28 @@ def main(page: ft.Page):
         vertical_alignment=ft.CrossAxisAlignment.CENTER
     )
 
-    coluna_busca_integrada = ft.Column([
-        linha_busca_input,
-        container_sugestoes
-    ], spacing=4, tight=True)
+    # Bloco com a barra de busca e a lista flutuando via Stack (não empurra o cabeçalho)
+    stack_busca_flutuante = ft.Stack(
+        controls=[
+            linha_busca_input,
+            container_sugestoes
+        ],
+        clip_behavior=ft.ClipBehavior.NONE
+    )
 
     linha_inferior_menu = ft.Row(
         controls=[
             btn_tab_bib,
-            coluna_busca_integrada
+            stack_busca_flutuante
         ],
         spacing=10,
         alignment=ft.MainAxisAlignment.CENTER,
-        vertical_alignment=ft.CrossAxisAlignment.START
+        vertical_alignment=ft.CrossAxisAlignment.CENTER
     )
 
     cabecalho_fixo = ft.Container(
         bgcolor=COR_FUNDO,
+        clip_behavior=ft.ClipBehavior.NONE,
         padding=ft.Padding(12, 6, 12, 10),
         border=ft.Border(bottom=ft.BorderSide(1, COR_BORDA)),
         content=ft.Column([
@@ -1534,7 +1553,7 @@ def main(page: ft.Page):
         largura_janela = page.width if page.width else 1000
         if largura_janela < 720:
             campo_busca.width = max(130, int(largura_janela * 0.38))
-            container_sugestoes.width = max(130, int(largura_janela * 0.38)) + 35
+            container_sugestoes.width = max(160, int(largura_janela * 0.45))
             btn_logo_interativo.content.height = 50
             btn_tab_bib.content.height = 40
             titulo_trends.width = None
@@ -1603,6 +1622,7 @@ def main(page: ft.Page):
     def alternar_tela(indice):
         fechar_dialogo(modal_detalhes)
         container_sugestoes.visible = False
+        container_sugestoes.height = 0
 
         if indice == 0:
             view_inicio.visible = True
@@ -1731,6 +1751,9 @@ def main(page: ft.Page):
         
         if persistir:
             try:
+                page.run_javascript(f"localStorage.setItem('user_id', '{uid}');")
+                page.run_javascript(f"localStorage.setItem('username', '{username}');")
+                page.run_javascript("localStorage.setItem('manter_conectado', 'true');")
                 page.client_storage.set("user_id", str(uid))
                 page.client_storage.set("username", str(username))
                 page.client_storage.set("manter_conectado", "true")
