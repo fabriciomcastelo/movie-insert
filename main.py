@@ -60,7 +60,7 @@ def carregar_config():
     return cfg
 
 # -------------------------------------------------------------
-# BASE DE DADOS
+# BANCO DE DADOS
 # -------------------------------------------------------------
 def init_db():
     conn = None
@@ -656,6 +656,41 @@ def main(page: ft.Page):
         threading.Thread(target=_fetch, daemon=True).start()
 
     # -------------------------------------------------------------
+    # ADICIONAR RÁPIDO DIRETO NO PÔSTER (+)
+    # -------------------------------------------------------------
+    def adicionar_rapido_poster(e, mid, mtype, titulo, ano, poster_url, btn_adicionar):
+        e.control.disabled = True
+        uid = sessao_usuario["id"]
+        if not uid:
+            return
+
+        mtype_seguro = "tv" if mtype in ["tv", "series"] else "movie"
+        chave_id = f"{mtype_seguro}_{mid}"
+
+        conn = None
+        try:
+            conn = sqlite3.connect(DB_FILE, timeout=5)
+            c = conn.cursor()
+            c.execute("SELECT id FROM filmes WHERE id = ? AND usuario_id = ?", (chave_id, uid))
+            if not c.fetchone():
+                c.execute("""
+                    INSERT INTO filmes (id, titulo, ano, diretor, elenco, sinopse, imdb, rotten, metascore, streaming, poster_url, categoria, nota_usuario, trailer_url, generos, usuario_id, tipo)
+                    VALUES (?, ?, ?, 'N/A', 'N/A', 'Adicionado diretamente da tela inicial.', 'N/A', 'N/A', 'N/A', 'Consultando...', ?, 'Para Assistir', NULL, NULL, 'Outros', ?, ?)
+                """, (chave_id, titulo, str(ano), poster_url, uid, mtype_seguro))
+                conn.commit()
+                atualizar_contador_biblioteca()
+        except Exception as ex:
+            print(f"Erro add rapido: {ex}")
+        finally:
+            if conn:
+                conn.close()
+
+        btn_adicionar.icon = ft.Icons.CHECK
+        btn_adicionar.icon_color = "#10b981"
+        btn_adicionar.bgcolor = "#064e3b"
+        page.update()
+
+    # -------------------------------------------------------------
     # CARTÕES DOS FILMES E SÉRIES
     # -------------------------------------------------------------
     def criar_card_filme(mid, mtype, titulo, ano, poster_url, categoria=None, nota=None):
@@ -712,16 +747,38 @@ def main(page: ft.Page):
                 right=6
             )
 
-        imagem_com_badge = ft.Stack([
+        # Botão discreto de "+" no canto inferior do pôster (apenas na tela inicial)
+        btn_add_rapido = None
+        if not categoria:
+            btn_add_rapido = ft.IconButton(
+                icon=ft.Icons.ADD,
+                icon_color="white",
+                icon_size=16,
+                bgcolor="#0d1419cc",
+                tooltip="Adicionar à Biblioteca",
+                bottom=6,
+                right=6,
+                width=28,
+                height=28,
+                style=ft.ButtonStyle(padding=0)
+            )
+            btn_add_rapido.on_click = lambda e, m=mid, mt=mtype, t=titulo, a=ano, p=poster_url, b=btn_add_rapido: adicionar_rapido_poster(e, m, mt, t, a, p, b)
+
+        stack_itens = [
             ft.Image(
                 src=poster_url if poster_url else "https://via.placeholder.com/152x216?text=Sem+Poster",
                 width=152,
                 height=216,
                 border_radius=6,
                 fit="cover"
-            ),
-            badge_tipo if badge_tipo else ft.Container()
-        ])
+            )
+        ]
+        if badge_tipo:
+            stack_itens.append(badge_tipo)
+        if btn_add_rapido:
+            stack_itens.append(btn_add_rapido)
+
+        imagem_com_badge = ft.Stack(stack_itens)
 
         card_corpo = ft.Container(
             width=162,
@@ -1459,7 +1516,7 @@ def main(page: ft.Page):
     )
 
     # -------------------------------------------------------------
-    # LOGO INTERATIVO
+    # LOGO INTERATIVO (SEM BLOQUEIOS DE THREAD)
     # -------------------------------------------------------------
     def clicar_no_logo(e):
         btn_logo_interativo.scale = 0.94
@@ -1469,11 +1526,6 @@ def main(page: ft.Page):
         
         alternar_tela(0)
         alternar_filtro_home("todos")
-        if view_inicio.content and hasattr(view_inicio.content, "scroll_to"):
-            try:
-                view_inicio.content.scroll_to(offset=0, duration=300)
-            except Exception:
-                pass
 
     btn_logo_interativo = ft.Container(
         content=ft.Image(src="logo.png", height=65, fit="contain"),
