@@ -54,9 +54,6 @@ def carregar_config():
         cfg["omdb_key"] = os.environ.get("OMDB_KEY", "")
     return cfg
 
-# -------------------------------------------------------------
-# SEGURANÇA E BANCO DE DADOS
-# -------------------------------------------------------------
 def gerar_hash_senha(senha: str) -> str:
     salt = os.urandom(16).hex()
     hash_obj = hashlib.pbkdf2_hmac(
@@ -175,11 +172,7 @@ def main(page: ft.Page):
 
     init_db()
 
-    sessao_usuario = {
-        "id": None,
-        "username": ""
-    }
-
+    sessao_usuario = {"id": None, "username": ""}
     item_ativo = {"data": None}
     timer_busca = {"timer": None}
     filme_avaliando = {"id": None, "nota": "10"}
@@ -327,7 +320,7 @@ def main(page: ft.Page):
         abrir_dialogo(modal_avaliacao)
 
     # -------------------------------------------------------------
-    # JANELA DE DETALHES COM SUPORTE A SÉRIE E METASCORE
+    # JANELA DE DETALHES
     # -------------------------------------------------------------
     dt_img = ft.Image(
         src="https://via.placeholder.com/130x195?text=Sem+Poster",
@@ -455,9 +448,6 @@ def main(page: ft.Page):
     btn_salvar.on_click = salvar_filme_ativo
 
     def abrir_detalhes(mid, mtype, titulo_prev, ano_prev, poster_prev):
-        if container_sugestoes.visible:
-            container_sugestoes.visible = False
-
         mtype_seguro = "tv" if mtype in ["tv", "series"] else "movie"
 
         dt_img.src = poster_prev if poster_prev else "https://via.placeholder.com/130x195?text=Sem+Poster"
@@ -781,7 +771,7 @@ def main(page: ft.Page):
     )
 
     # -------------------------------------------------------------
-    # POPULARES COM ROLAGEM INFINITA E REQUISIÇÕES RESILIENTES
+    # POPULARES E ROLAGEM INFINITA
     # -------------------------------------------------------------
     def carregar_populares(incrementar=False):
         c = carregar_config()
@@ -908,13 +898,7 @@ def main(page: ft.Page):
         alignment=ft.MainAxisAlignment.CENTER
     )
 
-    # Detecção de rolagem melhorada para Desktop e Mobile
     def ao_rolar_inicio(e: ft.OnScrollEvent):
-        if container_sugestoes.visible:
-            container_sugestoes.visible = False
-            page.update()
-
-        # Dispara quando estiver nos últimos 1200 pixels ou passar de 80% da rolagem total
         distancia_do_fim = e.max_scroll_extent - e.pixels
         percentual = (e.pixels / e.max_scroll_extent) if e.max_scroll_extent > 0 else 0
 
@@ -1297,7 +1281,7 @@ def main(page: ft.Page):
         page.update()
 
     # -------------------------------------------------------------
-    # SUGESTÕES NO OVERLAY
+    # SUGESTÕES DE BUSCA SEGURA
     # -------------------------------------------------------------
     coluna_sugestoes = ft.Column(spacing=4, scroll=ft.ScrollMode.AUTO)
 
@@ -1310,11 +1294,8 @@ def main(page: ft.Page):
         visible=False,
         width=260,
         height=260,
-        top=190,
-        left=0,
         shadow=ft.BoxShadow(blur_radius=15, color="#000000")
     )
-    page.overlay.append(container_sugestoes)
 
     def selecionar_sugestao(mid, mtype, tit, ano, p_url):
         container_sugestoes.visible = False
@@ -1512,14 +1493,19 @@ def main(page: ft.Page):
         vertical_alignment=ft.CrossAxisAlignment.CENTER
     )
 
+    coluna_busca_com_dropdown = ft.Column([
+        linha_busca_input,
+        container_sugestoes
+    ], spacing=4, tight=True)
+
     linha_inferior_menu = ft.Row(
         controls=[
             btn_tab_bib,
-            linha_busca_input
+            coluna_busca_com_dropdown
         ],
         spacing=16,
         alignment=ft.MainAxisAlignment.CENTER,
-        vertical_alignment=ft.CrossAxisAlignment.CENTER
+        vertical_alignment=ft.CrossAxisAlignment.START
     )
 
     cabecalho_fixo = ft.Container(
@@ -1542,20 +1528,16 @@ def main(page: ft.Page):
         largura_janela = page.width if page.width else 1000
         if largura_janela < 720:
             campo_busca.width = max(180, int(largura_janela - 150))
-            container_sugestoes.width = max(200, int(largura_janela - 100))
+            container_sugestoes.width = max(180, int(largura_janela - 150))
             btn_logo_interativo.content.height = 50
             btn_tab_bib.content.height = 40
             titulo_trends.width = None
-            container_sugestoes.left = 20
-            container_sugestoes.top = 185
         else:
             campo_busca.width = 224
             container_sugestoes.width = 260
             btn_logo_interativo.content.height = 65
             btn_tab_bib.content.height = 45
             titulo_trends.width = 1100
-            container_sugestoes.left = max(0, int((largura_janela / 2) - 10))
-            container_sugestoes.top = 190
         page.update()
 
     page.on_resized = ajustar_layout_responsivo
@@ -1912,7 +1894,7 @@ def main(page: ft.Page):
     page.update()
 
     # -------------------------------------------------------------
-    # RECUPERAÇÃO DE SESSÃO SEM BLOQUEIO
+    # RECUPERAÇÃO DE SESSÃO
     # -------------------------------------------------------------
     def verificar_sessao_salva():
         time.sleep(0.3)
