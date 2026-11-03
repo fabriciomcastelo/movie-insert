@@ -777,7 +777,7 @@ def main(page: ft.Page):
     )
 
     # -------------------------------------------------------------
-    # POPULARES E ROLAGEM INFINITA (SEM BLOQUEIOS DE THREAD)
+    # POPULARES E ROLAGEM INFINITA
     # -------------------------------------------------------------
     def carregar_populares(incrementar=False):
         c = carregar_config()
@@ -1287,7 +1287,7 @@ def main(page: ft.Page):
         page.update()
 
     # -------------------------------------------------------------
-    # SUGESTÕES DE BUSCA (INLINE, SEM OVERLAY BLOQUEANTE)
+    # SUGESTÕES DE BUSCA (ESTRUTURA LIMPA, SEM OVERLAY BLOQUEANTE)
     # -------------------------------------------------------------
     coluna_sugestoes = ft.Column(spacing=4, scroll=ft.ScrollMode.AUTO)
 
@@ -1298,8 +1298,8 @@ def main(page: ft.Page):
         border=criar_borda(1.2, COR_PETROLEO),
         padding=6,
         visible=False,
-        width=224,
-        max_height=240,
+        width=200,
+        height=220,
         shadow=ft.BoxShadow(blur_radius=12, color="#000000")
     )
 
@@ -1395,7 +1395,6 @@ def main(page: ft.Page):
                 page.update()
         threading.Timer(0.3, _ocultar).start()
 
-    # Largura adaptada para não cortar em telemóveis
     campo_busca = ft.TextField(
         hint_text="Buscar...",
         hint_style=ft.TextStyle(size=12, color="#64748b"),
