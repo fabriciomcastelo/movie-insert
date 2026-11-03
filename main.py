@@ -327,7 +327,7 @@ def main(page: ft.Page):
         abrir_dialogo(modal_avaliacao)
 
     # -------------------------------------------------------------
-    # JANELA DE DETALHES
+    # JANELA DE DETALHES COM SUPORTE A SÉRIE E METASCORE
     # -------------------------------------------------------------
     dt_img = ft.Image(
         src="https://via.placeholder.com/130x195?text=Sem+Poster",
@@ -508,7 +508,8 @@ def main(page: ft.Page):
                     info_criacao = f"Criador(es): {', '.join(criadores) if criadores else 'Não informado'} • {temporadas} Temporada(s)"
                     diretor = info_criacao
 
-                elenco_list = [a.get("name") for a in res.get("credits", {}).get("cast", [])[:4]]
+                credits_data = res.get("credits", {})
+                elenco_list = [a.get("name") for a in credits_data.get("cast", [])[:4]]
                 elenco = ", ".join(elenco_list) if elenco_list else "Não informado"
 
                 titulo = res.get("title") or res.get("name") or titulo_prev
@@ -768,8 +769,19 @@ def main(page: ft.Page):
     coluna_biblioteca_itens = ft.Column(spacing=16, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
     spinner_carregamento = ft.ProgressRing(width=30, height=30, stroke_width=3, color=COR_PETROLEO, visible=False)
 
+    btn_carregar_mais = ft.Button(
+        content=ft.Text("Carregar Mais Títulos", size=12, weight="bold", color=COR_TEXTO_CLARO),
+        bgcolor=COR_CARD,
+        height=36,
+        style=ft.ButtonStyle(
+            shape=ft.RoundedRectangleBorder(radius=8),
+            side=ft.BorderSide(1, COR_BORDA)
+        ),
+        on_click=lambda e: carregar_populares(incrementar=True)
+    )
+
     # -------------------------------------------------------------
-    # POPULARES COM DESTRAVAMENTO DE CONCORRÊNCIA
+    # POPULARES COM ROLAGEM INFINITA E REQUISIÇÕES RESILIENTES
     # -------------------------------------------------------------
     def carregar_populares(incrementar=False):
         c = carregar_config()
@@ -794,6 +806,7 @@ def main(page: ft.Page):
             paginacao["pagina_atual"] += 1
 
         spinner_carregamento.visible = True
+        btn_carregar_mais.visible = False
         page.update()
 
         def _fetch():
@@ -813,8 +826,9 @@ def main(page: ft.Page):
                 if resp.status_code == 200:
                     dados = resp.json()
                     itens = dados.get("results", [])
+                    total_pages = dados.get("total_pages", 1000)
 
-                    if not itens:
+                    if not itens or p >= total_pages:
                         paginacao["fim"] = True
 
                     novos = []
@@ -841,12 +855,13 @@ def main(page: ft.Page):
             finally:
                 paginacao["carregando"] = False
                 spinner_carregamento.visible = False
+                btn_carregar_mais.visible = not paginacao["fim"]
                 page.update()
 
         threading.Thread(target=_fetch, daemon=True).start()
 
     def alternar_filtro_home(novo_filtro):
-        paginacao["carregando"] = False  # Destrava requisições anteriores presas
+        paginacao["carregando"] = False
         paginacao["filtro_home"] = novo_filtro
         paginacao["pagina_atual"] = 1
         paginacao["fim"] = False
@@ -893,12 +908,17 @@ def main(page: ft.Page):
         alignment=ft.MainAxisAlignment.CENTER
     )
 
+    # Detecção de rolagem melhorada para Desktop e Mobile
     def ao_rolar_inicio(e: ft.OnScrollEvent):
         if container_sugestoes.visible:
             container_sugestoes.visible = False
             page.update()
 
-        if e.max_scroll_extent > 0 and (e.pixels + 900) >= e.max_scroll_extent:
+        # Dispara quando estiver nos últimos 1200 pixels ou passar de 80% da rolagem total
+        distancia_do_fim = e.max_scroll_extent - e.pixels
+        percentual = (e.pixels / e.max_scroll_extent) if e.max_scroll_extent > 0 else 0
+
+        if (distancia_do_fim <= 1200 or percentual >= 0.8) and e.max_scroll_extent > 0:
             if not paginacao["carregando"] and not paginacao["fim"]:
                 carregar_populares(incrementar=True)
 
@@ -947,7 +967,7 @@ def main(page: ft.Page):
         page.launch_url(f"file://{arq}")
 
     # -------------------------------------------------------------
-    # BIBLIOTECA COM CORREÇÃO DE ESTADO
+    # BIBLIOTECA
     # -------------------------------------------------------------
     def mudar_aba_biblioteca(nova_aba):
         estado_biblioteca["aba"] = nova_aba
@@ -1551,6 +1571,15 @@ def main(page: ft.Page):
         padding=ft.Padding(0, 10, 0, 0)
     )
 
+    bloco_carregamento_fim = ft.Column(
+        controls=[
+            spinner_carregamento,
+            btn_carregar_mais
+        ],
+        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+        spacing=8
+    )
+
     view_inicio = ft.Container(
         expand=True,
         padding=ft.Padding(12, 0, 12, 10),
@@ -1563,9 +1592,9 @@ def main(page: ft.Page):
                 titulo_trends,
                 grade_populares,
                 ft.Container(
-                    content=spinner_carregamento,
+                    content=bloco_carregamento_fim,
                     alignment=ft.Alignment(0, 0),
-                    padding=ft.Padding(0, 15, 0, 35)
+                    padding=ft.Padding(0, 15, 0, 40)
                 )
             ]
         )
@@ -1886,6 +1915,7 @@ def main(page: ft.Page):
     # RECUPERAÇÃO DE SESSÃO SEM BLOQUEIO
     # -------------------------------------------------------------
     def verificar_sessao_salva():
+        time.sleep(0.3)
         saved_uid = None
         saved_user = None
         saved_manter = None
