@@ -210,6 +210,7 @@ def main(page: ft.Page):
                 if conn:
                     conn.close()
             fechar_dialogo(modal_confirmacao)
+            atualizar_contador_biblioteca()
             carregar_biblioteca()
 
     modal_confirmacao = ft.AlertDialog(
@@ -431,6 +432,7 @@ def main(page: ft.Page):
         btn_salvar.bgcolor = "#334155"
         btn_salvar.disabled = True
         btn_ir_lista.visible = True
+        atualizar_contador_biblioteca()
         page.update()
 
     btn_salvar.on_click = salvar_filme_ativo
@@ -911,6 +913,7 @@ def main(page: ft.Page):
             finally:
                 if conn:
                     conn.close()
+            atualizar_contador_biblioteca()
             carregar_biblioteca()
 
     def imprimir_lista():
@@ -942,7 +945,7 @@ def main(page: ft.Page):
         page.launch_url(f"file://{arq}")
 
     # -------------------------------------------------------------
-    # BIBLIOTECA
+    # BIBLIOTECA (ORGANIZAÇÃO LADO A LADO COM QUEBRA DE LINHA)
     # -------------------------------------------------------------
     def mudar_aba_biblioteca(nova_aba):
         estado_biblioteca["aba"] = nova_aba
@@ -1110,12 +1113,14 @@ def main(page: ft.Page):
             page.update()
             return
 
+        # Renderização Lado a Lado (wrap=True) para todas as seções (Streaming, A-Z, Gênero)
         def renderizar_secao(titulo_secao, icone, cor, lista):
             if not lista:
                 return
-            linha_cards = ft.Row(
+            grade_cards = ft.Row(
+                wrap=True,
                 spacing=12,
-                scroll=ft.ScrollMode.AUTO,
+                run_spacing=14,
                 alignment=ft.MainAxisAlignment.START,
                 controls=[
                     criar_card_filme(mid, tp, tit, ano, p_url, categoria=cat, nota=nota)
@@ -1134,8 +1139,8 @@ def main(page: ft.Page):
                             border_radius=8
                         )
                     ], spacing=6),
-                    linha_cards
-                ], spacing=6),
+                    grade_cards
+                ], spacing=10),
                 width=1000
             )
             coluna_biblioteca_itens.controls.append(bloco)
@@ -1420,7 +1425,7 @@ def main(page: ft.Page):
     )
 
     # -------------------------------------------------------------
-    # LOGO INTERATIVO (RESETA PARA 'TODOS' NA HOME E ROLA AO INÍCIO)
+    # LOGO INTERATIVO
     # -------------------------------------------------------------
     def clicar_no_logo(e):
         btn_logo_interativo.scale = 0.94
@@ -1447,12 +1452,35 @@ def main(page: ft.Page):
         on_click=clicar_no_logo
     )
 
+    # Botão de Biblioteca com contador dinâmico
+    txt_contador_bib = ft.Text("BIBLIOTECA", color="white", weight="bold", size=11)
+
+    def atualizar_contador_biblioteca():
+        uid = sessao_usuario["id"]
+        total = 0
+        if uid:
+            conn = None
+            try:
+                conn = sqlite3.connect(DB_FILE, timeout=5)
+                c = conn.cursor()
+                c.execute("SELECT COUNT(*) FROM filmes WHERE usuario_id = ?", (uid,))
+                row = c.fetchone()
+                total = row[0] if row else 0
+            except Exception:
+                pass
+            finally:
+                if conn:
+                    conn.close()
+        txt_contador_bib.value = f"BIBLIOTECA ({total})"
+        page.update()
+
     btn_tab_bib = ft.Container(
-        content=ft.Image(src="biblioteca.png", height=45, fit="contain"),
-        ink=True,
+        content=txt_contador_bib,
+        bgcolor=COR_CARD,
+        border=criar_borda(1.2, COR_BORDA),
         border_radius=10,
-        border=criar_borda(2, "transparent"),
-        padding=2,
+        padding=ft.Padding(12, 10, 12, 10),
+        ink=True,
         on_click=lambda e: alternar_tela(1)
     )
 
@@ -1495,7 +1523,7 @@ def main(page: ft.Page):
         vertical_alignment=ft.CrossAxisAlignment.CENTER
     )
 
-    # Inversão consolidada: Busca à esquerda, Biblioteca à direita
+    # Inversão: Busca à esquerda, Biblioteca à direita
     linha_inferior_menu = ft.Row(
         controls=[
             linha_busca_input,
@@ -1527,12 +1555,10 @@ def main(page: ft.Page):
         if largura_janela < 720:
             campo_busca.width = max(130, int(largura_janela * 0.38))
             btn_logo_interativo.content.height = 50
-            btn_tab_bib.content.height = 40
             titulo_trends.width = None
         else:
             campo_busca.width = 180
             btn_logo_interativo.content.height = 65
-            btn_tab_bib.content.height = 45
             titulo_trends.width = 1100
         page.update()
 
@@ -1598,14 +1624,14 @@ def main(page: ft.Page):
             view_inicio.visible = True
             view_biblioteca.visible = False
             linha_seletor_home.visible = True
-            btn_tab_bib.border = criar_borda(2, "transparent")
+            btn_tab_bib.border = criar_borda(1.2, COR_BORDA)
             btn_logo_interativo.border = criar_borda(2, COR_PETROLEO)
         elif indice == 1:
             carregar_biblioteca()
             view_inicio.visible = False
             view_biblioteca.visible = True
             linha_seletor_home.visible = False
-            btn_tab_bib.border = criar_borda(2, COR_PETROLEO)
+            btn_tab_bib.border = criar_borda(1.5, COR_PETROLEO)
             btn_logo_interativo.border = criar_borda(2, "transparent")
 
         page.update()
@@ -1623,7 +1649,7 @@ def main(page: ft.Page):
     )
 
     # -------------------------------------------------------------
-    # SELEÇÃO DE PERFIL ESTILO NETFLIX
+    # SELEÇÃO DE PERFIL ESTILO NETFLIX ("Quem está usando?")
     # -------------------------------------------------------------
     linha_cards_perfis = ft.Row(
         wrap=True,
@@ -1642,6 +1668,7 @@ def main(page: ft.Page):
         tela_perfis.visible = False
         layout_mestre.visible = True
         ajustar_layout_responsivo()
+        atualizar_contador_biblioteca()
         page.update()
 
         paginacao["pagina_atual"] = 1
@@ -1653,7 +1680,6 @@ def main(page: ft.Page):
 
         carregar_populares()
 
-    # Modal para criar novo perfil
     txt_novo_perfil_nome = ft.TextField(
         label="Nome do Perfil",
         label_style=ft.TextStyle(color="#94a3b8"),
@@ -1695,7 +1721,6 @@ def main(page: ft.Page):
             txt_novo_perfil_nome.value = ""
             txt_novo_perfil_erro.value = ""
 
-            # Entra direto com o perfil recém-criado
             entrar_com_perfil(novo_id, nome, cor_escolhida)
         except Exception as err:
             txt_novo_perfil_erro.value = f"Erro: {err}"
@@ -1806,7 +1831,6 @@ def main(page: ft.Page):
                 conn.close()
 
         if not perfis:
-            # Caso não exista perfil nenhum (primeiro uso), abre logo o cadastro
             abrir_modal_novo_perfil()
 
         for pid, pnome, pcor in perfis:
@@ -1822,7 +1846,7 @@ def main(page: ft.Page):
         content=ft.Column([
             ft.Image(src="logo.png", height=75, fit="contain"),
             ft.Container(height=10),
-            ft.Text("Quem está assistindo?", size=26, weight="bold", color="white", text_align=ft.TextAlign.CENTER),
+            ft.Text("Quem está usando?", size=26, weight="bold", color="white", text_align=ft.TextAlign.CENTER),
             ft.Container(height=15),
             linha_cards_perfis
         ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, alignment=ft.MainAxisAlignment.CENTER, spacing=12),
