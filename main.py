@@ -95,6 +95,14 @@ def init_db():
             )
         """)
         
+        # Tabela auxiliar para memorizar o último usuário logado
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS configuracoes_locais (
+                chave TEXT PRIMARY KEY,
+                valor TEXT
+            )
+        """)
+        
         c.execute("""
             CREATE TABLE IF NOT EXISTS filmes (
                 id TEXT,
@@ -139,6 +147,27 @@ def init_db():
     finally:
         if conn:
             conn.close()
+
+def salvar_param_db(chave, valor):
+    try:
+        conn = sqlite3.connect(DB_FILE, timeout=5)
+        c = conn.cursor()
+        c.execute("INSERT OR REPLACE INTO configuracoes_locais (chave, valor) VALUES (?, ?)", (chave, str(valor)))
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+def obter_param_db(chave):
+    try:
+        conn = sqlite3.connect(DB_FILE, timeout=5)
+        c = conn.cursor()
+        c.execute("SELECT valor FROM configuracoes_locais WHERE chave = ?", (chave,))
+        row = c.fetchone()
+        conn.close()
+        return row[0] if row else None
+    except Exception:
+        return None
 
 def normalizar_texto(texto):
     if not texto:
@@ -1469,6 +1498,7 @@ def main(page: ft.Page):
     def acao_logout(e):
         try:
             page.client_storage.clear()
+            salvar_param_db("lembrar_usuario", "")
         except Exception:
             pass
         
@@ -1639,15 +1669,19 @@ def main(page: ft.Page):
     )
 
     # -------------------------------------------------------------
-    # AUTENTICAÇÃO
+    # AUTENTICAÇÃO (COM PREENCHIMENTO AUTOMÁTICO - PLANO B)
     # -------------------------------------------------------------
     logo_login = ft.Image(src="logo.png", height=65, fit="contain")
 
     txt_auth_titulo = ft.Text("Entrar", size=18, weight="bold", color=COR_TEXTO_CLARO)
     txt_auth_erro = ft.Text("", size=12, color="#ef4444")
     
+    # Inicia com o último usuário salvo no banco local
+    lembrado = obter_param_db("lembrar_usuario") or ""
+
     txt_auth_user = ft.TextField(
         label="Nome de Usuário",
+        value=lembrado,
         label_style=ft.TextStyle(color="#94a3b8"),
         bgcolor=COR_FUNDO,
         dense=True,
@@ -1685,7 +1719,7 @@ def main(page: ft.Page):
     chk_manter_conectado = ft.Checkbox(
         label="Permanecer conectado",
         label_style=ft.TextStyle(size=12, color=COR_TEXTO_CLARO),
-        value=True,
+        value=True if lembrado else True,
         fill_color=COR_PETROLEO,
         check_color="white"
     )
@@ -1739,8 +1773,11 @@ def main(page: ft.Page):
             try:
                 page.client_storage.set("user_id", str(uid))
                 page.client_storage.set("username", str(username))
+                salvar_param_db("lembrar_usuario", str(username))
             except Exception:
                 pass
+        else:
+            salvar_param_db("lembrar_usuario", "")
 
         spinner_autologin.visible = False
         card_auth.visible = False
@@ -1904,14 +1941,14 @@ def main(page: ft.Page):
     page.update()
 
     # -------------------------------------------------------------
-    # RECUPERAÇÃO DE SESSÃO SEGURA E SEM TRAVAMENTOS
+    # VERIFICAÇÃO DE SESSÃO SEM TRAVAMENTOS
     # -------------------------------------------------------------
     def verificar_sessao_salva():
         saved_uid = None
         saved_user = None
 
-        # Aguarda brevemente a montagem inicial do WebSocket
-        for _ in range(6):
+        # Tenta ler rápido se o cliente já enviou storage
+        for _ in range(4):
             try:
                 saved_uid = page.client_storage.get("user_id")
                 saved_user = page.client_storage.get("username")
@@ -1919,11 +1956,17 @@ def main(page: ft.Page):
                     break
             except Exception:
                 pass
-            time.sleep(0.1)
+            time.sleep(0.08)
 
         if saved_uid and saved_user:
             iniciar_sessao(saved_uid, saved_user, persistir=True)
         else:
+            # Não conseguiu auto-login imediato: exibe login com usuário pré-preenchido
+            user_lembrado = obter_param_db("lembrar_usuario")
+            if user_lembrado:
+                txt_auth_user.value = user_lembrado
+                chk_manter_conectado.value = True
+
             spinner_autologin.visible = False
             definir_modo_auth("login")
             card_auth.visible = True
