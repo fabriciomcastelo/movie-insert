@@ -23,6 +23,7 @@ COR_VERMELHO_PLAY = "#9e0f0f"
 COR_FUNDO = "#070b0e"
 COR_CARD = "#0d1419"
 COR_BORDA = "#17232b"
+COR_ATIVO_BORDA = "#0ea5e9"
 
 CORES_AVATAR = [
     "#0284c7", "#0d9488", "#16a34a", "#ca8a04", 
@@ -157,6 +158,21 @@ def main(page: ft.Page):
     page.padding = 0
     page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
     page.scroll = None
+
+    # Splash Screen Customizado do App
+    page.splash = ft.Container(
+        content=ft.Column(
+            [
+                ft.Image(src="logo.png", height=70, fit="contain"),
+                ft.ProgressRing(width=28, height=28, stroke_width=2.5, color=COR_PETROLEO)
+            ],
+            alignment=ft.MainAxisAlignment.CENTER,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            spacing=18
+        ),
+        bgcolor=COR_FUNDO,
+        alignment=ft.Alignment(0, 0)
+    )
 
     init_db()
 
@@ -748,7 +764,7 @@ def main(page: ft.Page):
         return card_corpo
 
     grade_populares = ft.Row(wrap=True, spacing=12, run_spacing=14, alignment=ft.MainAxisAlignment.CENTER)
-    coluna_biblioteca_itens = ft.Column(spacing=16, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
+    coluna_biblioteca_itens = ft.Column(spacing=18, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
     spinner_carregamento = ft.ProgressRing(width=28, height=28, stroke_width=2.5, color=COR_PETROLEO, visible=False)
 
     btn_carregar_mais = ft.Button(
@@ -854,33 +870,42 @@ def main(page: ft.Page):
 
     def atualizar_botoes_filtro_home():
         atual = paginacao["filtro_home"]
+        
         btn_home_todos.bgcolor = COR_PETROLEO if atual == "todos" else COR_CARD
-        btn_home_todos.content.color = COR_TEXTO_CLARO if atual == "todos" else "#94a3b8"
+        btn_home_todos.content.color = "white" if atual == "todos" else "#94a3b8"
+        btn_home_todos.border = criar_borda(1.5, COR_ATIVO_BORDA) if atual == "todos" else criar_borda(1, COR_BORDA)
+
         btn_home_filmes.bgcolor = COR_PETROLEO if atual == "movie" else COR_CARD
-        btn_home_filmes.content.color = COR_TEXTO_CLARO if atual == "movie" else "#94a3b8"
+        btn_home_filmes.content.color = "white" if atual == "movie" else "#94a3b8"
+        btn_home_filmes.border = criar_borda(1.5, COR_ATIVO_BORDA) if atual == "movie" else criar_borda(1, COR_BORDA)
+
         btn_home_series.bgcolor = COR_PETROLEO if atual == "tv" else COR_CARD
-        btn_home_series.content.color = COR_TEXTO_CLARO if atual == "tv" else "#94a3b8"
+        btn_home_series.content.color = "white" if atual == "tv" else "#94a3b8"
+        btn_home_series.border = criar_borda(1.5, COR_ATIVO_BORDA) if atual == "tv" else criar_borda(1, COR_BORDA)
         page.update()
 
     btn_home_todos = ft.Button(
-        content=ft.Text("Todos", size=11, weight="bold", color=COR_TEXTO_CLARO),
+        content=ft.Text("Todos", size=11, weight="bold", color="white"),
         bgcolor=COR_PETROLEO,
         height=32,
-        style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8)),
+        style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=20)),
+        border=criar_borda(1.5, COR_ATIVO_BORDA),
         on_click=lambda e: alternar_filtro_home("todos")
     )
     btn_home_filmes = ft.Button(
         content=ft.Text("🎬 Filmes", size=11, weight="bold", color="#94a3b8"),
         bgcolor=COR_CARD,
         height=32,
-        style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8)),
+        style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=20)),
+        border=criar_borda(1, COR_BORDA),
         on_click=lambda e: alternar_filtro_home("movie")
     )
     btn_home_series = ft.Button(
         content=ft.Text("📺 Séries", size=11, weight="bold", color="#94a3b8"),
         bgcolor=COR_CARD,
         height=32,
-        style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8)),
+        style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=20)),
+        border=criar_borda(1, COR_BORDA),
         on_click=lambda e: alternar_filtro_home("tv")
     )
 
@@ -945,7 +970,7 @@ def main(page: ft.Page):
         page.launch_url(f"file://{arq}")
 
     # -------------------------------------------------------------
-    # BIBLIOTECA (ORGANIZAÇÃO LADO A LADO COM QUEBRA DE LINHA)
+    # BIBLIOTECA (ORGANIZAÇÃO CENTRALIZADA E DIFERENCIAÇÃO FORTE)
     # -------------------------------------------------------------
     def mudar_aba_biblioteca(nova_aba):
         estado_biblioteca["aba"] = nova_aba
@@ -1008,33 +1033,39 @@ def main(page: ft.Page):
             on_click=lambda e: imprimir_lista()
         )
 
+        # Diferenciação FORTE: Aba Ativa vs Inativa
+        is_para_assistir_ativo = (aba_atual == "Para Assistir")
         btn_aba_para_assistir = ft.Button(
-            content=ft.Text(f"⏳ Para Assistir ({total_para_assistir})", color=COR_TEXTO_CLARO if aba_atual == "Para Assistir" else "#94a3b8", weight="bold"),
-            bgcolor=COR_PETROLEO if aba_atual == "Para Assistir" else COR_CHUMBO,
+            content=ft.Text(f"⏳ Para Assistir ({total_para_assistir})", color="white" if is_para_assistir_ativo else "#94a3b8", weight="bold"),
+            bgcolor=COR_PETROLEO if is_para_assistir_ativo else "#141d24",
+            border=criar_borda(2, COR_ATIVO_BORDA) if is_para_assistir_ativo else criar_borda(1, COR_BORDA),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10)),
             on_click=lambda e: mudar_aba_biblioteca("Para Assistir")
         )
 
         btn_aba_assistidos = ft.Button(
-            content=ft.Text(f"✓ Assistidos ({total_assistidos})", color=COR_TEXTO_CLARO if aba_atual == "Assistidos" else "#94a3b8", weight="bold"),
-            bgcolor=COR_PETROLEO if aba_atual == "Assistidos" else COR_CHUMBO,
+            content=ft.Text(f"✓ Assistidos ({total_assistidos})", color="white" if not is_para_assistir_ativo else "#94a3b8", weight="bold"),
+            bgcolor=COR_PETROLEO if not is_para_assistir_ativo else "#141d24",
+            border=criar_borda(2, COR_ATIVO_BORDA) if not is_para_assistir_ativo else criar_borda(1, COR_BORDA),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10)),
             on_click=lambda e: mudar_aba_biblioteca("Assistidos")
         )
 
         linha_abas_biblioteca = ft.Row(
-            spacing=8,
+            spacing=10,
             alignment=ft.MainAxisAlignment.CENTER,
             controls=[btn_aba_para_assistir, btn_aba_assistidos]
         )
 
+        # Diferenciação FORTE do Tipo (Filmes, Séries, Todos)
         def criar_botao_tipo(rotulo, valor_tipo):
             ativo = (tipo_atual == valor_tipo)
             return ft.Button(
-                content=ft.Text(rotulo, color=COR_TEXTO_CLARO if ativo else "#94a3b8", size=11, weight="bold"),
+                content=ft.Text(rotulo, color="white" if ativo else "#94a3b8", size=11, weight="bold"),
                 bgcolor=COR_PETROLEO if ativo else COR_CARD,
-                height=30,
-                style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8)),
+                border=criar_borda(1.8, COR_ATIVO_BORDA) if ativo else criar_borda(1, COR_BORDA),
+                height=32,
+                style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=20)),
                 on_click=lambda e, t=valor_tipo: mudar_filtro_tipo_bib(t)
             )
 
@@ -1042,28 +1073,27 @@ def main(page: ft.Page):
             spacing=6,
             alignment=ft.MainAxisAlignment.CENTER,
             controls=[
-                ft.Text("Tipo:", size=11, color="#94a3b8", weight="bold"),
+                ft.Text("Tipo:", size=11, color="#cbd5e1", weight="bold"),
                 criar_botao_tipo("Todos", "todos"),
                 criar_botao_tipo("🎬 Filmes", "movie"),
                 criar_botao_tipo("📺 Séries", "tv"),
             ]
         )
 
+        # Diferenciação FORTE do Organizador (Streaming, A-Z, Gênero, Notas)
         def criar_botao_filtro(rotulo, modo_alvo):
             ativo = (modo_atual == modo_alvo)
             return ft.Button(
-                content=ft.Text(rotulo, color=COR_TEXTO_CLARO if ativo else "#94a3b8", size=11, weight="bold"),
-                bgcolor=COR_PETROLEO if ativo else COR_CARD,
-                height=30,
-                style=ft.ButtonStyle(
-                    shape=ft.RoundedRectangleBorder(radius=8),
-                    side=ft.BorderSide(1, COR_PETROLEO if ativo else COR_BORDA)
-                ),
+                content=ft.Text(rotulo, color="white" if ativo else "#94a3b8", size=11, weight="bold"),
+                bgcolor="#055663" if ativo else COR_CARD,
+                border=criar_borda(2, "#38bdf8") if ativo else criar_borda(1, COR_BORDA),
+                height=32,
+                style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8)),
                 on_click=lambda e, m=modo_alvo: mudar_modo_filtro(m)
             )
 
         controles_filtros = [
-            ft.Text("Organizar:", size=11, color="#94a3b8", weight="bold"),
+            ft.Text("Organizar:", size=11, color="#cbd5e1", weight="bold"),
             criar_botao_filtro("Streaming", "streaming"),
             criar_botao_filtro("A-Z", "alfabetico"),
             criar_botao_filtro("Gênero", "genero"),
@@ -1075,7 +1105,7 @@ def main(page: ft.Page):
             controles_filtros.append(criar_botao_filtro("Nota Pessoal", "nota_pessoal"))
 
         barra_filtros = ft.Row(
-            spacing=6,
+            spacing=8,
             wrap=True,
             alignment=ft.MainAxisAlignment.CENTER,
             controls=controles_filtros
@@ -1093,7 +1123,7 @@ def main(page: ft.Page):
                 linha_abas_biblioteca,
                 barra_tipo,
                 barra_filtros
-            ], spacing=8, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+            ], spacing=10, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
             width=1000
         )
 
@@ -1107,13 +1137,13 @@ def main(page: ft.Page):
                         color="#94a3b8",
                         size=14
                     ),
-                    padding=ft.Padding(10, 25, 10, 20)
+                    padding=ft.Padding(10, 30, 10, 20)
                 )
             )
             page.update()
             return
 
-        # Renderização Lado a Lado (wrap=True) para todas as seções (Streaming, A-Z, Gênero)
+        # Renderização LADO A LADO E CENTRALIZADA com quebra fluida de linha (wrap=True)
         def renderizar_secao(titulo_secao, icone, cor, lista):
             if not lista:
                 return
@@ -1121,7 +1151,7 @@ def main(page: ft.Page):
                 wrap=True,
                 spacing=12,
                 run_spacing=14,
-                alignment=ft.MainAxisAlignment.START,
+                alignment=ft.MainAxisAlignment.CENTER,
                 controls=[
                     criar_card_filme(mid, tp, tit, ano, p_url, categoria=cat, nota=nota)
                     for mid, tit, ano, p_url, nota, cat, tp in lista
@@ -1138,9 +1168,9 @@ def main(page: ft.Page):
                             padding=ft.Padding(5, 2, 5, 2),
                             border_radius=8
                         )
-                    ], spacing=6),
+                    ], spacing=6, alignment=ft.MainAxisAlignment.CENTER),
                     grade_cards
-                ], spacing=10),
+                ], spacing=10, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
                 width=1000
             )
             coluna_biblioteca_itens.controls.append(bloco)
@@ -1174,7 +1204,7 @@ def main(page: ft.Page):
                 )
             elementos.append(grade)
             bloco = ft.Container(
-                content=ft.Column(elementos, spacing=8, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                content=ft.Column(elementos, spacing=10, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
                 width=1000
             )
             coluna_biblioteca_itens.controls.append(bloco)
@@ -1452,7 +1482,7 @@ def main(page: ft.Page):
         on_click=clicar_no_logo
     )
 
-    # Botão de Biblioteca com contador dinâmico
+    # Botão de Biblioteca com contador dinâmico e estilo consistente
     txt_contador_bib = ft.Text("BIBLIOTECA", color="white", weight="bold", size=11)
 
     def atualizar_contador_biblioteca():
@@ -1523,7 +1553,6 @@ def main(page: ft.Page):
         vertical_alignment=ft.CrossAxisAlignment.CENTER
     )
 
-    # Inversão: Busca à esquerda, Biblioteca à direita
     linha_inferior_menu = ft.Row(
         controls=[
             linha_busca_input,
@@ -1631,7 +1660,7 @@ def main(page: ft.Page):
             view_inicio.visible = False
             view_biblioteca.visible = True
             linha_seletor_home.visible = False
-            btn_tab_bib.border = criar_borda(1.5, COR_PETROLEO)
+            btn_tab_bib.border = criar_borda(2, COR_ATIVO_BORDA)
             btn_logo_interativo.border = criar_borda(2, "transparent")
 
         page.update()
