@@ -95,14 +95,6 @@ def init_db():
             )
         """)
         
-        # Tabela auxiliar para memorizar o último usuário logado
-        c.execute("""
-            CREATE TABLE IF NOT EXISTS configuracoes_locais (
-                chave TEXT PRIMARY KEY,
-                valor TEXT
-            )
-        """)
-        
         c.execute("""
             CREATE TABLE IF NOT EXISTS filmes (
                 id TEXT,
@@ -147,27 +139,6 @@ def init_db():
     finally:
         if conn:
             conn.close()
-
-def salvar_param_db(chave, valor):
-    try:
-        conn = sqlite3.connect(DB_FILE, timeout=5)
-        c = conn.cursor()
-        c.execute("INSERT OR REPLACE INTO configuracoes_locais (chave, valor) VALUES (?, ?)", (chave, str(valor)))
-        conn.commit()
-        conn.close()
-    except Exception:
-        pass
-
-def obter_param_db(chave):
-    try:
-        conn = sqlite3.connect(DB_FILE, timeout=5)
-        c = conn.cursor()
-        c.execute("SELECT valor FROM configuracoes_locais WHERE chave = ?", (chave,))
-        row = c.fetchone()
-        conn.close()
-        return row[0] if row else None
-    except Exception:
-        return None
 
 def normalizar_texto(texto):
     if not texto:
@@ -385,8 +356,8 @@ def main(page: ft.Page):
         bgcolor=COR_VERMELHO_PLAY,
         url="https://youtube.com"
     )
-    btn_salvar = ft.Button(content=ft.Text("+ Adicionar à Lista", color="white", size=12), bgcolor=COR_PETROLEO, disabled=True)
-    btn_ir_lista = ft.Button(content=ft.Text("📁 Ir para Minha Lista", color="white", size=12), bgcolor="#10b981", visible=False)
+    btn_salvar = ft.Button(content=ft.Text("+ Adicionar à Biblioteca", color="white", size=12), bgcolor=COR_PETROLEO, disabled=True)
+    btn_ir_lista = ft.Button(content=ft.Text("📁 Ir para Biblioteca", color="white", size=12), bgcolor="#10b981", visible=False)
 
     def fechar_detalhes(e=None):
         fechar_dialogo(modal_detalhes)
@@ -471,7 +442,7 @@ def main(page: ft.Page):
                 conn.close()
 
         it["categoria_existente"] = "Para Assistir"
-        btn_salvar.content = ft.Text("✓ Na sua Lista", color="white", size=12)
+        btn_salvar.content = ft.Text("✓ Na Biblioteca", color="white", size=12)
         btn_salvar.bgcolor = "#334155"
         btn_salvar.disabled = True
         btn_ir_lista.visible = True
@@ -677,12 +648,12 @@ def main(page: ft.Page):
                     dt_stremio_status.bgcolor = "#78350f"
 
                 if cat_exist:
-                    btn_salvar.content = ft.Text("✓ Na sua Lista", color="white", size=12)
+                    btn_salvar.content = ft.Text("✓ Na Biblioteca", color="white", size=12)
                     btn_salvar.bgcolor = "#334155"
                     btn_salvar.disabled = True
                     btn_ir_lista.visible = True
                 else:
-                    btn_salvar.content = ft.Text("+ Adicionar à Lista", color="white", size=12)
+                    btn_salvar.content = ft.Text("+ Adicionar à Biblioteca", color="white", size=12)
                     btn_salvar.bgcolor = COR_PETROLEO
                     btn_salvar.disabled = False
                     btn_ir_lista.visible = False
@@ -1316,7 +1287,7 @@ def main(page: ft.Page):
         page.update()
 
     # -------------------------------------------------------------
-    # SUGESTÕES DE BUSCA VIA OVERLAY
+    # SUGESTÕES DE BUSCA (OVERLAY FLUTUANTE)
     # -------------------------------------------------------------
     coluna_sugestoes = ft.Column(spacing=4, scroll=ft.ScrollMode.AUTO)
 
@@ -1404,12 +1375,12 @@ def main(page: ft.Page):
                 largura_atual = page.width if page.width else 1000
                 container_sugestoes.visible = True
                 if largura_atual < 720:
-                    container_sugestoes.width = max(160, int(largura_atual * 0.46))
-                    container_sugestoes.left = max(10, int(largura_atual * 0.44))
+                    container_sugestoes.width = max(160, int(largura_atual * 0.44))
+                    container_sugestoes.left = 18
                     container_sugestoes.top = 175
                 else:
                     container_sugestoes.width = 200
-                    container_sugestoes.left = max(0, int((largura_atual / 2) - 10))
+                    container_sugestoes.left = max(0, int((largura_atual / 2) - 170))
                     container_sugestoes.top = 175
             else:
                 ocultar_sugestoes()
@@ -1464,14 +1435,21 @@ def main(page: ft.Page):
     )
 
     # -------------------------------------------------------------
-    # LOGO INTERATIVO
+    # LOGO INTERATIVO (RESETA PARA 'TODOS' NA HOME E ROLA AO INÍCIO)
     # -------------------------------------------------------------
     def clicar_no_logo(e):
         btn_logo_interativo.scale = 0.94
         page.update()
         time.sleep(0.06)
         btn_logo_interativo.scale = 1.0
+        
         alternar_tela(0)
+        alternar_filtro_home("todos")
+        if view_inicio.content and hasattr(view_inicio.content, "scroll_to"):
+            try:
+                view_inicio.content.scroll_to(offset=0, duration=300)
+            except Exception:
+                pass
 
     btn_logo_interativo = ft.Container(
         content=ft.Image(src="logo.png", height=65, fit="contain"),
@@ -1480,7 +1458,7 @@ def main(page: ft.Page):
         padding=4,
         scale=1.0,
         animate_scale=ft.Animation(100, ft.AnimationCurve.EASE_OUT),
-        tooltip="Voltar ao Início",
+        tooltip="Voltar ao Início (Todos)",
         on_click=clicar_no_logo
     )
 
@@ -1497,8 +1475,9 @@ def main(page: ft.Page):
 
     def acao_logout(e):
         try:
-            page.client_storage.clear()
-            salvar_param_db("lembrar_usuario", "")
+            page.client_storage.remove("user_id")
+            page.client_storage.remove("username")
+            page.client_storage.remove("manter_conectado")
         except Exception:
             pass
         
@@ -1542,10 +1521,11 @@ def main(page: ft.Page):
         vertical_alignment=ft.CrossAxisAlignment.CENTER
     )
 
+    # Inversão solicitada: Busca à esquerda, Biblioteca à direita
     linha_inferior_menu = ft.Row(
         controls=[
-            btn_tab_bib,
-            linha_busca_input
+            linha_busca_input,
+            btn_tab_bib
         ],
         spacing=10,
         alignment=ft.MainAxisAlignment.CENTER,
@@ -1669,19 +1649,15 @@ def main(page: ft.Page):
     )
 
     # -------------------------------------------------------------
-    # AUTENTICAÇÃO (COM PREENCHIMENTO AUTOMÁTICO - PLANO B)
+    # AUTENTICAÇÃO
     # -------------------------------------------------------------
     logo_login = ft.Image(src="logo.png", height=65, fit="contain")
 
     txt_auth_titulo = ft.Text("Entrar", size=18, weight="bold", color=COR_TEXTO_CLARO)
     txt_auth_erro = ft.Text("", size=12, color="#ef4444")
     
-    # Inicia com o último usuário salvo no banco local
-    lembrado = obter_param_db("lembrar_usuario") or ""
-
     txt_auth_user = ft.TextField(
         label="Nome de Usuário",
-        value=lembrado,
         label_style=ft.TextStyle(color="#94a3b8"),
         bgcolor=COR_FUNDO,
         dense=True,
@@ -1719,7 +1695,7 @@ def main(page: ft.Page):
     chk_manter_conectado = ft.Checkbox(
         label="Permanecer conectado",
         label_style=ft.TextStyle(size=12, color=COR_TEXTO_CLARO),
-        value=True if lembrado else True,
+        value=True,
         fill_color=COR_PETROLEO,
         check_color="white"
     )
@@ -1773,11 +1749,16 @@ def main(page: ft.Page):
             try:
                 page.client_storage.set("user_id", str(uid))
                 page.client_storage.set("username", str(username))
-                salvar_param_db("lembrar_usuario", str(username))
+                page.client_storage.set("manter_conectado", "true")
             except Exception:
                 pass
         else:
-            salvar_param_db("lembrar_usuario", "")
+            try:
+                page.client_storage.remove("user_id")
+                page.client_storage.remove("username")
+                page.client_storage.remove("manter_conectado")
+            except Exception:
+                pass
 
         spinner_autologin.visible = False
         card_auth.visible = False
@@ -1941,38 +1922,51 @@ def main(page: ft.Page):
     page.update()
 
     # -------------------------------------------------------------
-    # VERIFICAÇÃO DE SESSÃO SEM TRAVAMENTOS
+    # RECUPERAÇÃO DE SESSÃO COM ESPERA ATIVA SEGURA
     # -------------------------------------------------------------
     def verificar_sessao_salva():
         saved_uid = None
         saved_user = None
+        saved_manter = None
 
-        # Tenta ler rápido se o cliente já enviou storage
-        for _ in range(4):
+        # Aguarda a comunicação WebSocket entregar o armazenamento local
+        for _ in range(8):
             try:
                 saved_uid = page.client_storage.get("user_id")
                 saved_user = page.client_storage.get("username")
-                if saved_uid and saved_user:
+                saved_manter = page.client_storage.get("manter_conectado")
+                if saved_uid and saved_user and str(saved_manter).lower() == "true":
                     break
             except Exception:
                 pass
-            time.sleep(0.08)
+            time.sleep(0.12)
 
-        if saved_uid and saved_user:
-            iniciar_sessao(saved_uid, saved_user, persistir=True)
-        else:
-            # Não conseguiu auto-login imediato: exibe login com usuário pré-preenchido
-            user_lembrado = obter_param_db("lembrar_usuario")
-            if user_lembrado:
-                txt_auth_user.value = user_lembrado
-                chk_manter_conectado.value = True
+        if saved_uid and saved_user and str(saved_manter).lower() == "true":
+            # Confirma se o usuário ainda existe no banco
+            conn = None
+            usuario_valido = False
+            try:
+                conn = sqlite3.connect(DB_FILE, timeout=5)
+                c = conn.cursor()
+                c.execute("SELECT id FROM usuarios WHERE id = ? AND username = ?", (saved_uid, saved_user))
+                if c.fetchone():
+                    usuario_valido = True
+            except Exception:
+                pass
+            finally:
+                if conn:
+                    conn.close()
 
-            spinner_autologin.visible = False
-            definir_modo_auth("login")
-            card_auth.visible = True
-            layout_mestre.visible = False
-            ajustar_layout_responsivo()
-            page.update()
+            if usuario_valido:
+                iniciar_sessao(saved_uid, saved_user, persistir=True)
+                return
+
+        spinner_autologin.visible = False
+        definir_modo_auth("login")
+        card_auth.visible = True
+        layout_mestre.visible = False
+        ajustar_layout_responsivo()
+        page.update()
 
     threading.Thread(target=verificar_sessao_salva, daemon=True).start()
 
