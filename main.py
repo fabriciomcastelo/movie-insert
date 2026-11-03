@@ -188,14 +188,14 @@ def main(page: ft.Page):
     estado_biblioteca = {
         "aba": "Para Assistir",
         "modo": "streaming",
-        "filtro_tipo": "todos"  # "todos", "movie", "tv"
+        "filtro_tipo": "todos"
     }
 
     paginacao = {
         "pagina_atual": 1,
         "carregando": False,
         "fim": False,
-        "filtro_home": "todos",  # "todos", "movie", "tv"
+        "filtro_home": "todos",
         "ids_carregados": set()
     }
 
@@ -508,7 +508,7 @@ def main(page: ft.Page):
                     info_criacao = f"Criador(es): {', '.join(criadores) if criadores else 'Não informado'} • {temporadas} Temporada(s)"
                     diretor = info_criacao
 
-                elenco_list = [a.get("name") for a in res.get("credits", {}).get("cast", [])[:4]]
+                elenco_list = [a.get("name") for a in credits_data.get("cast", [])[:4]] if (credits_data := res.get("credits", {})) else []
                 elenco = ", ".join(elenco_list) if elenco_list else "Não informado"
 
                 titulo = res.get("title") or res.get("name") or titulo_prev
@@ -769,7 +769,7 @@ def main(page: ft.Page):
     spinner_carregamento = ft.ProgressRing(width=30, height=30, stroke_width=3, color=COR_PETROLEO, visible=False)
 
     # -------------------------------------------------------------
-    # POPULARES (FILMES, SÉRIES OU TODOS) COM ROLAGEM INFINITA
+    # POPULARES (FILMES, SÉRIES OU TODOS)
     # -------------------------------------------------------------
     def carregar_populares(incrementar=False):
         c = carregar_config()
@@ -883,6 +883,7 @@ def main(page: ft.Page):
         on_click=lambda e: alternar_filtro_home("tv")
     )
 
+    # Linha dos seletores fixa no cabeçalho
     linha_seletor_home = ft.Row(
         controls=[btn_home_todos, btn_home_filmes, btn_home_series],
         spacing=8,
@@ -991,10 +992,8 @@ def main(page: ft.Page):
         modo_atual = estado_biblioteca["modo"]
         tipo_atual = estado_biblioteca["filtro_tipo"]
 
-        # 1. Filtro da Aba (Para Assistir vs Assistidos)
         itens_aba = [it for it in todos_itens if it[5] == aba_atual]
 
-        # 2. Filtro do Tipo (Todos vs Filmes vs Séries)
         if tipo_atual == "movie":
             itens_filtrados = [it for it in itens_aba if (it[9] or "movie") == "movie"]
         elif tipo_atual == "tv":
@@ -1028,7 +1027,6 @@ def main(page: ft.Page):
             controls=[btn_aba_para_assistir, btn_aba_assistidos]
         )
 
-        # Seletor de Tipo (Pílulas: Todos | Filmes | Séries)
         def criar_botao_tipo(rotulo, valor_tipo):
             ativo = (tipo_atual == valor_tipo)
             return ft.Button(
@@ -1050,7 +1048,6 @@ def main(page: ft.Page):
             ]
         )
 
-        # Seletor de Organização / Ordenação
         def criar_botao_filtro(rotulo, modo_alvo):
             ativo = (modo_atual == modo_alvo)
             return ft.Button(
@@ -1290,7 +1287,7 @@ def main(page: ft.Page):
         visible=False,
         width=260,
         height=260,
-        top=200,
+        top=190,
         left=0,
         shadow=ft.BoxShadow(blur_radius=15, color="#000000")
     )
@@ -1503,16 +1500,18 @@ def main(page: ft.Page):
         vertical_alignment=ft.CrossAxisAlignment.CENTER
     )
 
+    # Cabeçalho com: Logo -> Biblioteca/Busca -> Seletores Fixos (Todos/Filmes/Séries)
     cabecalho_fixo = ft.Container(
         bgcolor=COR_FUNDO,
-        padding=ft.Padding(20, 6, 20, 12),
+        padding=ft.Padding(20, 6, 20, 10),
         border=ft.Border(bottom=ft.BorderSide(1, COR_BORDA)),
         content=ft.Column([
             progresso,
             bloco_usuario_topo,
             ft.Row([btn_logo_interativo], alignment=ft.MainAxisAlignment.CENTER),
-            linha_inferior_menu
-        ], spacing=6, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
+            linha_inferior_menu,
+            linha_seletor_home  # Agora fixo no cabeçalho
+        ], spacing=8, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
     )
 
     # -------------------------------------------------------------
@@ -1527,7 +1526,7 @@ def main(page: ft.Page):
             btn_tab_bib.content.height = 40
             titulo_trends.width = None
             container_sugestoes.left = 20
-            container_sugestoes.top = 195
+            container_sugestoes.top = 185
         else:
             campo_busca.width = 224
             container_sugestoes.width = 260
@@ -1535,7 +1534,7 @@ def main(page: ft.Page):
             btn_tab_bib.content.height = 45
             titulo_trends.width = 1100
             container_sugestoes.left = max(0, int((largura_janela / 2) - 10))
-            container_sugestoes.top = 200
+            container_sugestoes.top = 190
         page.update()
 
     page.on_resized = ajustar_layout_responsivo
@@ -1545,9 +1544,8 @@ def main(page: ft.Page):
     # -------------------------------------------------------------
     titulo_trends = ft.Container(
         content=ft.Row([
-            ft.Text("Em Alta (TMDb Trends)", size=15, weight="bold", color=COR_TEXTO_CLARO),
-            linha_seletor_home
-        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, wrap=True),
+            ft.Text("Em Alta (TMDb Trends)", size=15, weight="bold", color=COR_TEXTO_CLARO)
+        ], alignment=ft.MainAxisAlignment.START),
         width=1100,
         padding=ft.Padding(0, 10, 0, 0)
     )
@@ -1592,12 +1590,14 @@ def main(page: ft.Page):
         if indice == 0:
             view_inicio.visible = True
             view_biblioteca.visible = False
+            linha_seletor_home.visible = True
             btn_tab_bib.border = criar_borda(2, "transparent")
             btn_logo_interativo.border = criar_borda(2, COR_PETROLEO)
         elif indice == 1:
             carregar_biblioteca()
             view_inicio.visible = False
             view_biblioteca.visible = True
+            linha_seletor_home.visible = False
             btn_tab_bib.border = criar_borda(2, COR_PETROLEO)
             btn_logo_interativo.border = criar_borda(2, "transparent")
 
