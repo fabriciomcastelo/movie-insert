@@ -96,6 +96,14 @@ def init_db():
         """)
         
         c.execute("""
+            CREATE TABLE IF NOT EXISTS sessao_ativa (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                user_id INTEGER,
+                username TEXT
+            )
+        """)
+        
+        c.execute("""
             CREATE TABLE IF NOT EXISTS filmes (
                 id TEXT,
                 titulo TEXT,
@@ -451,8 +459,7 @@ def main(page: ft.Page):
     btn_salvar.on_click = salvar_filme_ativo
 
     def abrir_detalhes(mid, mtype, titulo_prev, ano_prev, poster_prev):
-        coluna_sugestoes.controls.clear()
-        container_sugestoes.visible = False
+        ocultar_sugestoes()
 
         mtype_seguro = "tv" if mtype in ["tv", "series"] else "movie"
 
@@ -905,6 +912,7 @@ def main(page: ft.Page):
     )
 
     def ao_rolar_inicio(e: ft.OnScrollEvent):
+        ocultar_sugestoes()
         distancia_do_fim = e.max_scroll_extent - e.pixels
         percentual = (e.pixels / e.max_scroll_extent) if e.max_scroll_extent > 0 else 0
 
@@ -1287,7 +1295,7 @@ def main(page: ft.Page):
         page.update()
 
     # -------------------------------------------------------------
-    # SUGESTÕES DE BUSCA (POSICIONAMENTO FLUTUANTE EM STACK)
+    # SUGESTÕES NO OVERLAY (FLUTUAÇÃO GARANTIDA NO TOPO Z-INDEX)
     # -------------------------------------------------------------
     coluna_sugestoes = ft.Column(spacing=4, scroll=ft.ScrollMode.AUTO)
 
@@ -1298,16 +1306,21 @@ def main(page: ft.Page):
         border=criar_borda(1.2, COR_PETROLEO),
         padding=6,
         visible=False,
-        width=200,
-        height=0,
-        top=50,   # Flutua exatamente abaixo do campo de busca sem empurrar a linha
-        left=0,
-        shadow=ft.BoxShadow(blur_radius=12, color="#000000")
+        width=220,
+        height=240,
+        top=180,
+        left=20,
+        shadow=ft.BoxShadow(blur_radius=15, color="#000000")
     )
+    page.overlay.append(container_sugestoes)
+
+    def ocultar_sugestoes():
+        if container_sugestoes.visible:
+            container_sugestoes.visible = False
+            page.update()
 
     def selecionar_sugestao(mid, mtype, tit, ano, p_url):
-        container_sugestoes.visible = False
-        container_sugestoes.height = 0
+        ocultar_sugestoes()
         campo_busca.value = ""
         page.update()
         abrir_detalhes(mid, mtype, tit, ano, p_url)
@@ -1317,9 +1330,7 @@ def main(page: ft.Page):
         tmdb_key = c.get("tmdb_key", "").strip()
         termo_limpo = termo.strip()
         if not tmdb_key or len(termo_limpo) < 2:
-            container_sugestoes.visible = False
-            container_sugestoes.height = 0
-            page.update()
+            ocultar_sugestoes()
             return
 
         try:
@@ -1369,11 +1380,19 @@ def main(page: ft.Page):
                 coluna_sugestoes.controls.append(linha_item)
 
             if len(coluna_sugestoes.controls) > 0:
-                container_sugestoes.height = 240
+                largura_atual = page.width if page.width else 1000
                 container_sugestoes.visible = True
+                if largura_atual < 720:
+                    container_sugestoes.width = max(160, int(largura_atual * 0.48))
+                    container_sugestoes.left = max(10, int(largura_atual * 0.46) - 10)
+                    container_sugestoes.top = 175
+                else:
+                    container_sugestoes.width = 220
+                    container_sugestoes.left = max(0, int((largura_atual / 2) - 15))
+                    container_sugestoes.top = 175
             else:
-                container_sugestoes.height = 0
-                container_sugestoes.visible = False
+                ocultar_sugestoes()
+
             page.update()
         except Exception:
             pass
@@ -1389,9 +1408,7 @@ def main(page: ft.Page):
             timer_busca["timer"].cancel()
 
         if not termo or len(termo.strip()) < 2:
-            container_sugestoes.visible = False
-            container_sugestoes.height = 0
-            page.update()
+            ocultar_sugestoes()
             return
 
         t = threading.Timer(0.25, buscar_sugestoes_api, args=[termo])
@@ -1399,12 +1416,7 @@ def main(page: ft.Page):
         t.start()
 
     def fechar_busca_ao_perder_foco(e):
-        def _ocultar():
-            if container_sugestoes.visible:
-                container_sugestoes.visible = False
-                container_sugestoes.height = 0
-                page.update()
-        threading.Timer(0.3, _ocultar).start()
+        threading.Timer(0.3, ocultar_sugestoes).start()
 
     campo_busca = ft.TextField(
         hint_text="Buscar...",
@@ -1464,12 +1476,16 @@ def main(page: ft.Page):
 
     def acao_logout(e):
         try:
-            page.run_javascript("localStorage.removeItem('user_id');")
-            page.run_javascript("localStorage.removeItem('username');")
-            page.run_javascript("localStorage.removeItem('manter_conectado');")
             page.client_storage.remove("user_id")
             page.client_storage.remove("username")
             page.client_storage.remove("manter_conectado")
+            
+            # Limpa sessão persistida no banco
+            conn = sqlite3.connect(DB_FILE, timeout=5)
+            c = conn.cursor()
+            c.execute("DELETE FROM sessao_ativa WHERE id = 1")
+            conn.commit()
+            conn.close()
         except Exception:
             pass
         
@@ -1513,19 +1529,10 @@ def main(page: ft.Page):
         vertical_alignment=ft.CrossAxisAlignment.CENTER
     )
 
-    # Bloco com a barra de busca e a lista flutuando via Stack (não empurra o cabeçalho)
-    stack_busca_flutuante = ft.Stack(
-        controls=[
-            linha_busca_input,
-            container_sugestoes
-        ],
-        clip_behavior=ft.ClipBehavior.NONE
-    )
-
     linha_inferior_menu = ft.Row(
         controls=[
             btn_tab_bib,
-            stack_busca_flutuante
+            linha_busca_input
         ],
         spacing=10,
         alignment=ft.MainAxisAlignment.CENTER,
@@ -1534,7 +1541,6 @@ def main(page: ft.Page):
 
     cabecalho_fixo = ft.Container(
         bgcolor=COR_FUNDO,
-        clip_behavior=ft.ClipBehavior.NONE,
         padding=ft.Padding(12, 6, 12, 10),
         border=ft.Border(bottom=ft.BorderSide(1, COR_BORDA)),
         content=ft.Column([
@@ -1553,13 +1559,11 @@ def main(page: ft.Page):
         largura_janela = page.width if page.width else 1000
         if largura_janela < 720:
             campo_busca.width = max(130, int(largura_janela * 0.38))
-            container_sugestoes.width = max(160, int(largura_janela * 0.45))
             btn_logo_interativo.content.height = 50
             btn_tab_bib.content.height = 40
             titulo_trends.width = None
         else:
             campo_busca.width = 180
-            container_sugestoes.width = 224
             btn_logo_interativo.content.height = 65
             btn_tab_bib.content.height = 45
             titulo_trends.width = 1100
@@ -1621,8 +1625,7 @@ def main(page: ft.Page):
 
     def alternar_tela(indice):
         fechar_dialogo(modal_detalhes)
-        container_sugestoes.visible = False
-        container_sugestoes.height = 0
+        ocultar_sugestoes()
 
         if indice == 0:
             view_inicio.visible = True
@@ -1751,12 +1754,16 @@ def main(page: ft.Page):
         
         if persistir:
             try:
-                page.run_javascript(f"localStorage.setItem('user_id', '{uid}');")
-                page.run_javascript(f"localStorage.setItem('username', '{username}');")
-                page.run_javascript("localStorage.setItem('manter_conectado', 'true');")
                 page.client_storage.set("user_id", str(uid))
                 page.client_storage.set("username", str(username))
                 page.client_storage.set("manter_conectado", "true")
+                
+                # Guarda sessão no banco SQLite para garantir persistência além da cache
+                conn = sqlite3.connect(DB_FILE, timeout=5)
+                c = conn.cursor()
+                c.execute("INSERT OR REPLACE INTO sessao_ativa (id, user_id, username) VALUES (1, ?, ?)", (int(uid), str(username)))
+                conn.commit()
+                conn.close()
             except Exception:
                 pass
 
@@ -1922,21 +1929,38 @@ def main(page: ft.Page):
     page.update()
 
     # -------------------------------------------------------------
-    # RECUPERAÇÃO DE SESSÃO SEM BLOQUEIO
+    # RECUPERAÇÃO DE SESSÃO COM TOLERÂNCIA E DUPLO CHECK
     # -------------------------------------------------------------
     def verificar_sessao_salva():
         saved_uid = None
         saved_user = None
-        saved_manter = None
 
-        try:
-            saved_uid = page.client_storage.get("user_id")
-            saved_user = page.client_storage.get("username")
-            saved_manter = page.client_storage.get("manter_conectado")
-        except Exception:
-            pass
+        # 1. Tentativa via client_storage
+        for _ in range(3):
+            try:
+                saved_uid = page.client_storage.get("user_id")
+                saved_user = page.client_storage.get("username")
+                if saved_uid and saved_user:
+                    break
+            except Exception:
+                pass
+            time.sleep(0.15)
 
-        if saved_uid and saved_user and (str(saved_manter).lower() == "true"):
+        # 2. Fallback via banco de dados local (sessao_ativa)
+        if not saved_uid or not saved_user:
+            try:
+                conn = sqlite3.connect(DB_FILE, timeout=5)
+                c = conn.cursor()
+                c.execute("SELECT user_id, username FROM sessao_ativa WHERE id = 1")
+                row = c.fetchone()
+                if row:
+                    saved_uid = row[0]
+                    saved_user = row[1]
+                conn.close()
+            except Exception:
+                pass
+
+        if saved_uid and saved_user:
             iniciar_sessao(saved_uid, saved_user, persistir=True)
         else:
             spinner_autologin.visible = False
