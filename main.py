@@ -167,6 +167,29 @@ def main(page: ft.Page):
     filme_avaliando = {"id": None, "nota": "10"}
     filme_para_remover = {"id": None, "titulo": ""}
     
+    # Mapeamento dinâmico dos botões de atalho da Home: chave_id -> ft.IconButton
+    botoes_add_home = {}
+    
+    # Cache em memória dos IDs de filmes já salvos pelo usuário logado
+    ids_salvos_usuario = set()
+
+    def recarregar_ids_salvos():
+        ids_salvos_usuario.clear()
+        uid = sessao_usuario["id"]
+        if uid:
+            conn = None
+            try:
+                conn = sqlite3.connect(DB_FILE, timeout=5)
+                c = conn.cursor()
+                c.execute("SELECT id FROM filmes WHERE usuario_id = ?", (uid,))
+                for row in c.fetchall():
+                    ids_salvos_usuario.add(row[0])
+            except Exception:
+                pass
+            finally:
+                if conn:
+                    conn.close()
+
     estado_biblioteca = {
         "aba": "Para Assistir",
         "modo": "streaming",
@@ -210,6 +233,18 @@ def main(page: ft.Page):
             finally:
                 if conn:
                     conn.close()
+            
+            if fid in ids_salvos_usuario:
+                ids_salvos_usuario.remove(fid)
+            
+            # Se o botão estiver na Home, restaura o símbolo de +
+            if fid in botoes_add_home and botoes_add_home[fid]:
+                btn = botoes_add_home[fid]
+                btn.icon = ft.Icons.ADD
+                btn.icon_color = "white"
+                btn.bgcolor = "#0d1419cc"
+                btn.disabled = False
+
             fechar_dialogo(modal_confirmacao)
             atualizar_contador_biblioteca()
             carregar_biblioteca()
@@ -405,23 +440,25 @@ def main(page: ft.Page):
         if not it or not uid:
             return
 
+        fid = it["id"]
         tipo_salvar = it.get("tipo", "movie")
         conn = None
         try:
             conn = sqlite3.connect(DB_FILE, timeout=5)
             c = conn.cursor()
-            c.execute("SELECT categoria FROM filmes WHERE id = ? AND usuario_id = ?", (it["id"], uid))
+            c.execute("SELECT categoria FROM filmes WHERE id = ? AND usuario_id = ?", (fid, uid))
             if not c.fetchone():
                 c.execute("""
                     INSERT INTO filmes (id, titulo, ano, diretor, elenco, sinopse, imdb, rotten, metascore, streaming, poster_url, categoria, nota_usuario, trailer_url, generos, usuario_id, tipo)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Para Assistir', ?, ?, ?, ?, ?)
                 """, (
-                    it["id"], it["titulo"], it["ano"], it["diretor"], it["elenco"],
+                    fid, it["titulo"], it["ano"], it["diretor"], it["elenco"],
                     it["sinopse"], it["imdb"], it["rotten"], it.get("metascore", "N/A"),
                     it["streaming"], it["poster_url"], it.get("nota_usuario"),
                     it.get("trailer_url"), it.get("generos", ""), uid, tipo_salvar
                 ))
                 conn.commit()
+                ids_salvos_usuario.add(fid)
         except Exception:
             pass
         finally:
@@ -433,6 +470,16 @@ def main(page: ft.Page):
         btn_salvar.bgcolor = "#334155"
         btn_salvar.disabled = True
         btn_ir_lista.visible = True
+
+        # Sincroniza o botão de atalho da tela inicial se ele existir
+        if fid in botoes_add_home and botoes_add_home[fid]:
+            btn = botoes_add_home[fid]
+            btn.icon = ft.Icons.CHECK
+            btn.icon_color = "#10b981"
+            btn.bgcolor = "#064e3b"
+            btn.disabled = True
+            btn.tooltip = "Já está na sua biblioteca"
+
         atualizar_contador_biblioteca()
         page.update()
 
@@ -658,14 +705,12 @@ def main(page: ft.Page):
     # -------------------------------------------------------------
     # ADICIONAR RÁPIDO DIRETO NO PÔSTER (+)
     # -------------------------------------------------------------
-    def adicionar_rapido_poster(e, mid, mtype, titulo, ano, poster_url, btn_adicionar):
-        e.control.disabled = True
+    def adicionar_rapido_poster(e, mid, mtype, titulo, ano, poster_url, chave_id, btn_adicionar):
         uid = sessao_usuario["id"]
-        if not uid:
+        if not uid or chave_id in ids_salvos_usuario:
             return
 
         mtype_seguro = "tv" if mtype in ["tv", "series"] else "movie"
-        chave_id = f"{mtype_seguro}_{mid}"
 
         conn = None
         try:
@@ -678,6 +723,7 @@ def main(page: ft.Page):
                     VALUES (?, ?, ?, 'N/A', 'N/A', 'Adicionado diretamente da tela inicial.', 'N/A', 'N/A', 'N/A', 'Consultando...', ?, 'Para Assistir', NULL, NULL, 'Outros', ?, ?)
                 """, (chave_id, titulo, str(ano), poster_url, uid, mtype_seguro))
                 conn.commit()
+                ids_salvos_usuario.add(chave_id)
                 atualizar_contador_biblioteca()
         except Exception as ex:
             print(f"Erro add rapido: {ex}")
@@ -688,12 +734,17 @@ def main(page: ft.Page):
         btn_adicionar.icon = ft.Icons.CHECK
         btn_adicionar.icon_color = "#10b981"
         btn_adicionar.bgcolor = "#064e3b"
+        btn_adicionar.disabled = True
+        btn_adicionar.tooltip = "Já está na sua biblioteca"
         page.update()
 
     # -------------------------------------------------------------
     # CARTÕES DOS FILMES E SÉRIES
     # -------------------------------------------------------------
     def criar_card_filme(mid, mtype, titulo, ano, poster_url, categoria=None, nota=None):
+        mtype_seguro = "tv" if mtype in ["tv", "series"] else "movie"
+        chave_id = mid if isinstance(mid, str) and ("_" in mid or mid.startswith("tt")) else f"{mtype_seguro}_{mid}"
+        
         acoes = []
         if categoria == "Para Assistir":
             acoes.append(
@@ -701,7 +752,7 @@ def main(page: ft.Page):
                     content=ft.Text("✓ Visto", color="white", size=10),
                     bgcolor="#10b981",
                     height=28,
-                    on_click=lambda e: abrir_modal_avaliacao(mid)
+                    on_click=lambda e: abrir_modal_avaliacao(chave_id)
                 )
             )
             acoes.append(
@@ -710,7 +761,7 @@ def main(page: ft.Page):
                     icon_color="red400",
                     icon_size=16,
                     tooltip="Remover",
-                    on_click=lambda e: remover_filme_direto(mid)
+                    on_click=lambda e: remover_filme_direto(chave_id)
                 )
             )
         elif categoria == "Assistidos":
@@ -723,7 +774,7 @@ def main(page: ft.Page):
                     padding=ft.Padding(6, 3, 6, 3),
                     border_radius=5,
                     ink=True,
-                    on_click=lambda e: abrir_modal_avaliacao(mid, nota)
+                    on_click=lambda e: abrir_modal_avaliacao(chave_id, nota)
                 )
             )
             acoes.append(
@@ -732,7 +783,7 @@ def main(page: ft.Page):
                     icon_color="red400",
                     icon_size=16,
                     tooltip="Excluir",
-                    on_click=lambda e: pedir_confirmacao_remocao(mid, titulo)
+                    on_click=lambda e: pedir_confirmacao_remocao(chave_id, titulo)
                 )
             )
 
@@ -747,22 +798,24 @@ def main(page: ft.Page):
                 right=6
             )
 
-        # Botão discreto de "+" no canto inferior do pôster (apenas na tela inicial)
+        # Botão de inclusão rápida: renderizado EXCLUSIVAMENTE na tela inicial (fora da biblioteca)
         btn_add_rapido = None
         if not categoria:
+            ja_esta_salvo = chave_id in ids_salvos_usuario
             btn_add_rapido = ft.IconButton(
-                icon=ft.Icons.ADD,
-                icon_color="white",
-                icon_size=16,
-                bgcolor="#0d1419cc",
-                tooltip="Adicionar à Biblioteca",
+                icon=ft.Icons.CHECK if ja_esta_salvo else ft.Icons.ADD,
+                icon_color="#10b981" if ja_esta_salvo else "white",
+                bgcolor="#064e3b" if ja_esta_salvo else "#0d1419cc",
+                tooltip="Já está na sua biblioteca" if ja_esta_salvo else "Adicionar à Biblioteca",
+                disabled=ja_esta_salvo,
                 bottom=6,
                 right=6,
                 width=28,
                 height=28,
                 style=ft.ButtonStyle(padding=0)
             )
-            btn_add_rapido.on_click = lambda e, m=mid, mt=mtype, t=titulo, a=ano, p=poster_url, b=btn_add_rapido: adicionar_rapido_poster(e, m, mt, t, a, p, b)
+            btn_add_rapido.on_click = lambda e, m=mid, mt=mtype, t=titulo, a=ano, p=poster_url, c=chave_id, b=btn_add_rapido: adicionar_rapido_poster(e, m, mt, t, a, p, c, b)
+            botoes_add_home[chave_id] = btn_add_rapido
 
         stack_itens = [
             ft.Image(
@@ -906,6 +959,7 @@ def main(page: ft.Page):
         paginacao["pagina_atual"] = 1
         paginacao["fim"] = False
         paginacao["ids_carregados"].clear()
+        botoes_add_home.clear()
         grade_populares.controls.clear()
         atualizar_botoes_filtro_home()
         carregar_populares()
@@ -995,6 +1049,18 @@ def main(page: ft.Page):
             finally:
                 if conn:
                     conn.close()
+            
+            if fid in ids_salvos_usuario:
+                ids_salvos_usuario.remove(fid)
+            
+            # Se o botão estiver na Home, restaura o símbolo de +
+            if fid in botoes_add_home and botoes_add_home[fid]:
+                btn = botoes_add_home[fid]
+                btn.icon = ft.Icons.ADD
+                btn.icon_color = "white"
+                btn.bgcolor = "#0d1419cc"
+                btn.disabled = False
+            
             atualizar_contador_biblioteca()
             carregar_biblioteca()
 
@@ -1027,7 +1093,7 @@ def main(page: ft.Page):
         page.launch_url(f"file://{arq}")
 
     # -------------------------------------------------------------
-    # BIBLIOTECA
+    # BIBLIOTECA (ORGANIZAÇÃO CENTRALIZADA E DIFERENCIAÇÃO FORTE)
     # -------------------------------------------------------------
     def mudar_aba_biblioteca(nova_aba):
         estado_biblioteca["aba"] = nova_aba
@@ -1516,7 +1582,7 @@ def main(page: ft.Page):
     )
 
     # -------------------------------------------------------------
-    # LOGO INTERATIVO (SEM BLOQUEIOS DE THREAD)
+    # LOGO INTERATIVO
     # -------------------------------------------------------------
     def clicar_no_logo(e):
         btn_logo_interativo.scale = 0.94
@@ -1574,6 +1640,8 @@ def main(page: ft.Page):
     def acao_trocar_perfil(e):
         sessao_usuario["id"] = None
         sessao_usuario["username"] = ""
+        ids_salvos_usuario.clear()
+        botoes_add_home.clear()
         
         paginacao["pagina_atual"] = 1
         paginacao["carregando"] = False
@@ -1749,6 +1817,7 @@ def main(page: ft.Page):
         sessao_usuario["cor"] = cor
         lbl_user_tag.value = f"👤 {nome}"
         
+        recarregar_ids_salvos()
         tela_perfis.visible = False
         layout_mestre.visible = True
         ajustar_layout_responsivo()
@@ -1760,6 +1829,7 @@ def main(page: ft.Page):
         paginacao["fim"] = False
         paginacao["filtro_home"] = "todos"
         paginacao["ids_carregados"].clear()
+        botoes_add_home.clear()
         grade_populares.controls.clear()
 
         carregar_populares()
