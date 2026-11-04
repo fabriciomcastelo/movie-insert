@@ -30,7 +30,6 @@ CORES_AVATAR = [
     "#dc2626", "#9333ea", "#c026d3", "#4f46e5"
 ]
 
-# Mapa direto de temas clássicos para IDs oficiais do TMDb (Sem risco de tradução falhar)
 MAPA_KEYWORDS_CONHECIDAS = {
     "segunda guerra": "1956|849|428|1957|1958",
     "segunda guerra mundial": "1956|849|428|1957|1958",
@@ -204,7 +203,7 @@ def main(page: ft.Page):
     sessao_usuario = {"id": None, "username": "", "cor": COR_PETROLEO}
     item_ativo = {"data": None}
     timer_busca = {"timer": None}
-    versao_busca_atual = {"epoch": 0}  # Previne corridas de rede (race conditions)
+    versao_busca_atual = {"epoch": 0}
     filme_avaliando = {"id": None, "nota": "10"}
     filme_para_remover = {"id": None, "titulo": ""}
     
@@ -1153,10 +1152,44 @@ def main(page: ft.Page):
         on_click=lambda e: alternar_filtro_home("tv")
     )
 
-    linha_seletor_home = ft.Row(
-        controls=[btn_home_todos, btn_home_filmes, btn_home_series],
+    txt_contador_bib = ft.Text("BIBLIOTECA", color="white", weight="bold", size=11)
+
+    def atualizar_contador_biblioteca():
+        uid = sessao_usuario["id"]
+        total = 0
+        if uid:
+            conn = None
+            try:
+                conn = sqlite3.connect(DB_FILE, timeout=5)
+                c = conn.cursor()
+                c.execute("SELECT COUNT(*) FROM filmes WHERE usuario_id = ?", (uid,))
+                row = c.fetchone()
+                total = row[0] if row else 0
+            except Exception:
+                pass
+            finally:
+                if conn:
+                    conn.close()
+        txt_contador_bib.value = f"BIBLIOTECA ({total})"
+        page.update()
+
+    btn_tab_bib = ft.Container(
+        content=txt_contador_bib,
+        bgcolor=COR_CARD,
+        border=criar_borda(1.2, COR_BORDA),
+        border_radius=10,
+        padding=ft.Padding(12, 8, 12, 8),
+        ink=True,
+        on_click=lambda e: alternar_tela(1)
+    )
+
+    # Linha única de controle que agrega os filtros e a biblioteca juntos de forma compacta
+    linha_controles_unificados = ft.Row(
+        controls=[btn_home_todos, btn_home_filmes, btn_home_series, btn_tab_bib],
         spacing=8,
-        alignment=ft.MainAxisAlignment.CENTER
+        alignment=ft.MainAxisAlignment.CENTER,
+        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        wrap=True
     )
 
     def ao_rolar_inicio(e: ft.OnScrollEvent):
@@ -1703,7 +1736,7 @@ def main(page: ft.Page):
                 itens_totais = []
                 vistos = set()
 
-                # 3. Busca tematica no discover com filtro de votos (elimina documentarios obscuros sem cartaz)
+                # 3. Busca temática no discover com filtro de votos (elimina obras sem cartaz)
                 if kw_ids_str:
                     try:
                         url_m = f"https://api.themoviedb.org/3/discover/movie?api_key={tmdb_key}&language=pt-BR&sort_by=vote_count.desc&with_keywords={kw_ids_str}&vote_count.gte=50&page=1"
@@ -1763,7 +1796,6 @@ def main(page: ft.Page):
         abrir_detalhes(mid, mtype, tit, ano, p_url, tela_atual="home")
 
     def buscar_sugestoes_api(termo, epoch_disparo):
-        # Se o usuário continuou digitando após este disparo, descarta o resultado antigo
         if epoch_disparo != versao_busca_atual["epoch"]:
             return
 
@@ -1784,7 +1816,6 @@ def main(page: ft.Page):
             }
             resp_multi = requests.get(url_multi, params=params_multi, timeout=3.0)
             
-            # Checa novamente antes de aplicar para evitar que "segun" sobrescreva "segunda guerra"
             if epoch_disparo != versao_busca_atual["epoch"]:
                 return
 
@@ -1909,6 +1940,7 @@ def main(page: ft.Page):
         timer_busca["timer"] = t
         t.start()
 
+    # Caixa de busca adaptável com ícone da lupa embutido internamente à direita
     campo_busca = ft.TextField(
         hint_text="Buscar filmes, atores, temas...",
         hint_style=ft.TextStyle(size=12, color="#64748b"),
@@ -1920,20 +1952,19 @@ def main(page: ft.Page):
         expand=True,
         height=45,
         content_padding=ft.Padding(12, 0, 10, 0),
+        suffix=ft.IconButton(
+            icon=ft.Icons.SEARCH,
+            icon_color="#64748b",
+            icon_size=20,
+            tooltip="Buscar filme, pessoa ou tema",
+            on_click=disparar_busca_manual
+        ),
         on_change=ao_digitar_busca,
         on_submit=disparar_busca_manual
     )
 
-    btn_lupa = ft.IconButton(
-        icon=ft.Icons.SEARCH,
-        icon_color="#64748b",
-        icon_size=20,
-        tooltip="Buscar filme, pessoa ou tema",
-        on_click=disparar_busca_manual
-    )
-
     # -------------------------------------------------------------
-    # LOGOTIPO INTERATIVO
+    # LOGOTIPO INTERATIVO (20% MAIOR, SEM MOLDURA/CAIXA DURA)
     # -------------------------------------------------------------
     def clicar_no_logo(e):
         btn_logo_interativo.scale = 0.94
@@ -1955,46 +1986,15 @@ def main(page: ft.Page):
 
     img_logo = ft.Image(src="logo.png", height=65, fit="contain")
 
+    # Sem bordas duras para manter a identidade visual limpa
     btn_logo_interativo = ft.Container(
         content=img_logo,
         ink=True,
-        border_radius=8,
         padding=4,
         scale=1.0,
         animate_scale=ft.Animation(100, ft.AnimationCurve.EASE_OUT),
         tooltip="Voltar ao Início (Todos)",
         on_click=clicar_no_logo
-    )
-
-    txt_contador_bib = ft.Text("BIBLIOTECA", color="white", weight="bold", size=11)
-
-    def atualizar_contador_biblioteca():
-        uid = sessao_usuario["id"]
-        total = 0
-        if uid:
-            conn = None
-            try:
-                conn = sqlite3.connect(DB_FILE, timeout=5)
-                c = conn.cursor()
-                c.execute("SELECT COUNT(*) FROM filmes WHERE usuario_id = ?", (uid,))
-                row = c.fetchone()
-                total = row[0] if row else 0
-            except Exception:
-                pass
-            finally:
-                if conn:
-                    conn.close()
-        txt_contador_bib.value = f"BIBLIOTECA ({total})"
-        page.update()
-
-    btn_tab_bib = ft.Container(
-        content=txt_contador_bib,
-        bgcolor=COR_CARD,
-        border=criar_borda(1.2, COR_BORDA),
-        border_radius=10,
-        padding=ft.Padding(12, 10, 12, 10),
-        ink=True,
-        on_click=lambda e: alternar_tela(1)
     )
 
     lbl_user_tag = ft.Text("", size=12, color="#64748b", weight="bold")
@@ -2043,21 +2043,10 @@ def main(page: ft.Page):
 
     container_input_busca = ft.Container(
         content=ft.Row(
-            controls=[campo_busca, btn_lupa],
-            spacing=2,
+            controls=[campo_busca],
             vertical_alignment=ft.CrossAxisAlignment.CENTER
         ),
         width=320
-    )
-
-    linha_inferior_menu = ft.Row(
-        controls=[
-            container_input_busca,
-            btn_tab_bib
-        ],
-        spacing=10,
-        alignment=ft.MainAxisAlignment.CENTER,
-        vertical_alignment=ft.CrossAxisAlignment.CENTER
     )
 
     coluna_conteudo_cabecalho = ft.Column(
@@ -2065,8 +2054,8 @@ def main(page: ft.Page):
             progresso,
             bloco_usuario_topo,
             ft.Row([btn_logo_interativo], alignment=ft.MainAxisAlignment.CENTER),
-            linha_inferior_menu,
-            linha_seletor_home
+            ft.Row([container_input_busca], alignment=ft.MainAxisAlignment.CENTER),
+            linha_controles_unificados
         ],
         spacing=8,
         horizontal_alignment=ft.CrossAxisAlignment.CENTER
@@ -2086,17 +2075,11 @@ def main(page: ft.Page):
         largura_janela = page.width if page.width else 1000
         if largura_janela < 720:
             img_logo.height = 65
-            container_input_busca.width = min(int(largura_janela * 0.90), 380)
-            linha_inferior_menu.controls = [container_input_busca]
-            if btn_tab_bib not in coluna_conteudo_cabecalho.controls:
-                coluna_conteudo_cabecalho.controls.insert(4, ft.Row([btn_tab_bib], alignment=ft.MainAxisAlignment.CENTER))
+            container_input_busca.width = min(int(largura_janela * 0.92), 380)
             titulo_trends.width = None
         else:
             img_logo.height = 70
-            container_input_busca.width = 280
-            linha_inferior_menu.controls = [container_input_busca, btn_tab_bib]
-            if len(coluna_conteudo_cabecalho.controls) > 5:
-                coluna_conteudo_cabecalho.controls.pop(4)
+            container_input_busca.width = 340
             titulo_trends.width = 1100
         page.update()
 
@@ -2161,16 +2144,14 @@ def main(page: ft.Page):
         if indice == 0:
             view_inicio.visible = True
             view_biblioteca.visible = False
-            linha_seletor_home.visible = True
+            linha_controles_unificados.visible = True
             btn_tab_bib.border = criar_borda(1.2, COR_BORDA)
-            btn_logo_interativo.border = criar_borda(2, COR_PETROLEO)
         elif indice == 1:
             carregar_biblioteca()
             view_inicio.visible = False
             view_biblioteca.visible = True
-            linha_seletor_home.visible = False
+            linha_controles_unificados.visible = False
             btn_tab_bib.border = criar_borda(2, COR_ATIVO_BORDA)
-            btn_logo_interativo.border = criar_borda(2, "transparent")
 
         page.update()
 
