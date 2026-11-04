@@ -167,28 +167,46 @@ def main(page: ft.Page):
     filme_avaliando = {"id": None, "nota": "10"}
     filme_para_remover = {"id": None, "titulo": ""}
     
-    # Mapeamento dinâmico dos botões de atalho da Home: chave_id -> ft.IconButton
+    # Registro de botões de atalho da Home (chave TMDb e/ou IMDb)
     botoes_add_home = {}
     
-    # Cache em memória dos IDs de filmes já salvos pelo usuário logado
+    # Cache de filmes já salvos pelo usuário logado (armazena IDs e títulos normalizados)
     ids_salvos_usuario = set()
+    titulos_salvos_usuario = set()
 
     def recarregar_ids_salvos():
         ids_salvos_usuario.clear()
+        titulos_salvos_usuario.clear()
         uid = sessao_usuario["id"]
         if uid:
             conn = None
             try:
                 conn = sqlite3.connect(DB_FILE, timeout=5)
                 c = conn.cursor()
-                c.execute("SELECT id FROM filmes WHERE usuario_id = ?", (uid,))
+                c.execute("SELECT id, titulo FROM filmes WHERE usuario_id = ?", (uid,))
                 for row in c.fetchall():
-                    ids_salvos_usuario.add(row[0])
+                    ids_salvos_usuario.add(str(row[0]))
+                    if row[1]:
+                        titulos_salvos_usuario.add(normalizar_texto(row[1]))
             except Exception:
                 pass
             finally:
                 if conn:
                     conn.close()
+
+    def marcar_botao_home_como_salvo(chave_tmdb, chave_imdb=None):
+        chaves = [chave_tmdb]
+        if chave_imdb:
+            chaves.append(chave_imdb)
+        for k in chaves:
+            if k in botoes_add_home and botoes_add_home[k]:
+                btn = botoes_add_home[k]
+                btn.icon = ft.Icons.CHECK
+                btn.icon_color = "#10b981"
+                btn.bgcolor = "#064e3b"
+                btn.disabled = True
+                btn.tooltip = "Já está na sua biblioteca"
+        page.update()
 
     estado_biblioteca = {
         "aba": "Para Assistir",
@@ -234,8 +252,7 @@ def main(page: ft.Page):
                 if conn:
                     conn.close()
             
-            if fid in ids_salvos_usuario:
-                ids_salvos_usuario.remove(fid)
+            recarregar_ids_salvos()
             
             # Se o botão estiver na Home, restaura o símbolo de +
             if fid in botoes_add_home and botoes_add_home[fid]:
@@ -442,7 +459,9 @@ def main(page: ft.Page):
             return
 
         fid = it["id"]
+        chave_tmdb_orig = it.get("tmdb_orig_key")
         tipo_salvar = it.get("tipo", "movie")
+        
         conn = None
         try:
             conn = sqlite3.connect(DB_FILE, timeout=5)
@@ -460,8 +479,10 @@ def main(page: ft.Page):
                 ))
                 conn.commit()
                 ids_salvos_usuario.add(fid)
-        except Exception:
-            pass
+                if it.get("titulo"):
+                    titulos_salvos_usuario.add(normalizar_texto(it["titulo"]))
+        except Exception as ex:
+            print(f"Erro ao salvar: {ex}")
         finally:
             if conn:
                 conn.close()
@@ -472,14 +493,8 @@ def main(page: ft.Page):
         btn_salvar.disabled = True
         btn_ir_lista.visible = True
 
-        # Sincroniza o botão de atalho da tela inicial se ele existir
-        if fid in botoes_add_home and botoes_add_home[fid]:
-            btn = botoes_add_home[fid]
-            btn.icon = ft.Icons.CHECK
-            btn.icon_color = "#10b981"
-            btn.bgcolor = "#064e3b"
-            btn.disabled = True
-            btn.tooltip = "Já está na sua biblioteca"
+        # Sincroniza o botão de atalho da Home (tanto pela chave TMDb quanto IMDb)
+        marcar_botao_home_como_salvo(chave_tmdb_orig, fid)
 
         atualizar_contador_biblioteca()
         page.update()
@@ -490,6 +505,7 @@ def main(page: ft.Page):
         ocultar_sugestoes()
 
         mtype_seguro = "tv" if mtype in ["tv", "series"] else "movie"
+        chave_tmdb_calc = f"{mtype_seguro}_{mid}"
 
         dt_img.src = poster_prev if poster_prev else "https://via.placeholder.com/130x195?text=Sem+Poster"
         dt_titulo.value = f"{titulo_prev} ({ano_prev})"
@@ -506,9 +522,18 @@ def main(page: ft.Page):
         dt_metascore.bgcolor = "#334155"
         dt_metascore.content.color = "white"
         dt_user.content.value = "★ .."
-        btn_salvar.disabled = True
-        btn_salvar.visible = (tela_atual == "home")
-        btn_ir_lista.visible = False
+        
+        # Se estamos dentro da tela de biblioteca, o botão de inclusão JAMAIS deve aparecer
+        if tela_atual == "biblioteca":
+            btn_salvar.visible = False
+            btn_ir_lista.visible = False
+        else:
+            ja_esta = (chave_tmdb_calc in ids_salvos_usuario) or (normalizar_texto(titulo_prev) in titulos_salvos_usuario)
+            btn_salvar.visible = True
+            btn_salvar.disabled = ja_esta
+            btn_salvar.content = ft.Text("✓ Na Biblioteca" if ja_esta else "+ Adicionar à Biblioteca", color="white", size=12)
+            btn_salvar.bgcolor = "#334155" if ja_esta else COR_PETROLEO
+            btn_ir_lista.visible = ja_esta
 
         fallback_trailer = f"https://www.youtube.com/results?search_query={quote_plus('trailer oficial ' + titulo_prev + ' ' + ano_prev)}"
         btn_trailer.url = fallback_trailer
@@ -604,7 +629,13 @@ def main(page: ft.Page):
 
                 streamings = ", ".join(stream_nomes) if stream_nomes else "Sem streaming no BR"
 
-                chave_id = imdb_id or f"{mtype_seguro}_{mid}"
+                # Chave salva prioriza o IMDb ID
+                chave_id = imdb_id or chave_tmdb_calc
+                
+                # Se o botão do TMDb estava na Home, vincula também a chave IMDb para atualização rápida
+                if chave_tmdb_calc in botoes_add_home:
+                    botoes_add_home[chave_id] = botoes_add_home[chave_tmdb_calc]
+
                 nota_usr = None
                 cat_exist = None
 
@@ -613,7 +644,7 @@ def main(page: ft.Page):
                     try:
                         conn = sqlite3.connect(DB_FILE, timeout=5)
                         cur = conn.cursor()
-                        cur.execute("SELECT nota_usuario, categoria FROM filmes WHERE id = ? AND usuario_id = ?", (chave_id, uid))
+                        cur.execute("SELECT nota_usuario, categoria FROM filmes WHERE (id = ? OR id = ?) AND usuario_id = ?", (chave_id, chave_tmdb_calc, uid))
                         row = cur.fetchone()
                         if row:
                             nota_usr = row[0]
@@ -625,11 +656,11 @@ def main(page: ft.Page):
                             conn.close()
 
                 item_ativo["data"] = {
-                    "id": chave_id, "titulo": titulo, "ano": ano, "diretor": diretor,
-                    "elenco": elenco, "sinopse": sinopse, "imdb": imdb_nota, "rotten": rt_nota,
-                    "metascore": meta_nota, "streaming": streamings, "poster_url": poster_url,
-                    "nota_usuario": nota_usr, "trailer_url": trailer_url, "categoria_existente": cat_exist,
-                    "generos": generos_txt, "tipo": mtype_seguro
+                    "id": chave_id, "tmdb_orig_key": chave_tmdb_calc, "titulo": titulo, "ano": ano, 
+                    "diretor": diretor, "elenco": elenco, "sinopse": sinopse, "imdb": imdb_nota, 
+                    "rotten": rt_nota, "metascore": meta_nota, "streaming": streamings, 
+                    "poster_url": poster_url, "nota_usuario": nota_usr, "trailer_url": trailer_url, 
+                    "categoria_existente": cat_exist, "generos": generos_txt, "tipo": mtype_seguro
                 }
 
                 dt_img.src = poster_url
@@ -684,22 +715,24 @@ def main(page: ft.Page):
                     txt_stremio.color = "#fde68a"
                     dt_stremio_status.bgcolor = "#78350f"
 
-                if cat_exist:
+                # Controle estrito de visibilidade: se está na biblioteca, oculta
+                if tela_atual == "biblioteca":
+                    btn_salvar.visible = False
+                    btn_ir_lista.visible = False
+                elif cat_exist or (chave_id in ids_salvos_usuario) or (chave_tmdb_calc in ids_salvos_usuario):
                     btn_salvar.content = ft.Text("✓ Na Biblioteca", color="white", size=12)
                     btn_salvar.bgcolor = "#334155"
                     btn_salvar.disabled = True
-                    btn_ir_lista.visible = True
                     btn_salvar.visible = True
+                    btn_ir_lista.visible = True
+                    # Garante que o atalho da home também esteja com check
+                    marcar_botao_home_como_salvo(chave_tmdb_calc, chave_id)
                 else:
-                    if tela_atual == "home":
-                        btn_salvar.content = ft.Text("+ Adicionar à Biblioteca", color="white", size=12)
-                        btn_salvar.bgcolor = COR_PETROLEO
-                        btn_salvar.disabled = False
-                        btn_ir_lista.visible = False
-                        btn_salvar.visible = True
-                    else:
-                        btn_salvar.visible = False
-                        btn_ir_lista.visible = False
+                    btn_salvar.content = ft.Text("+ Adicionar à Biblioteca", color="white", size=12)
+                    btn_salvar.bgcolor = COR_PETROLEO
+                    btn_salvar.disabled = False
+                    btn_salvar.visible = True
+                    btn_ir_lista.visible = False
 
             except Exception as ex:
                 print(f"Erro ao obter detalhes: {ex}")
@@ -732,6 +765,8 @@ def main(page: ft.Page):
                 """, (chave_id, titulo, str(ano), poster_url, uid, mtype_seguro))
                 conn.commit()
                 ids_salvos_usuario.add(chave_id)
+                if titulo:
+                    titulos_salvos_usuario.add(normalizar_texto(titulo))
                 atualizar_contador_biblioteca()
         except Exception as ex:
             print(f"Erro add rapido: {ex}")
@@ -806,10 +841,10 @@ def main(page: ft.Page):
                 right=6
             )
 
-        # Botão de inclusão rápida: renderizado EXCLUSIVAMENTE na tela inicial (fora da biblioteca)
+        # Botão de inclusão rápida: renderizado EXCLUSIVAMENTE na tela inicial (categoria=None)
         btn_add_rapido = None
         if not categoria:
-            ja_esta_salvo = chave_id in ids_salvos_usuario
+            ja_esta_salvo = (chave_id in ids_salvos_usuario) or (normalizar_texto(titulo) in titulos_salvos_usuario)
             btn_add_rapido = ft.IconButton(
                 icon=ft.Icons.CHECK if ja_esta_salvo else ft.Icons.ADD,
                 icon_color="#10b981" if ja_esta_salvo else "white",
@@ -1058,8 +1093,7 @@ def main(page: ft.Page):
                 if conn:
                     conn.close()
             
-            if fid in ids_salvos_usuario:
-                ids_salvos_usuario.remove(fid)
+            recarregar_ids_salvos()
             
             # Se o botão estiver na Home, restaura o símbolo de +
             if fid in botoes_add_home and botoes_add_home[fid]:
@@ -1102,7 +1136,7 @@ def main(page: ft.Page):
         page.launch_url(f"file://{arq}")
 
     # -------------------------------------------------------------
-    # BIBLIOTECA (ORGANIZAÇÃO CENTRALIZADA E DIFERENCIAÇÃO FORTE)
+    # BIBLIOTECA
     # -------------------------------------------------------------
     def mudar_aba_biblioteca(nova_aba):
         estado_biblioteca["aba"] = nova_aba
@@ -1650,6 +1684,7 @@ def main(page: ft.Page):
         sessao_usuario["id"] = None
         sessao_usuario["username"] = ""
         ids_salvos_usuario.clear()
+        titulos_salvos_usuario.clear()
         botoes_add_home.clear()
         
         paginacao["pagina_atual"] = 1
