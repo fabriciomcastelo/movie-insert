@@ -171,12 +171,12 @@ def main(page: ft.Page):
     ids_salvos_usuario = set()
     titulos_salvos_usuario = set()
 
-    # Contexto ativo da busca expandida para permitir filtrar por Tipo (Filmes / Séries)
+    # Contexto permanente da busca ativa
     contexto_busca = {
         "tipo": None,        # 'person' ou 'keyword'
         "id": None,
         "nome": "",
-        "itens_cache": []    # Lista com todos os itens retornados pela API
+        "itens_cache": []    # Lista completa sem cortes
     }
 
     def recarregar_ids_salvos():
@@ -920,6 +920,7 @@ def main(page: ft.Page):
         f_tipo = paginacao["filtro_home"]
         todos_itens = contexto_busca.get("itens_cache", [])
         
+        # Filtro preciso com detecção inteligente por title/name
         if f_tipo == "movie":
             filtrados = [i for i in todos_itens if i.get("media_type") == "movie"]
         elif f_tipo == "tv":
@@ -930,6 +931,17 @@ def main(page: ft.Page):
         grade_populares.controls.clear()
         botoes_add_home.clear()
         
+        if not filtrados:
+            tipo_rotulo = "séries" if f_tipo == "tv" else ("filmes" if f_tipo == "movie" else "títulos")
+            grade_populares.controls.append(
+                ft.Container(
+                    content=ft.Text(f"Nenhum resultado em {tipo_rotulo} para esta pesquisa.", size=13, color="#94a3b8"),
+                    padding=30
+                )
+            )
+            page.update()
+            return
+
         cards = []
         for it in filtrados:
             mid = it.get("id")
@@ -1028,12 +1040,11 @@ def main(page: ft.Page):
         paginacao["filtro_home"] = novo_filtro
         atualizar_botoes_filtro_home()
 
-        # Se houver uma pessoa ou tema ativo na busca, filtra os itens dessa busca
+        # Se houver busca de pessoa ou tema em andamento, filtra apenas a lista já carregada
         if paginacao["modo_busca_ativo"] and contexto_busca.get("tipo"):
             renderizar_itens_busca_contexto()
             return
 
-        # Caso contrário, pesquisa nos Em Alta normais
         paginacao["pagina_atual"] = 1
         paginacao["fim"] = False
         paginacao["ids_carregados"].clear()
@@ -1539,7 +1550,7 @@ def main(page: ft.Page):
 
     def exibir_filmografia_pessoa(person_id, nome_pessoa):
         ocultar_sugestoes()
-        campo_busca.value = ""
+        campo_busca.value = nome_pessoa  # Mantém o nome na caixa de busca
         paginacao["modo_busca_ativo"] = True
         paginacao["fim"] = True
         btn_carregar_mais.visible = False
@@ -1561,22 +1572,29 @@ def main(page: ft.Page):
         def _fetch():
             try:
                 url = f"https://api.themoviedb.org/3/person/{person_id}/combined_credits?api_key={tmdb_key}&language=pt-BR"
-                res = requests.get(url, timeout=4.0).json()
+                res = requests.get(url, timeout=4.5).json()
                 itens = res.get("cast", []) + res.get("crew", [])
                 
+                # Ordena por popularidade sem corte artificial de 50 itens
                 itens_ordenados = sorted(itens, key=lambda x: x.get("popularity", 0), reverse=True)
                 vistos = set()
                 itens_limpos = []
                 for it in itens_ordenados:
                     mid = it.get("id")
-                    mtype = it.get("media_type") or "movie"
+                    if not mid:
+                        continue
+                    
+                    # Garante detecção exata de media_type
+                    mtype = it.get("media_type")
+                    if not mtype:
+                        mtype = "movie" if "title" in it else "tv"
+                    it["media_type"] = mtype
+
                     chave = f"{mtype}_{mid}"
                     if chave in vistos or mtype not in ["movie", "tv"]:
                         continue
                     vistos.add(chave)
                     itens_limpos.append(it)
-                    if len(itens_limpos) >= 50:
-                        break
 
                 contexto_busca["itens_cache"] = itens_limpos
             except Exception as ex:
@@ -1589,7 +1607,7 @@ def main(page: ft.Page):
 
     def exibir_tema_palavra_chave(keyword_id, nome_tema):
         ocultar_sugestoes()
-        campo_busca.value = ""
+        campo_busca.value = nome_tema.capitalize()  # Mantém o tema na caixa de busca
         paginacao["modo_busca_ativo"] = True
         paginacao["fim"] = True
         btn_carregar_mais.visible = False
@@ -1610,6 +1628,7 @@ def main(page: ft.Page):
 
         def _fetch():
             try:
+                # Busca páginas de filmes e séries com o tema
                 url_m = f"https://api.themoviedb.org/3/discover/movie?api_key={tmdb_key}&language=pt-BR&sort_by=popularity.desc&with_keywords={keyword_id}&page=1"
                 res_m = requests.get(url_m, timeout=4.0).json().get("results", [])
                 for i in res_m:
@@ -1620,7 +1639,7 @@ def main(page: ft.Page):
                 for i in res_t:
                     i["media_type"] = "tv"
 
-                contexto_busca["itens_cache"] = res_m + res_t
+                contexto_busca["itens_cache"] = sorted(res_m + res_t, key=lambda x: x.get("popularity", 0), reverse=True)
             except Exception as ex:
                 print(f"Erro tema: {ex}")
             finally:
@@ -1631,7 +1650,7 @@ def main(page: ft.Page):
 
     def selecionar_sugestao_filme(mid, mtype, tit, ano, p_url):
         ocultar_sugestoes()
-        campo_busca.value = ""
+        campo_busca.value = tit  # Mantém o título selecionado na caixa
         page.update()
         abrir_detalhes(mid, mtype, tit, ano, p_url, tela_atual="home")
 
@@ -1805,7 +1824,7 @@ def main(page: ft.Page):
     )
 
     # -------------------------------------------------------------
-    # LOGO INTERATIVO (RESETA PARA O INÍCIO)
+    # LOGO INTERATIVO (RESETA PARA O INÍCIO E LIMPA BUSCA)
     # -------------------------------------------------------------
     def clicar_no_logo(e):
         btn_logo_interativo.scale = 0.94
@@ -1813,6 +1832,7 @@ def main(page: ft.Page):
         time.sleep(0.06)
         btn_logo_interativo.scale = 1.0
         
+        campo_busca.value = ""
         paginacao["modo_busca_ativo"] = False
         contexto_busca["tipo"] = None
         contexto_busca["id"] = None
@@ -1875,6 +1895,7 @@ def main(page: ft.Page):
         titulos_salvos_usuario.clear()
         botoes_add_home.clear()
         
+        campo_busca.value = ""
         paginacao["pagina_atual"] = 1
         paginacao["carregando"] = False
         paginacao["fim"] = False
