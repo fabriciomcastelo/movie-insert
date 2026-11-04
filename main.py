@@ -30,6 +30,36 @@ CORES_AVATAR = [
     "#dc2626", "#9333ea", "#c026d3", "#4f46e5"
 ]
 
+# Mapa direto de temas clássicos para IDs oficiais do TMDb (Sem risco de tradução falhar)
+MAPA_KEYWORDS_CONHECIDAS = {
+    "segunda guerra": "1956|849|428|1957|1958",
+    "segunda guerra mundial": "1956|849|428|1957|1958",
+    "ww2": "1956|849",
+    "wwii": "1956|849",
+    "primeira guerra": "1957|2149",
+    "primeira guerra mundial": "1957|2149",
+    "holocausto": "238|1956",
+    "nazismo": "238|1956|3618",
+    "guerra fria": "1954|2143",
+    "vietna": "1955|1959",
+    "guerra do vietna": "1955|1959",
+    "zumbi": "12377|186565",
+    "zumbis": "12377|186565",
+    "viagem no tempo": "4379",
+    "espaco": "9882|3801",
+    "extraterrestre": "9951|14909",
+    "alien": "9951",
+    "mafia": "10051|10391",
+    "inteligencia artificial": "310",
+    "ia": "310",
+    "cyberpunk": "12190",
+    "apocalipse": "4458",
+    "pos-apocaliptico": "4458|2853",
+    "serial killer": "10714",
+    "vampiro": "3133",
+    "vampiros": "3133"
+}
+
 def criar_borda(espessura, cor):
     bs = ft.BorderSide(espessura, cor)
     return ft.Border(top=bs, right=bs, bottom=bs, left=bs)
@@ -174,6 +204,7 @@ def main(page: ft.Page):
     sessao_usuario = {"id": None, "username": "", "cor": COR_PETROLEO}
     item_ativo = {"data": None}
     timer_busca = {"timer": None}
+    versao_busca_atual = {"epoch": 0}  # Previne corridas de rede (race conditions)
     filme_avaliando = {"id": None, "nota": "10"}
     filme_para_remover = {"id": None, "titulo": ""}
     
@@ -181,12 +212,11 @@ def main(page: ft.Page):
     ids_salvos_usuario = set()
     titulos_salvos_usuario = set()
 
-    # Contexto permanente da busca ativa
     contexto_busca = {
-        "tipo": None,        # 'person' ou 'tema'
+        "tipo": None,
         "id": None,
         "nome": "",
-        "itens_cache": []    # Lista completa validada
+        "itens_cache": []
     }
 
     def recarregar_ids_salvos():
@@ -924,7 +954,7 @@ def main(page: ft.Page):
     )
 
     # -------------------------------------------------------------
-    # RENDERIZAÇÃO ESTÁVEL DO CONTEXTO DE PESQUISA (SEM PERDER ESTADO)
+    # RENDERIZAÇÃO ESTÁVEL DA PESQUISA
     # -------------------------------------------------------------
     def renderizar_itens_busca_contexto():
         f_tipo = paginacao["filtro_home"]
@@ -940,7 +970,6 @@ def main(page: ft.Page):
         grade_populares.controls.clear()
         botoes_add_home.clear()
         
-        # Garante que NUNCA recarregue os populares ao clicar em Séries ou Filmes sem resultados
         if not filtrados:
             rotulo = "séries" if f_tipo == "tv" else ("filmes" if f_tipo == "movie" else "obras")
             grade_populares.controls.append(
@@ -1056,7 +1085,6 @@ def main(page: ft.Page):
         paginacao["filtro_home"] = novo_filtro
         atualizar_botoes_filtro_home()
 
-        # Mantém estritamente o contexto de busca sem recarregar tendências da semana
         if paginacao["modo_busca_ativo"] and contexto_busca.get("tipo"):
             renderizar_itens_busca_contexto()
             return
@@ -1540,7 +1568,7 @@ def main(page: ft.Page):
         page.update()
 
     # -------------------------------------------------------------
-    # SUGESTÕES DE PESQUISA EXPANDIDA (POSICIONAMENTO CENTRALIZADO)
+    # SUGESTÕES DE PESQUISA (SEM CORRIDA DE REDE)
     # -------------------------------------------------------------
     coluna_sugestoes = ft.Column(spacing=4, scroll=ft.ScrollMode.AUTO)
 
@@ -1647,41 +1675,38 @@ def main(page: ft.Page):
 
         def _fetch():
             try:
-                # 1. Sinônimos conhecidos e tradução dinâmica
                 norm = normalizar_texto(termo_limpo)
-                tokens_ingles = []
+                kw_ids_str = ""
 
-                if "segunda guerra" in norm or "guerra mundial" in norm:
-                    tokens_ingles.extend(["world war ii", "world war 2", "wwii"])
-                elif "primeira guerra" in norm:
-                    tokens_ingles.extend(["world war i", "wwi"])
-                elif "holocausto" in norm or "nazis" in norm:
-                    tokens_ingles.extend(["holocaust", "nazi"])
-                else:
+                # 1. Verifica no mapa curado se o tema já possui ID oficial
+                for termo_k, ids_v in MAPA_KEYWORDS_CONHECIDAS.items():
+                    if termo_k in norm:
+                        kw_ids_str = ids_v
+                        break
+
+                # 2. Se não achou na lista curada, traduz e pesquisa na API
+                if not kw_ids_str:
                     tr = traduzir_para_ingles(termo_limpo)
-                    tokens_ingles.append(tr)
-                    if tr != norm:
-                        tokens_ingles.append(norm)
-
-                kw_ids = set()
-                for token in tokens_ingles:
-                    try:
-                        kw_url = f"https://api.themoviedb.org/3/search/keyword?api_key={tmdb_key}&query={quote_plus(token)}&page=1"
-                        resp_kw = requests.get(kw_url, timeout=2.5)
-                        if resp_kw.status_code == 200:
-                            for k in resp_kw.json().get("results", [])[:3]:
-                                kw_ids.add(str(k.get("id")))
-                    except Exception:
-                        pass
+                    kw_encontrados = set()
+                    for q in [tr, norm]:
+                        try:
+                            kw_url = f"https://api.themoviedb.org/3/search/keyword?api_key={tmdb_key}&query={quote_plus(q)}&page=1"
+                            r = requests.get(kw_url, timeout=2.0)
+                            if r.status_code == 200:
+                                for k in r.json().get("results", [])[:3]:
+                                    kw_encontrados.add(str(k.get("id")))
+                        except Exception:
+                            pass
+                    if kw_encontrados:
+                        kw_ids_str = "|".join(list(kw_encontrados)[:5])
 
                 itens_totais = []
                 vistos = set()
 
-                # 2. Se achou keywords, busca no discover por popularidade e relevância de votos
-                if kw_ids:
-                    str_kw = "|".join(list(kw_ids)[:5])
+                # 3. Busca tematica no discover com filtro de votos (elimina documentarios obscuros sem cartaz)
+                if kw_ids_str:
                     try:
-                        url_m = f"https://api.themoviedb.org/3/discover/movie?api_key={tmdb_key}&language=pt-BR&sort_by=vote_count.desc&with_keywords={str_kw}&vote_count.gte=50&page=1"
+                        url_m = f"https://api.themoviedb.org/3/discover/movie?api_key={tmdb_key}&language=pt-BR&sort_by=vote_count.desc&with_keywords={kw_ids_str}&vote_count.gte=50&page=1"
                         res_m = requests.get(url_m, timeout=4.0).json().get("results", [])
                         for item in res_m:
                             if not item.get("poster_path"):
@@ -1695,7 +1720,7 @@ def main(page: ft.Page):
                         pass
 
                     try:
-                        url_t = f"https://api.themoviedb.org/3/discover/tv?api_key={tmdb_key}&language=pt-BR&sort_by=vote_count.desc&with_keywords={str_kw}&vote_count.gte=10&page=1"
+                        url_t = f"https://api.themoviedb.org/3/discover/tv?api_key={tmdb_key}&language=pt-BR&sort_by=vote_count.desc&with_keywords={kw_ids_str}&vote_count.gte=10&page=1"
                         res_t = requests.get(url_t, timeout=4.0).json().get("results", [])
                         for item in res_t:
                             if not item.get("poster_path"):
@@ -1708,13 +1733,13 @@ def main(page: ft.Page):
                     except Exception:
                         pass
 
-                # 3. Complemento de busca textual geral filtrando apenas obras com pôster e votos reais
+                # 4. Busca textual complementar filtrando exclusivamente obras com pôster e votos reais
                 try:
                     url_multi = f"https://api.themoviedb.org/3/search/multi?api_key={tmdb_key}&query={quote_plus(termo_limpo)}&language=pt-BR&include_adult=false&page=1"
                     res_multi = requests.get(url_multi, timeout=3.5).json().get("results", [])
                     for item in res_multi:
                         mtype = item.get("media_type")
-                        if mtype in ["movie", "tv"] and item.get("poster_path") and item.get("vote_count", 0) >= 5:
+                        if mtype in ["movie", "tv"] and item.get("poster_path") and item.get("vote_count", 0) >= 30:
                             chave = f"{mtype}_{item.get('id')}"
                             if chave not in vistos:
                                 vistos.add(chave)
@@ -1737,7 +1762,11 @@ def main(page: ft.Page):
         page.update()
         abrir_detalhes(mid, mtype, tit, ano, p_url, tela_atual="home")
 
-    def buscar_sugestoes_api(termo):
+    def buscar_sugestoes_api(termo, epoch_disparo):
+        # Se o usuário continuou digitando após este disparo, descarta o resultado antigo
+        if epoch_disparo != versao_busca_atual["epoch"]:
+            return
+
         c = carregar_config()
         tmdb_key = c.get("tmdb_key", "").strip()
         termo_limpo = termo.strip()
@@ -1754,6 +1783,11 @@ def main(page: ft.Page):
                 "include_adult": "false"
             }
             resp_multi = requests.get(url_multi, params=params_multi, timeout=3.0)
+            
+            # Checa novamente antes de aplicar para evitar que "segun" sobrescreva "segunda guerra"
+            if epoch_disparo != versao_busca_atual["epoch"]:
+                return
+
             itens_multi = resp_multi.json().get("results", []) if resp_multi.status_code == 200 else []
 
             coluna_sugestoes.controls.clear()
@@ -1836,7 +1870,7 @@ def main(page: ft.Page):
                 )
                 coluna_sugestoes.controls.append(linha_item)
 
-            if len(coluna_sugestoes.controls) > 0:
+            if len(coluna_sugestoes.controls) > 0 and epoch_disparo == versao_busca_atual["epoch"]:
                 largura_atual = page.width if page.width else 1000
                 container_sugestoes.visible = True
                 if largura_atual < 720:
@@ -1861,6 +1895,9 @@ def main(page: ft.Page):
 
     def ao_digitar_busca(e):
         termo = campo_busca.value
+        versao_busca_atual["epoch"] += 1
+        epoch_deste_disparo = versao_busca_atual["epoch"]
+
         if timer_busca["timer"]:
             timer_busca["timer"].cancel()
 
@@ -1868,7 +1905,7 @@ def main(page: ft.Page):
             ocultar_sugestoes()
             return
 
-        t = threading.Timer(0.25, buscar_sugestoes_api, args=[termo])
+        t = threading.Timer(0.3, buscar_sugestoes_api, args=[termo, epoch_deste_disparo])
         timer_busca["timer"] = t
         t.start()
 
@@ -1896,7 +1933,7 @@ def main(page: ft.Page):
     )
 
     # -------------------------------------------------------------
-    # LOGOTIPO INTERATIVO (20% MAIOR NO CELULAR)
+    # LOGOTIPO INTERATIVO
     # -------------------------------------------------------------
     def clicar_no_logo(e):
         btn_logo_interativo.scale = 0.94
@@ -2150,7 +2187,7 @@ def main(page: ft.Page):
     )
 
     # -------------------------------------------------------------
-    # SELEÇÃO DE PERFIL ESTILO NETFLIX ("Quem está usando?")
+    # SELEÇÃO DE PERFIL ESTILO NETFLIX
     # -------------------------------------------------------------
     linha_cards_perfis = ft.Row(
         wrap=True,
