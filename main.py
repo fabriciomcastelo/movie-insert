@@ -99,7 +99,7 @@ def traduzir_para_ingles(texto):
     return texto.strip().lower()
 
 # -------------------------------------------------------------
-# BASE DE DADOS
+# BANCO DE DADOS
 # -------------------------------------------------------------
 def init_db():
     conn = None
@@ -939,7 +939,7 @@ def main(page: ft.Page):
         return card_corpo
 
     # -------------------------------------------------------------
-    # CARREGAMENTO INCREMENTAL NA PESQUISA
+    # CARREGAMENTO INCREMENTAL OTIMIZADO (COM LIMITE DE SEGURANÇA)
     # -------------------------------------------------------------
     def carregar_mais_busca():
         if paginacao["carregando"] or paginacao["fim"]:
@@ -960,7 +960,7 @@ def main(page: ft.Page):
             filtrados = todos_itens
 
         offset = contexto_busca.get("offset", 0)
-        proxima_fatia = filtrados[offset : offset + 24]
+        proxima_fatia = filtrados[offset : offset + 20]
 
         if not proxima_fatia:
             paginacao["fim"] = True
@@ -1051,7 +1051,7 @@ def main(page: ft.Page):
             page.update()
             return
 
-        primeira_fatia = filtrados[:24]
+        primeira_fatia = filtrados[:20]
         contexto_busca["offset"] = len(primeira_fatia)
 
         cards = [
@@ -1067,7 +1067,7 @@ def main(page: ft.Page):
 
         grade_populares.controls.extend(cards)
 
-        if len(filtrados) > 24:
+        if len(filtrados) > 20:
             paginacao["fim"] = False
             btn_carregar_mais.visible = True
         else:
@@ -1268,17 +1268,20 @@ def main(page: ft.Page):
         wrap=True
     )
 
+    # Rolagem protegida contra chamadas concorrentes
     def ao_rolar_inicio(e: ft.OnScrollEvent):
         ocultar_sugestoes()
+        if paginacao["carregando"] or paginacao["fim"]:
+            return
+
         distancia_do_fim = e.max_scroll_extent - e.pixels
         percentual = (e.pixels / e.max_scroll_extent) if e.max_scroll_extent > 0 else 0
 
-        if (distancia_do_fim <= 1200 or percentual >= 0.75) and e.max_scroll_extent > 0:
-            if not paginacao["carregando"] and not paginacao["fim"]:
-                if paginacao["modo_busca_ativo"]:
-                    carregar_mais_busca()
-                else:
-                    carregar_populares(incrementar=True)
+        if (distancia_do_fim <= 1000 or percentual >= 0.80) and e.max_scroll_extent > 0:
+            if paginacao["modo_busca_ativo"]:
+                carregar_mais_busca()
+            else:
+                carregar_populares(incrementar=True)
 
     def remover_filme_direto(fid):
         uid = sessao_usuario["id"]
@@ -1691,7 +1694,7 @@ def main(page: ft.Page):
         visible=False,
         width=320,
         height=260,
-        top=170,
+        top=160,
         left=20,
         shadow=ft.BoxShadow(blur_radius=15, color="#000000")
     )
@@ -1702,7 +1705,7 @@ def main(page: ft.Page):
             container_sugestoes.visible = False
             page.update()
 
-    # FILTRAGEM INTELIGENTE DE CRÉDITOS DE ARTISTA (EXCLUI 'SELF' E DOCUMENTÁRIOS)
+    # FILTRAGEM INTELIGENTE DE ARTISTA COM NOMENCLATURA LIMPA
     def exibir_filmografia_pessoa(person_id, nome_pessoa):
         ocultar_sugestoes()
         campo_busca.value = nome_pessoa
@@ -1717,7 +1720,8 @@ def main(page: ft.Page):
         contexto_busca["itens_cache"] = []
         contexto_busca["offset"] = 0
         
-        txt_titulo_home.value = f"👤 Títulos com/dirigidos por: {nome_pessoa}"
+        # Nomenclatura limpa: exibe apenas o nome
+        txt_titulo_home.value = nome_pessoa
         alternar_tela(0)
         progresso.visible = True
         page.update()
@@ -1736,7 +1740,6 @@ def main(page: ft.Page):
                 itens_filtrados = []
                 vistos = set()
 
-                # 1. Atuações reais como personagem (ignora entrevistas 'Self' e documentários)
                 for item in cast_puro:
                     mid = item.get("id")
                     if not mid or not item.get("poster_path"):
@@ -1758,7 +1761,6 @@ def main(page: ft.Page):
                         vistos.add(chave)
                         itens_filtrados.append(item)
 
-                # 2. Direção e escrita criativa relevante (não meramente executivo)
                 for item in crew_puro:
                     mid = item.get("id")
                     if not mid or not item.get("poster_path"):
@@ -1781,7 +1783,6 @@ def main(page: ft.Page):
                             vistos.add(chave)
                             itens_filtrados.append(item)
 
-                # Ordena pelo peso de votos e popularidade no cinema
                 contexto_busca["itens_cache"] = sorted(
                     itens_filtrados,
                     key=lambda x: (x.get("vote_count", 0), x.get("popularity", 0)),
@@ -1795,7 +1796,7 @@ def main(page: ft.Page):
 
         threading.Thread(target=_fetch, daemon=True).start()
 
-    # MOTOR HÍBRIDO EXPANDIDO COM MÚLTIPLAS PÁGINAS DE CATALOGO
+    # MOTOR HÍBRIDO EXPANDIDO COM NOMENCLATURA LIMPA
     def executar_pesquisa_tema_ou_termo(termo_busca):
         ocultar_sugestoes()
         termo_limpo = termo_busca.strip()
@@ -1814,7 +1815,8 @@ def main(page: ft.Page):
         contexto_busca["itens_cache"] = []
         contexto_busca["offset"] = 0
         
-        txt_titulo_home.value = f"🏷️ Assunto: {termo_limpo.capitalize()}"
+        # Nomenclatura limpa: exibe apenas o nome
+        txt_titulo_home.value = termo_limpo.title()
         alternar_tela(0)
         progresso.visible = True
         page.update()
@@ -1892,8 +1894,8 @@ def main(page: ft.Page):
                                 if chave not in vistos:
                                     vistos.add(chave)
                                     itens_totais.append(item)
-                        except Exception:
-                            pass
+                    except Exception:
+                        pass
 
                 contexto_busca["itens_cache"] = sorted(itens_totais, key=lambda x: x.get("vote_count", 0), reverse=True)
             except Exception as ex:
@@ -2022,11 +2024,11 @@ def main(page: ft.Page):
                 if largura_atual < 720:
                     container_sugestoes.width = min(int(largura_atual * 0.90), 380)
                     container_sugestoes.left = max(10, int((largura_atual - container_sugestoes.width) / 2))
-                    container_sugestoes.top = 180
+                    container_sugestoes.top = 165
                 else:
                     container_sugestoes.width = 320
                     container_sugestoes.left = max(0, int((largura_atual / 2) - 160))
-                    container_sugestoes.top = 175
+                    container_sugestoes.top = 165
             else:
                 ocultar_sugestoes()
 
@@ -2055,21 +2057,22 @@ def main(page: ft.Page):
         timer_busca["timer"] = t
         t.start()
 
+    # Altura diminuída para 38px e texto perfeitamente centralizado na vertical
     campo_busca = ft.TextField(
         hint_text="Buscar filmes, atores, temas...",
         hint_style=ft.TextStyle(size=12, color="#64748b"),
-        text_size=13,
+        text_size=12,
         bgcolor="#0d1419",
-        border_radius=10,
+        border_radius=8,
         border_color=COR_BORDA,
         focused_border_color=COR_PETROLEO,
         expand=True,
-        height=45,
-        content_padding=ft.Padding(12, 0, 10, 0),
+        height=38,
+        content_padding=ft.Padding(12, 0, 8, 0),
         suffix=ft.IconButton(
             icon=ft.Icons.SEARCH,
             icon_color="#64748b",
-            icon_size=20,
+            icon_size=18,
             tooltip="Buscar filme, pessoa ou tema",
             on_click=disparar_busca_manual
         ),
@@ -2104,7 +2107,7 @@ def main(page: ft.Page):
     btn_logo_interativo = ft.Container(
         content=img_logo,
         ink=True,
-        padding=4,
+        padding=2,
         scale=1.0,
         animate_scale=ft.Animation(100, ft.AnimationCurve.EASE_OUT),
         tooltip="Voltar ao Início (Todos)",
@@ -2172,13 +2175,13 @@ def main(page: ft.Page):
             ft.Row([container_input_busca], alignment=ft.MainAxisAlignment.CENTER),
             linha_controles_unificados
         ],
-        spacing=8,
+        spacing=6,
         horizontal_alignment=ft.CrossAxisAlignment.CENTER
     )
 
     cabecalho_fixo = ft.Container(
         bgcolor=COR_FUNDO,
-        padding=ft.Padding(12, 6, 12, 10),
+        padding=ft.Padding(12, 4, 12, 8),
         border=ft.Border(bottom=ft.BorderSide(1, COR_BORDA)),
         content=coluna_conteudo_cabecalho
     )
@@ -2189,11 +2192,11 @@ def main(page: ft.Page):
     def ajustar_layout_responsivo(e=None):
         largura_janela = page.width if page.width else 1000
         if largura_janela < 720:
-            img_logo.height = 65
+            img_logo.height = 60
             container_input_busca.width = min(int(largura_janela * 0.92), 380)
             titulo_trends.width = None
         else:
-            img_logo.height = 70
+            img_logo.height = 68
             container_input_busca.width = 340
             titulo_trends.width = 1100
         page.update()
@@ -2208,7 +2211,7 @@ def main(page: ft.Page):
     titulo_trends = ft.Container(
         content=ft.Row([txt_titulo_home], alignment=ft.MainAxisAlignment.START),
         width=1100,
-        padding=ft.Padding(0, 10, 0, 0)
+        padding=ft.Padding(0, 8, 0, 0)
     )
 
     bloco_carregamento_fim = ft.Column(
