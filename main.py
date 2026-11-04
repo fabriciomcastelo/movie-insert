@@ -167,12 +167,17 @@ def main(page: ft.Page):
     filme_avaliando = {"id": None, "nota": "10"}
     filme_para_remover = {"id": None, "titulo": ""}
     
-    # Registro de botões de atalho da Home (chave TMDb e/ou IMDb)
     botoes_add_home = {}
-    
-    # Cache de filmes já salvos pelo usuário logado
     ids_salvos_usuario = set()
     titulos_salvos_usuario = set()
+
+    # Contexto ativo da busca expandida para permitir filtrar por Tipo (Filmes / Séries)
+    contexto_busca = {
+        "tipo": None,        # 'person' ou 'keyword'
+        "id": None,
+        "nome": "",
+        "itens_cache": []    # Lista com todos os itens retornados pela API
+    }
 
     def recarregar_ids_salvos():
         ids_salvos_usuario.clear()
@@ -909,6 +914,36 @@ def main(page: ft.Page):
     )
 
     # -------------------------------------------------------------
+    # RENDERIZAÇÃO DO CONTEXTO DE BUSCA (FILMES / SÉRIES / TODOS)
+    # -------------------------------------------------------------
+    def renderizar_itens_busca_contexto():
+        f_tipo = paginacao["filtro_home"]
+        todos_itens = contexto_busca.get("itens_cache", [])
+        
+        if f_tipo == "movie":
+            filtrados = [i for i in todos_itens if i.get("media_type") == "movie"]
+        elif f_tipo == "tv":
+            filtrados = [i for i in todos_itens if i.get("media_type") == "tv"]
+        else:
+            filtrados = todos_itens
+
+        grade_populares.controls.clear()
+        botoes_add_home.clear()
+        
+        cards = []
+        for it in filtrados:
+            mid = it.get("id")
+            mtype = it.get("media_type", "movie")
+            tit = it.get("title") or it.get("name") or "Sem título"
+            ano = str((it.get("release_date") or it.get("first_air_date")) or "")[:4]
+            p_path = it.get("poster_path")
+            p_url = f"https://image.tmdb.org/t/p/w300{p_path}" if p_path else None
+            cards.append(criar_card_filme(mid, mtype, tit, ano, p_url))
+
+        grade_populares.controls.extend(cards)
+        page.update()
+
+    # -------------------------------------------------------------
     # POPULARES E ROLAGEM INFINITA
     # -------------------------------------------------------------
     def carregar_populares(incrementar=False):
@@ -990,15 +1025,21 @@ def main(page: ft.Page):
 
     def alternar_filtro_home(novo_filtro):
         paginacao["carregando"] = False
-        paginacao["modo_busca_ativo"] = False
         paginacao["filtro_home"] = novo_filtro
+        atualizar_botoes_filtro_home()
+
+        # Se houver uma pessoa ou tema ativo na busca, filtra os itens dessa busca
+        if paginacao["modo_busca_ativo"] and contexto_busca.get("tipo"):
+            renderizar_itens_busca_contexto()
+            return
+
+        # Caso contrário, pesquisa nos Em Alta normais
         paginacao["pagina_atual"] = 1
         paginacao["fim"] = False
         paginacao["ids_carregados"].clear()
         botoes_add_home.clear()
         grade_populares.controls.clear()
         txt_titulo_home.value = "Em Alta (TMDb Trends)"
-        atualizar_botoes_filtro_home()
         carregar_populares()
 
     def atualizar_botoes_filtro_home():
@@ -1472,7 +1513,7 @@ def main(page: ft.Page):
         page.update()
 
     # -------------------------------------------------------------
-    # SUGESTÕES DE BUSCA EXPANDIDA (TÍTULOS, ATORES, DIRETORES E TEMAS)
+    # SUGESTÕES DE BUSCA EXPANDIDA
     # -------------------------------------------------------------
     coluna_sugestoes = ft.Column(spacing=4, scroll=ft.ScrollMode.AUTO)
 
@@ -1503,7 +1544,13 @@ def main(page: ft.Page):
         paginacao["fim"] = True
         btn_carregar_mais.visible = False
         grade_populares.controls.clear()
-        txt_titulo_home.value = f"👤 Títulos com: {nome_pessoa}"
+        
+        contexto_busca["tipo"] = "person"
+        contexto_busca["id"] = person_id
+        contexto_busca["nome"] = nome_pessoa
+        contexto_busca["itens_cache"] = []
+        
+        txt_titulo_home.value = f"👤 Títulos com/dirigidos por: {nome_pessoa}"
         alternar_tela(0)
         progresso.visible = True
         page.update()
@@ -1517,10 +1564,9 @@ def main(page: ft.Page):
                 res = requests.get(url, timeout=4.0).json()
                 itens = res.get("cast", []) + res.get("crew", [])
                 
-                # Ordena pelos mais populares e sem duplicidade
                 itens_ordenados = sorted(itens, key=lambda x: x.get("popularity", 0), reverse=True)
                 vistos = set()
-                cards = []
+                itens_limpos = []
                 for it in itens_ordenados:
                     mid = it.get("id")
                     mtype = it.get("media_type") or "movie"
@@ -1528,20 +1574,16 @@ def main(page: ft.Page):
                     if chave in vistos or mtype not in ["movie", "tv"]:
                         continue
                     vistos.add(chave)
-                    tit = it.get("title") or it.get("name") or "Sem título"
-                    ano = str((it.get("release_date") or it.get("first_air_date")) or "")[:4]
-                    p_path = it.get("poster_path")
-                    p_url = f"https://image.tmdb.org/t/p/w300{p_path}" if p_path else None
-                    cards.append(criar_card_filme(mid, mtype, tit, ano, p_url))
-                    if len(cards) >= 30:
+                    itens_limpos.append(it)
+                    if len(itens_limpos) >= 50:
                         break
 
-                grade_populares.controls.extend(cards)
+                contexto_busca["itens_cache"] = itens_limpos
             except Exception as ex:
                 print(f"Erro filmografia: {ex}")
             finally:
                 progresso.visible = False
-                page.update()
+                renderizar_itens_busca_contexto()
 
         threading.Thread(target=_fetch, daemon=True).start()
 
@@ -1552,6 +1594,12 @@ def main(page: ft.Page):
         paginacao["fim"] = True
         btn_carregar_mais.visible = False
         grade_populares.controls.clear()
+        
+        contexto_busca["tipo"] = "keyword"
+        contexto_busca["id"] = keyword_id
+        contexto_busca["nome"] = nome_tema
+        contexto_busca["itens_cache"] = []
+        
         txt_titulo_home.value = f"🏷️ Tema: {nome_tema.capitalize()}"
         alternar_tela(0)
         progresso.visible = True
@@ -1562,24 +1610,22 @@ def main(page: ft.Page):
 
         def _fetch():
             try:
-                url = f"https://api.themoviedb.org/3/discover/movie?api_key={tmdb_key}&language=pt-BR&sort_by=popularity.desc&with_keywords={keyword_id}&page=1"
-                res = requests.get(url, timeout=4.0).json()
-                itens = res.get("results", [])
-                cards = []
-                for it in itens:
-                    mid = it.get("id")
-                    tit = it.get("title") or "Sem título"
-                    ano = str(it.get("release_date") or "")[:4]
-                    p_path = it.get("poster_path")
-                    p_url = f"https://image.tmdb.org/t/p/w300{p_path}" if p_path else None
-                    cards.append(criar_card_filme(mid, "movie", tit, ano, p_url))
+                url_m = f"https://api.themoviedb.org/3/discover/movie?api_key={tmdb_key}&language=pt-BR&sort_by=popularity.desc&with_keywords={keyword_id}&page=1"
+                res_m = requests.get(url_m, timeout=4.0).json().get("results", [])
+                for i in res_m:
+                    i["media_type"] = "movie"
 
-                grade_populares.controls.extend(cards)
+                url_t = f"https://api.themoviedb.org/3/discover/tv?api_key={tmdb_key}&language=pt-BR&sort_by=popularity.desc&with_keywords={keyword_id}&page=1"
+                res_t = requests.get(url_t, timeout=4.0).json().get("results", [])
+                for i in res_t:
+                    i["media_type"] = "tv"
+
+                contexto_busca["itens_cache"] = res_m + res_t
             except Exception as ex:
                 print(f"Erro tema: {ex}")
             finally:
                 progresso.visible = False
-                page.update()
+                renderizar_itens_busca_contexto()
 
         threading.Thread(target=_fetch, daemon=True).start()
 
@@ -1598,7 +1644,6 @@ def main(page: ft.Page):
             return
 
         try:
-            # 1. Busca Multi (Filmes, Séries e Pessoas)
             url_multi = "https://api.themoviedb.org/3/search/multi"
             params_multi = {
                 "api_key": tmdb_key,
@@ -1609,7 +1654,6 @@ def main(page: ft.Page):
             resp_multi = requests.get(url_multi, params=params_multi, timeout=3.0)
             itens_multi = resp_multi.json().get("results", []) if resp_multi.status_code == 200 else []
 
-            # 2. Busca Palavras-chave / Temas (Keywords)
             url_kw = "https://api.themoviedb.org/3/search/keyword"
             params_kw = {"api_key": tmdb_key, "query": termo_limpo, "page": 1}
             resp_kw = requests.get(url_kw, params=params_kw, timeout=2.0)
@@ -1617,7 +1661,7 @@ def main(page: ft.Page):
 
             coluna_sugestoes.controls.clear()
 
-            # Renderiza Pessoas (Atores/Diretores)
+            # 1. Pessoas (Atores / Diretores)
             pessoas = [i for i in itens_multi if i.get("media_type") == "person"][:2]
             for p in pessoas:
                 pid = p.get("id")
@@ -1649,7 +1693,7 @@ def main(page: ft.Page):
                 )
                 coluna_sugestoes.controls.append(linha_p)
 
-            # Renderiza Filmes e Séries
+            # 2. Filmes e Séries
             obras = [i for i in itens_multi if i.get("media_type") in ["movie", "tv"]][:4]
             for item in obras:
                 mtype = item.get("media_type", "movie")
@@ -1681,7 +1725,7 @@ def main(page: ft.Page):
                 )
                 coluna_sugestoes.controls.append(linha_item)
 
-            # Renderiza Assuntos / Temas (Keywords)
+            # 3. Temas / Palavras-chave
             for kw in itens_kw[:2]:
                 kid = kw.get("id")
                 knome = kw.get("name") or termo_limpo
@@ -1737,9 +1781,6 @@ def main(page: ft.Page):
         timer_busca["timer"] = t
         t.start()
 
-    def fechar_busca_ao_perder_foco(e):
-        threading.Timer(0.35, ocultar_sugestoes).start()
-
     campo_busca = ft.TextField(
         hint_text="Buscar filmes, atores, temas...",
         hint_style=ft.TextStyle(size=11, color="#64748b"),
@@ -1752,8 +1793,7 @@ def main(page: ft.Page):
         height=45,
         content_padding=ft.Padding(10, 0, 8, 0),
         on_change=ao_digitar_busca,
-        on_submit=disparar_busca_manual,
-        on_blur=fechar_busca_ao_perder_foco
+        on_submit=disparar_busca_manual
     )
 
     btn_lupa = ft.IconButton(
@@ -1774,6 +1814,11 @@ def main(page: ft.Page):
         btn_logo_interativo.scale = 1.0
         
         paginacao["modo_busca_ativo"] = False
+        contexto_busca["tipo"] = None
+        contexto_busca["id"] = None
+        contexto_busca["nome"] = ""
+        contexto_busca["itens_cache"] = []
+        
         txt_titulo_home.value = "Em Alta (TMDb Trends)"
         btn_carregar_mais.visible = True
         alternar_tela(0)
@@ -1836,6 +1881,12 @@ def main(page: ft.Page):
         paginacao["filtro_home"] = "todos"
         paginacao["modo_busca_ativo"] = False
         paginacao["ids_carregados"].clear()
+        
+        contexto_busca["tipo"] = None
+        contexto_busca["id"] = None
+        contexto_busca["nome"] = ""
+        contexto_busca["itens_cache"] = []
+        
         grade_populares.controls.clear()
         
         layout_mestre.visible = False
@@ -2018,6 +2069,12 @@ def main(page: ft.Page):
         paginacao["filtro_home"] = "todos"
         paginacao["modo_busca_ativo"] = False
         paginacao["ids_carregados"].clear()
+        
+        contexto_busca["tipo"] = None
+        contexto_busca["id"] = None
+        contexto_busca["nome"] = ""
+        contexto_busca["itens_cache"] = []
+        
         botoes_add_home.clear()
         grade_populares.controls.clear()
 
