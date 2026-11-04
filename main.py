@@ -59,6 +59,16 @@ def carregar_config():
         cfg["omdb_key"] = os.environ.get("OMDB_KEY", "")
     return cfg
 
+def traduzir_para_ingles(texto):
+    try:
+        url = f"https://translate.googleapis.com/translate_a/single?client=gtx&sl=pt&tl=en&dt=t&q={quote_plus(texto)}"
+        resp = requests.get(url, timeout=2.0)
+        if resp.status_code == 200:
+            return resp.json()[0][0][0].strip().lower()
+    except Exception:
+        pass
+    return texto.strip().lower()
+
 # -------------------------------------------------------------
 # BASE DE DADOS
 # -------------------------------------------------------------
@@ -171,12 +181,11 @@ def main(page: ft.Page):
     ids_salvos_usuario = set()
     titulos_salvos_usuario = set()
 
-    # Contexto permanente da pesquisa ativa
     contexto_busca = {
-        "tipo": None,        # 'person' ou 'tema'
+        "tipo": None,
         "id": None,
         "nome": "",
-        "itens_cache": []    # Lista completa sem cortes
+        "itens_cache": []
     }
 
     def recarregar_ids_salvos():
@@ -583,6 +592,7 @@ def main(page: ft.Page):
                 stream_nomes = [p.get("provider_name") for p in br_providers]
 
                 poster_path = res.get("poster_path")
+                # Modal utiliza qualidade superior w300
                 poster_url = f"https://image.tmdb.org/t/p/w300{poster_path}" if poster_path else poster_prev
 
                 imdb_id = res.get("imdb_id") or res.get("external_ids", {}).get("imdb_id")
@@ -780,7 +790,7 @@ def main(page: ft.Page):
         page.update()
 
     # -------------------------------------------------------------
-    # CARTÕES DOS FILMES E SÉRIES
+    # CARTÕES DOS FILMES E SÉRIES (COM IMAGEM LEVE w185)
     # -------------------------------------------------------------
     def criar_card_filme(mid, mtype, titulo, ano, poster_url, categoria=None, nota=None):
         mtype_seguro = "tv" if mtype in ["tv", "series"] else "movie"
@@ -914,7 +924,7 @@ def main(page: ft.Page):
     )
 
     # -------------------------------------------------------------
-    # RENDERIZAÇÃO DO CONTEXTO DE PESQUISA (FILMES / SÉRIES / TODOS)
+    # RENDERIZAÇÃO EM BLOCOS RÁPIDOS DA PESQUISA
     # -------------------------------------------------------------
     def renderizar_itens_busca_contexto():
         f_tipo = paginacao["filtro_home"]
@@ -934,28 +944,30 @@ def main(page: ft.Page):
             tipo_rotulo = "séries" if f_tipo == "tv" else ("filmes" if f_tipo == "movie" else "títulos")
             grade_populares.controls.append(
                 ft.Container(
-                    content=ft.Text(f"Nenhum resultado em {tipo_rotulo} para esta pesquisa.", size=13, color="#94a3b8"),
+                    content=ft.Text(f"Nenhum resultado em {tipo_rotulo} para este assunto.", size=13, color="#94a3b8"),
                     padding=30
                 )
             )
             page.update()
             return
 
-        cards = []
-        for it in filtrados:
-            mid = it.get("id")
-            mtype = it.get("media_type", "movie")
-            tit = it.get("title") or it.get("name") or "Sem título"
-            ano = str((it.get("release_date") or it.get("first_air_date")) or "")[:4]
-            p_path = it.get("poster_path")
-            p_url = f"https://image.tmdb.org/t/p/w300{p_path}" if p_path else None
-            cards.append(criar_card_filme(mid, mtype, tit, ano, p_url))
+        # Renderização com limite de 28 itens para resposta instantânea
+        cards = [
+            criar_card_filme(
+                it.get("id"),
+                it.get("media_type", "movie"),
+                it.get("title") or it.get("name") or "Sem título",
+                str((it.get("release_date") or it.get("first_air_date")) or "")[:4],
+                f"https://image.tmdb.org/t/p/w185{it.get('poster_path')}" if it.get("poster_path") else None
+            )
+            for it in filtrados[:28]
+        ]
 
         grade_populares.controls.extend(cards)
         page.update()
 
     # -------------------------------------------------------------
-    # POPULARES E ROLAGEM INFINITA
+    # POPULARES E ROLAGEM INFINITA (OTIMIZADA)
     # -------------------------------------------------------------
     def carregar_populares(incrementar=False):
         c = carregar_config()
@@ -1020,7 +1032,7 @@ def main(page: ft.Page):
                         tit = it.get("title") or it.get("name") or "Sem título"
                         ano = str((it.get("release_date") or it.get("first_air_date")) or "")[:4]
                         p_path = it.get("poster_path")
-                        p_url = f"https://image.tmdb.org/t/p/w300{p_path}" if p_path else None
+                        p_url = f"https://image.tmdb.org/t/p/w185{p_path}" if p_path else None
                         novos.append(criar_card_filme(mid, media_t, tit, ano, p_url))
 
                     grade_populares.controls.extend(novos)
@@ -1181,7 +1193,7 @@ def main(page: ft.Page):
         page.launch_url(f"file://{arq}")
 
     # -------------------------------------------------------------
-    # BIBLIOTECA
+    # BIBLIOTECA COM RENDERIZAÇÃO EM LOTE
     # -------------------------------------------------------------
     def mudar_aba_biblioteca(nova_aba):
         estado_biblioteca["aba"] = nova_aba
@@ -1522,7 +1534,7 @@ def main(page: ft.Page):
         page.update()
 
     # -------------------------------------------------------------
-    # SUGESTÕES DE PESQUISA EXPANDIDA (MOTOR HÍBRIDO SEM LIMITAÇÕES)
+    # SUGESTÕES DE PESQUISA EXPANDIDA
     # -------------------------------------------------------------
     coluna_sugestoes = ft.Column(spacing=4, scroll=ft.ScrollMode.AUTO)
 
@@ -1618,7 +1630,7 @@ def main(page: ft.Page):
         contexto_busca["nome"] = termo_limpo
         contexto_busca["itens_cache"] = []
         
-        txt_titulo_home.value = f"🔍 Catálogo sobre: {termo_limpo.capitalize()}"
+        txt_titulo_home.value = f"🏷️ Assunto: {termo_limpo.capitalize()}"
         alternar_tela(0)
         progresso.visible = True
         page.update()
@@ -1628,20 +1640,31 @@ def main(page: ft.Page):
 
         def _fetch():
             try:
-                # 1. Obter IDs de palavras-chave correspondentes
-                kw_url = f"https://api.themoviedb.org/3/search/keyword?api_key={tmdb_key}&query={quote_plus(termo_limpo)}&page=1"
-                resp_kw = requests.get(kw_url, timeout=3.0)
-                kw_ids = [str(k.get("id")) for k in resp_kw.json().get("results", [])[:3]] if resp_kw.status_code == 200 else []
+                termo_en = traduzir_para_ingles(termo_limpo)
+
+                queries = [termo_en]
+                if termo_en != termo_limpo.lower():
+                    queries.append(termo_limpo.lower())
+
+                kw_ids = []
+                for q in queries:
+                    try:
+                        kw_url = f"https://api.themoviedb.org/3/search/keyword?api_key={tmdb_key}&query={quote_plus(q)}&page=1"
+                        resp_kw = requests.get(kw_url, timeout=2.5)
+                        if resp_kw.status_code == 200:
+                            for k in resp_kw.json().get("results", [])[:3]:
+                                kw_ids.append(str(k.get("id")))
+                    except Exception:
+                        pass
 
                 itens_totais = []
                 vistos = set()
 
-                # 2. Se encontrou keywords, executa discover temático
                 if kw_ids:
-                    str_kw = "|".join(kw_ids)
+                    str_kw = "|".join(kw_ids[:4])
                     try:
-                        url_m = f"https://api.themoviedb.org/3/discover/movie?api_key={tmdb_key}&language=pt-BR&sort_by=popularity.desc&with_keywords={str_kw}&page=1"
-                        res_m = requests.get(url_m, timeout=3.5).json().get("results", [])
+                        url_m = f"https://api.themoviedb.org/3/discover/movie?api_key={tmdb_key}&language=pt-BR&sort_by=vote_count.desc&with_keywords={str_kw}&page=1"
+                        res_m = requests.get(url_m, timeout=4.0).json().get("results", [])
                         for item in res_m:
                             item["media_type"] = "movie"
                             chave = f"movie_{item.get('id')}"
@@ -1652,8 +1675,8 @@ def main(page: ft.Page):
                         pass
 
                     try:
-                        url_t = f"https://api.themoviedb.org/3/discover/tv?api_key={tmdb_key}&language=pt-BR&sort_by=popularity.desc&with_keywords={str_kw}&page=1"
-                        res_t = requests.get(url_t, timeout=3.5).json().get("results", [])
+                        url_t = f"https://api.themoviedb.org/3/discover/tv?api_key={tmdb_key}&language=pt-BR&sort_by=vote_count.desc&with_keywords={str_kw}&page=1"
+                        res_t = requests.get(url_t, timeout=4.0).json().get("results", [])
                         for item in res_t:
                             item["media_type"] = "tv"
                             chave = f"tv_{item.get('id')}"
@@ -1663,7 +1686,6 @@ def main(page: ft.Page):
                     except Exception:
                         pass
 
-                # 3. Busca livre complementar por títulos e termos no enredo
                 try:
                     url_multi = f"https://api.themoviedb.org/3/search/multi?api_key={tmdb_key}&query={quote_plus(termo_limpo)}&language=pt-BR&include_adult=false&page=1"
                     res_multi = requests.get(url_multi, timeout=3.5).json().get("results", [])
@@ -1679,7 +1701,7 @@ def main(page: ft.Page):
 
                 contexto_busca["itens_cache"] = sorted(itens_totais, key=lambda x: x.get("popularity", 0), reverse=True)
             except Exception as ex:
-                print(f"Erro pesquisa tema amplo: {ex}")
+                print(f"Erro pesquisa tema: {ex}")
             finally:
                 progresso.visible = False
                 renderizar_itens_busca_contexto()
@@ -1713,7 +1735,6 @@ def main(page: ft.Page):
 
             coluna_sugestoes.controls.clear()
 
-            # Opção universal no topo para qualquer assunto/tema digitado
             linha_tema_universal = ft.Container(
                 padding=8,
                 border_radius=6,
@@ -1723,14 +1744,13 @@ def main(page: ft.Page):
                 content=ft.Row([
                     ft.Icon(ft.Icons.SEARCH, size=18, color="#38bdf8"),
                     ft.Column([
-                        ft.Text(f'Ver tudo sobre "{termo_limpo}"', size=12, weight="bold", color="white", max_lines=1, overflow="ellipsis"),
-                        ft.Text("🏷️ Filmes e séries deste tema/assunto", size=10, color="#7dd3fc")
+                        ft.Text(f'Ver catálogo sobre "{termo_limpo}"', size=12, weight="bold", color="white", max_lines=1, overflow="ellipsis"),
+                        ft.Text("🏷️ Assunto, contexto ou tema", size=10, color="#7dd3fc")
                     ], spacing=2, expand=True)
                 ], spacing=8)
             )
             coluna_sugestoes.controls.append(linha_tema_universal)
 
-            # 1. Pessoas (Atores e Diretores)
             pessoas = [i for i in itens_multi if i.get("media_type") == "person"][:2]
             for p in pessoas:
                 pid = p.get("id")
@@ -1762,7 +1782,6 @@ def main(page: ft.Page):
                 )
                 coluna_sugestoes.controls.append(linha_p)
 
-            # 2. Filmes e Séries
             obras = [i for i in itens_multi if i.get("media_type") in ["movie", "tv"]][:4]
             for item in obras:
                 mtype = item.get("media_type", "movie")
@@ -1770,7 +1789,7 @@ def main(page: ft.Page):
                 tit = item.get("title") or item.get("name") or "Sem título"
                 ano = str((item.get("release_date") or item.get("first_air_date")) or "")[:4]
                 p_path = item.get("poster_path")
-                p_url = f"https://image.tmdb.org/t/p/w200{p_path}" if p_path else None
+                p_url = f"https://image.tmdb.org/t/p/w185{p_path}" if p_path else None
 
                 linha_item = ft.Container(
                     padding=6,
@@ -1854,7 +1873,7 @@ def main(page: ft.Page):
     )
 
     # -------------------------------------------------------------
-    # LOGÓTIPO INTERATIVO (RESETA PARA O INÍCIO E LIMPA PESQUISA)
+    # LOGÓTIPO INTERATIVO
     # -------------------------------------------------------------
     def clicar_no_logo(e):
         btn_logo_interativo.scale = 0.94
