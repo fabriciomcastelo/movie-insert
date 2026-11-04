@@ -181,11 +181,12 @@ def main(page: ft.Page):
     ids_salvos_usuario = set()
     titulos_salvos_usuario = set()
 
+    # Contexto permanente da busca ativa
     contexto_busca = {
-        "tipo": None,
+        "tipo": None,        # 'person' ou 'tema'
         "id": None,
         "nome": "",
-        "itens_cache": []
+        "itens_cache": []    # Lista completa validada
     }
 
     def recarregar_ids_salvos():
@@ -923,7 +924,7 @@ def main(page: ft.Page):
     )
 
     # -------------------------------------------------------------
-    # RENDERIZAÇÃO EM BLOCOS DA PESQUISA
+    # RENDERIZAÇÃO ESTÁVEL DO CONTEXTO DE PESQUISA (SEM PERDER ESTADO)
     # -------------------------------------------------------------
     def renderizar_itens_busca_contexto():
         f_tipo = paginacao["filtro_home"]
@@ -939,12 +940,18 @@ def main(page: ft.Page):
         grade_populares.controls.clear()
         botoes_add_home.clear()
         
+        # Garante que NUNCA recarregue os populares ao clicar em Séries ou Filmes sem resultados
         if not filtrados:
-            tipo_rotulo = "séries" if f_tipo == "tv" else ("filmes" if f_tipo == "movie" else "títulos")
+            rotulo = "séries" if f_tipo == "tv" else ("filmes" if f_tipo == "movie" else "obras")
             grade_populares.controls.append(
                 ft.Container(
-                    content=ft.Text(f"Nenhum resultado em {tipo_rotulo} para este assunto.", size=13, color="#94a3b8"),
-                    padding=30
+                    content=ft.Text(
+                        f"Nenhuma {rotulo} encontrada com o tema '{contexto_busca.get('nome')}'.",
+                        size=14,
+                        color="#94a3b8",
+                        text_align=ft.TextAlign.CENTER
+                    ),
+                    padding=40
                 )
             )
             page.update()
@@ -956,16 +963,16 @@ def main(page: ft.Page):
                 it.get("media_type", "movie"),
                 it.get("title") or it.get("name") or "Sem título",
                 str((it.get("release_date") or it.get("first_air_date")) or "")[:4],
-                f"https://image.tmdb.org/t/p/w185{it.get('poster_path')}" if it.get("poster_path") else None
+                f"https://image.tmdb.org/t/p/w185{it.get('poster_path')}"
             )
-            for it in filtrados[:24]
+            for it in filtrados[:28]
         ]
 
         grade_populares.controls.extend(cards)
         page.update()
 
     # -------------------------------------------------------------
-    # POPULARES E ROLAGEM INFINITA (PAGINAÇÃO SUAVE)
+    # POPULARES E ROLAGEM INFINITA
     # -------------------------------------------------------------
     def carregar_populares(incrementar=False):
         c = carregar_config()
@@ -1019,7 +1026,7 @@ def main(page: ft.Page):
                     for it in itens:
                         mid = it.get("id")
                         media_t = it.get("media_type") or ("tv" if f_home == "tv" else "movie")
-                        if media_t not in ["movie", "tv"]:
+                        if media_t not in ["movie", "tv"] or not it.get("poster_path"):
                             continue
 
                         chave_unicidade = f"{media_t}_{mid}"
@@ -1049,6 +1056,7 @@ def main(page: ft.Page):
         paginacao["filtro_home"] = novo_filtro
         atualizar_botoes_filtro_home()
 
+        # Mantém estritamente o contexto de busca sem recarregar tendências da semana
         if paginacao["modo_busca_ativo"] and contexto_busca.get("tipo"):
             renderizar_itens_busca_contexto()
             return
@@ -1532,7 +1540,7 @@ def main(page: ft.Page):
         page.update()
 
     # -------------------------------------------------------------
-    # SUGESTÕES DE PESQUISA EXPANDIDA (POSICIONAMENTO AJUSTADO)
+    # SUGESTÕES DE PESQUISA EXPANDIDA (POSICIONAMENTO CENTRALIZADO)
     # -------------------------------------------------------------
     coluna_sugestoes = ft.Column(spacing=4, scroll=ft.ScrollMode.AUTO)
 
@@ -1543,7 +1551,7 @@ def main(page: ft.Page):
         border=criar_borda(1.2, COR_PETROLEO),
         padding=6,
         visible=False,
-        width=300,
+        width=320,
         height=260,
         top=170,
         left=20,
@@ -1588,7 +1596,7 @@ def main(page: ft.Page):
                 itens_limpos = []
                 for it in itens_ordenados:
                     mid = it.get("id")
-                    if not mid:
+                    if not mid or not it.get("poster_path"):
                         continue
                     
                     mtype = it.get("media_type")
@@ -1611,6 +1619,7 @@ def main(page: ft.Page):
 
         threading.Thread(target=_fetch, daemon=True).start()
 
+    # MOTOR HÍBRIDO DEFINITIVO: ASSUNTOS, PALAVRAS-CHAVE E OBRAS CLÁSSICAS
     def executar_pesquisa_tema_ou_termo(termo_busca):
         ocultar_sugestoes()
         termo_limpo = termo_busca.strip()
@@ -1638,32 +1647,45 @@ def main(page: ft.Page):
 
         def _fetch():
             try:
-                termo_en = traduzir_para_ingles(termo_limpo)
+                # 1. Sinônimos conhecidos e tradução dinâmica
+                norm = normalizar_texto(termo_limpo)
+                tokens_ingles = []
 
-                queries = [termo_en]
-                if termo_en != termo_limpo.lower():
-                    queries.append(termo_limpo.lower())
+                if "segunda guerra" in norm or "guerra mundial" in norm:
+                    tokens_ingles.extend(["world war ii", "world war 2", "wwii"])
+                elif "primeira guerra" in norm:
+                    tokens_ingles.extend(["world war i", "wwi"])
+                elif "holocausto" in norm or "nazis" in norm:
+                    tokens_ingles.extend(["holocaust", "nazi"])
+                else:
+                    tr = traduzir_para_ingles(termo_limpo)
+                    tokens_ingles.append(tr)
+                    if tr != norm:
+                        tokens_ingles.append(norm)
 
-                kw_ids = []
-                for q in queries:
+                kw_ids = set()
+                for token in tokens_ingles:
                     try:
-                        kw_url = f"https://api.themoviedb.org/3/search/keyword?api_key={tmdb_key}&query={quote_plus(q)}&page=1"
+                        kw_url = f"https://api.themoviedb.org/3/search/keyword?api_key={tmdb_key}&query={quote_plus(token)}&page=1"
                         resp_kw = requests.get(kw_url, timeout=2.5)
                         if resp_kw.status_code == 200:
                             for k in resp_kw.json().get("results", [])[:3]:
-                                kw_ids.append(str(k.get("id")))
+                                kw_ids.add(str(k.get("id")))
                     except Exception:
                         pass
 
                 itens_totais = []
                 vistos = set()
 
+                # 2. Se achou keywords, busca no discover por popularidade e relevância de votos
                 if kw_ids:
-                    str_kw = "|".join(kw_ids[:4])
+                    str_kw = "|".join(list(kw_ids)[:5])
                     try:
-                        url_m = f"https://api.themoviedb.org/3/discover/movie?api_key={tmdb_key}&language=pt-BR&sort_by=vote_count.desc&with_keywords={str_kw}&page=1"
+                        url_m = f"https://api.themoviedb.org/3/discover/movie?api_key={tmdb_key}&language=pt-BR&sort_by=vote_count.desc&with_keywords={str_kw}&vote_count.gte=50&page=1"
                         res_m = requests.get(url_m, timeout=4.0).json().get("results", [])
                         for item in res_m:
+                            if not item.get("poster_path"):
+                                continue
                             item["media_type"] = "movie"
                             chave = f"movie_{item.get('id')}"
                             if chave not in vistos:
@@ -1673,9 +1695,11 @@ def main(page: ft.Page):
                         pass
 
                     try:
-                        url_t = f"https://api.themoviedb.org/3/discover/tv?api_key={tmdb_key}&language=pt-BR&sort_by=vote_count.desc&with_keywords={str_kw}&page=1"
+                        url_t = f"https://api.themoviedb.org/3/discover/tv?api_key={tmdb_key}&language=pt-BR&sort_by=vote_count.desc&with_keywords={str_kw}&vote_count.gte=10&page=1"
                         res_t = requests.get(url_t, timeout=4.0).json().get("results", [])
                         for item in res_t:
+                            if not item.get("poster_path"):
+                                continue
                             item["media_type"] = "tv"
                             chave = f"tv_{item.get('id')}"
                             if chave not in vistos:
@@ -1684,12 +1708,13 @@ def main(page: ft.Page):
                     except Exception:
                         pass
 
+                # 3. Complemento de busca textual geral filtrando apenas obras com pôster e votos reais
                 try:
                     url_multi = f"https://api.themoviedb.org/3/search/multi?api_key={tmdb_key}&query={quote_plus(termo_limpo)}&language=pt-BR&include_adult=false&page=1"
                     res_multi = requests.get(url_multi, timeout=3.5).json().get("results", [])
                     for item in res_multi:
                         mtype = item.get("media_type")
-                        if mtype in ["movie", "tv"]:
+                        if mtype in ["movie", "tv"] and item.get("poster_path") and item.get("vote_count", 0) >= 5:
                             chave = f"{mtype}_{item.get('id')}"
                             if chave not in vistos:
                                 vistos.add(chave)
@@ -1697,7 +1722,7 @@ def main(page: ft.Page):
                 except Exception:
                     pass
 
-                contexto_busca["itens_cache"] = sorted(itens_totais, key=lambda x: x.get("popularity", 0), reverse=True)
+                contexto_busca["itens_cache"] = sorted(itens_totais, key=lambda x: x.get("vote_count", 0), reverse=True)
             except Exception as ex:
                 print(f"Erro pesquisa tema: {ex}")
             finally:
@@ -1780,7 +1805,7 @@ def main(page: ft.Page):
                 )
                 coluna_sugestoes.controls.append(linha_p)
 
-            obras = [i for i in itens_multi if i.get("media_type") in ["movie", "tv"]][:4]
+            obras = [i for i in itens_multi if i.get("media_type") in ["movie", "tv"] and i.get("poster_path")][:4]
             for item in obras:
                 mtype = item.get("media_type", "movie")
                 mid = item.get("id")
@@ -1819,8 +1844,8 @@ def main(page: ft.Page):
                     container_sugestoes.left = max(10, int((largura_atual - container_sugestoes.width) / 2))
                     container_sugestoes.top = 180
                 else:
-                    container_sugestoes.width = 300
-                    container_sugestoes.left = max(0, int((largura_atual / 2) - 150))
+                    container_sugestoes.width = 320
+                    container_sugestoes.left = max(0, int((largura_atual / 2) - 160))
                     container_sugestoes.top = 175
             else:
                 ocultar_sugestoes()
@@ -1847,7 +1872,6 @@ def main(page: ft.Page):
         timer_busca["timer"] = t
         t.start()
 
-    # Caixa de busca adaptável
     campo_busca = ft.TextField(
         hint_text="Buscar filmes, atores, temas...",
         hint_style=ft.TextStyle(size=12, color="#64748b"),
@@ -1892,7 +1916,6 @@ def main(page: ft.Page):
         alternar_tela(0)
         alternar_filtro_home("todos")
 
-    # Altura inicial do logo (65px - 20% maior que os 50px anteriores)
     img_logo = ft.Image(src="logo.png", height=65, fit="contain")
 
     btn_logo_interativo = ft.Container(
@@ -1981,7 +2004,6 @@ def main(page: ft.Page):
         vertical_alignment=ft.CrossAxisAlignment.CENTER
     )
 
-    # Linha que abriga a barra de busca inteira
     container_input_busca = ft.Container(
         content=ft.Row(
             controls=[campo_busca, btn_lupa],
@@ -1991,7 +2013,6 @@ def main(page: ft.Page):
         width=320
     )
 
-    # Linha de menu para alternar responsivamente entre celular e desktop
     linha_inferior_menu = ft.Row(
         controls=[
             container_input_busca,
@@ -2022,33 +2043,23 @@ def main(page: ft.Page):
     )
 
     # -------------------------------------------------------------
-    # ADAPTAÇÃO DINÂMICA (LAYOUT OTIMIZADO PARA CELULAR)
+    # ADAPTAÇÃO DINÂMICA
     # -------------------------------------------------------------
     def ajustar_layout_responsivo(e=None):
         largura_janela = page.width if page.width else 1000
         if largura_janela < 720:
-            # 1. Logo 20% maior no celular (aumentado para 65px de altura)
             img_logo.height = 65
-            
-            # 2. Caixa de busca larga ocupando 90% da tela em linha exclusiva
             container_input_busca.width = min(int(largura_janela * 0.90), 380)
             linha_inferior_menu.controls = [container_input_busca]
-            
-            # 3. Botão da biblioteca centralizado logo abaixo da busca
             if btn_tab_bib not in coluna_conteudo_cabecalho.controls:
                 coluna_conteudo_cabecalho.controls.insert(4, ft.Row([btn_tab_bib], alignment=ft.MainAxisAlignment.CENTER))
-            
             titulo_trends.width = None
         else:
-            # Desktop
             img_logo.height = 70
-            container_input_busca.width = 240
+            container_input_busca.width = 280
             linha_inferior_menu.controls = [container_input_busca, btn_tab_bib]
-            
-            # Remove a linha intermediária da biblioteca no desktop
             if len(coluna_conteudo_cabecalho.controls) > 5:
                 coluna_conteudo_cabecalho.controls.pop(4)
-                
             titulo_trends.width = 1100
         page.update()
 
@@ -2229,139 +2240,3 @@ def main(page: ft.Page):
                 conn.close()
 
     modal_novo_perfil = ft.AlertDialog(
-        modal=False,
-        title=ft.Text("Adicionar Novo Perfil", size=16, weight="bold", color="white"),
-        content=ft.Column([
-            ft.Text("Como deseja chamar este perfil?", size=13, color="#94a3b8"),
-            txt_novo_perfil_erro,
-            txt_novo_perfil_nome
-        ], tight=True, spacing=10),
-        actions=[
-            ft.Button(content=ft.Text("Cancelar", color="#94a3b8"), on_click=lambda e: fechar_dialogo(modal_novo_perfil)),
-            ft.Button(content=ft.Text("Salvar Perfil", color="white"), bgcolor=COR_PETROLEO, on_click=salvar_novo_perfil)
-        ],
-        actions_alignment=ft.MainAxisAlignment.END
-    )
-
-    def abrir_modal_novo_perfil(e=None):
-        txt_novo_perfil_nome.value = ""
-        txt_novo_perfil_erro.value = ""
-        abrir_dialogo(modal_novo_perfil)
-
-    def criar_card_avatar(uid, nome, cor):
-        iniciais = (nome[:2] if len(nome) >= 2 else nome).upper()
-        
-        avatar_box = ft.Container(
-            content=ft.Text(iniciais, size=32, weight="bold", color="white"),
-            alignment=ft.Alignment(0, 0),
-            width=110,
-            height=110,
-            border_radius=12,
-            bgcolor=cor,
-            border=criar_borda(2, "transparent"),
-            animate=ft.Animation(150, ft.AnimationCurve.EASE_OUT)
-        )
-
-        def on_hover_card(e):
-            avatar_box.border = criar_borda(2, "white" if e.data == "true" else "transparent")
-            card_item.scale = 1.05 if e.data == "true" else 1.0
-            page.update()
-
-        card_item = ft.Container(
-            content=ft.Column([
-                avatar_box,
-                ft.Text(nome, size=14, weight="bold", color="#94a3b8", text_align=ft.TextAlign.CENTER, width=110)
-            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10),
-            ink=True,
-            border_radius=12,
-            padding=4,
-            scale=1.0,
-            animate_scale=ft.Animation(150, ft.AnimationCurve.EASE_OUT),
-            on_hover=on_hover_card,
-            on_click=lambda e, u=uid, n=nome, c=cor: entrar_com_perfil(u, n, c)
-        )
-        return card_item
-
-    def criar_card_adicionar():
-        box_add = ft.Container(
-            content=ft.Icon(ft.Icons.ADD_ROUNDED, size=48, color="#64748b"),
-            alignment=ft.Alignment(0, 0),
-            width=110,
-            height=110,
-            border_radius=12,
-            bgcolor="#0d1419",
-            border=criar_borda(1.5, "#334155")
-        )
-
-        def on_hover_add(e):
-            box_add.border = criar_borda(1.5, "white" if e.data == "true" else "#334155")
-            box_add.content.color = "white" if e.data == "true" else "#64748b"
-            card_add.scale = 1.05 if e.data == "true" else 1.0
-            page.update()
-
-        card_add = ft.Container(
-            content=ft.Column([
-                box_add,
-                ft.Text("Adicionar Perfil", size=13, color="#64748b", text_align=ft.TextAlign.CENTER, width=110)
-            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10),
-            ink=True,
-            border_radius=12,
-            padding=4,
-            scale=1.0,
-            animate_scale=ft.Animation(150, ft.AnimationCurve.EASE_OUT),
-            on_hover=on_hover_add,
-            on_click=abrir_modal_novo_perfil
-        )
-        return card_add
-
-    def carregar_perfis_tela():
-        linha_cards_perfis.controls.clear()
-        perfis = []
-        conn = None
-        try:
-            conn = sqlite3.connect(DB_FILE, timeout=5)
-            c = conn.cursor()
-            c.execute("SELECT id, username, cor_avatar FROM usuarios ORDER BY id ASC")
-            perfis = c.fetchall()
-        except Exception as e:
-            print(f"Erro ao buscar perfis: {e}")
-        finally:
-            if conn:
-                conn.close()
-
-        if not perfis:
-            abrir_modal_novo_perfil()
-
-        for pid, pnome, pcor in perfis:
-            cor_final = pcor if pcor else COR_PETROLEO
-            linha_cards_perfis.controls.append(criar_card_avatar(pid, pnome, cor_final))
-
-        linha_cards_perfis.controls.append(criar_card_adicionar())
-
-    tela_perfis = ft.Container(
-        expand=True,
-        alignment=ft.Alignment(0, 0),
-        padding=ft.Padding(20, 40, 20, 40),
-        content=ft.Column([
-            ft.Image(src="logo.png", height=75, fit="contain"),
-            ft.Container(height=10),
-            ft.Text("Quem está usando?", size=26, weight="bold", color="white", text_align=ft.TextAlign.CENTER),
-            ft.Container(height=15),
-            linha_cards_perfis
-        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, alignment=ft.MainAxisAlignment.CENTER, spacing=12),
-        visible=True
-    )
-
-    page.add(tela_perfis, layout_mestre)
-    carregar_perfis_tela()
-    page.update()
-
-if __name__ == "__main__":
-    porta = int(os.environ.get("PORT", 8550))
-    ft.run(
-        main,
-        view=ft.AppView.WEB_BROWSER,
-        host="0.0.0.0",
-        port=porta,
-        assets_dir=DIR_ASSETS
-    )
