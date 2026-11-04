@@ -2240,3 +2240,139 @@ def main(page: ft.Page):
                 conn.close()
 
     modal_novo_perfil = ft.AlertDialog(
+        modal=False,
+        title=ft.Text("Adicionar Novo Perfil", size=16, weight="bold", color="white"),
+        content=ft.Column([
+            ft.Text("Como deseja chamar este perfil?", size=13, color="#94a3b8"),
+            txt_novo_perfil_erro,
+            txt_novo_perfil_nome
+        ], tight=True, spacing=10),
+        actions=[
+            ft.Button(content=ft.Text("Cancelar", color="#94a3b8"), on_click=lambda e: fechar_dialogo(modal_novo_perfil)),
+            ft.Button(content=ft.Text("Salvar Perfil", color="white"), bgcolor=COR_PETROLEO, on_click=salvar_novo_perfil)
+        ],
+        actions_alignment=ft.MainAxisAlignment.END
+    )
+
+    def abrir_modal_novo_perfil(e=None):
+        txt_novo_perfil_nome.value = ""
+        txt_novo_perfil_erro.value = ""
+        abrir_dialogo(modal_novo_perfil)
+
+    def criar_card_avatar(uid, nome, cor):
+        iniciais = (nome[:2] if len(nome) >= 2 else nome).upper()
+        
+        avatar_box = ft.Container(
+            content=ft.Text(iniciais, size=32, weight="bold", color="white"),
+            alignment=ft.Alignment(0, 0),
+            width=110,
+            height=110,
+            border_radius=12,
+            bgcolor=cor,
+            border=criar_borda(2, "transparent"),
+            animate=ft.Animation(150, ft.AnimationCurve.EASE_OUT)
+        )
+
+        def on_hover_card(e):
+            avatar_box.border = criar_borda(2, "white" if e.data == "true" else "transparent")
+            card_item.scale = 1.05 if e.data == "true" else 1.0
+            page.update()
+
+        card_item = ft.Container(
+            content=ft.Column([
+                avatar_box,
+                ft.Text(nome, size=14, weight="bold", color="#94a3b8", text_align=ft.TextAlign.CENTER, width=110)
+            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10),
+            ink=True,
+            border_radius=12,
+            padding=4,
+            scale=1.0,
+            animate_scale=ft.Animation(150, ft.AnimationCurve.EASE_OUT),
+            on_hover=on_hover_card,
+            on_click=lambda e, u=uid, n=nome, c=cor: entrar_com_perfil(u, n, c)
+        )
+        return card_item
+
+    def criar_card_adicionar():
+        box_add = ft.Container(
+            content=ft.Icon(ft.Icons.ADD_ROUNDED, size=48, color="#64748b"),
+            alignment=ft.Alignment(0, 0),
+            width=110,
+            height=110,
+            border_radius=12,
+            bgcolor="#0d1419",
+            border=criar_borda(1.5, "#334155")
+        )
+
+        def on_hover_add(e):
+            box_add.border = criar_borda(1.5, "white" if e.data == "true" else "#334155")
+            box_add.content.color = "white" if e.data == "true" else "#64748b"
+            card_add.scale = 1.05 if e.data == "true" else 1.0
+            page.update()
+
+        card_add = ft.Container(
+            content=ft.Column([
+                box_add,
+                ft.Text("Adicionar Perfil", size=13, color="#64748b", text_align=ft.TextAlign.CENTER, width=110)
+            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10),
+            ink=True,
+            border_radius=12,
+            padding=4,
+            scale=1.0,
+            animate_scale=ft.Animation(150, ft.AnimationCurve.EASE_OUT),
+            on_hover=on_hover_add,
+            on_click=abrir_modal_novo_perfil
+        )
+        return card_add
+
+    def carregar_perfis_tela():
+        linha_cards_perfis.controls.clear()
+        perfis = []
+        conn = None
+        try:
+            conn = sqlite3.connect(DB_FILE, timeout=5)
+            c = conn.cursor()
+            c.execute("SELECT id, username, cor_avatar FROM usuarios ORDER BY id ASC")
+            perfis = c.fetchall()
+        except Exception as e:
+            print(f"Erro ao buscar perfis: {e}")
+        finally:
+            if conn:
+                conn.close()
+
+        if not perfis:
+            abrir_modal_novo_perfil()
+
+        for pid, pnome, pcor in perfis:
+            cor_final = pcor if pcor else COR_PETROLEO
+            linha_cards_perfis.controls.append(criar_card_avatar(pid, pnome, cor_final))
+
+        linha_cards_perfis.controls.append(criar_card_adicionar())
+
+    tela_perfis = ft.Container(
+        expand=True,
+        alignment=ft.Alignment(0, 0),
+        padding=ft.Padding(20, 40, 20, 40),
+        content=ft.Column([
+            ft.Image(src="logo.png", height=75, fit="contain"),
+            ft.Container(height=10),
+            ft.Text("Quem está usando?", size=26, weight="bold", color="white", text_align=ft.TextAlign.CENTER),
+            ft.Container(height=15),
+            linha_cards_perfis
+        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, alignment=ft.MainAxisAlignment.CENTER, spacing=12),
+        visible=True
+    )
+
+    page.add(tela_perfis, layout_mestre)
+    carregar_perfis_tela()
+    page.update()
+
+if __name__ == "__main__":
+    porta = int(os.environ.get("PORT", 8550))
+    ft.run(
+        main,
+        view=ft.AppView.WEB_BROWSER,
+        host="0.0.0.0",
+        port=porta,
+        assets_dir=DIR_ASSETS
+    )
