@@ -201,6 +201,7 @@ def main(page: ft.Page):
     item_ativo = {"data": None}
     timer_busca = {"timer": None}
     versao_busca_atual = {"epoch": 0}
+    ultimo_disparo_scroll = {"tempo": 0.0}
     filme_avaliando = {"id": None, "nota": "10"}
     filme_para_remover = {"id": None, "titulo": ""}
     
@@ -240,6 +241,7 @@ def main(page: ft.Page):
         chaves = [chave_tmdb]
         if chave_imdb:
             chaves.append(chave_imdb)
+        alterou = False
         for k in chaves:
             if k in botoes_add_home and botoes_add_home[k]:
                 btn = botoes_add_home[k]
@@ -248,7 +250,9 @@ def main(page: ft.Page):
                 btn.bgcolor = "#064e3b"
                 btn.disabled = True
                 btn.tooltip = "Já está na sua biblioteca"
-        page.update()
+                alterou = True
+        if alterou:
+            grade_populares.update()
 
     estado_biblioteca = {
         "aba": "Para Assistir",
@@ -336,7 +340,7 @@ def main(page: ft.Page):
             is_ativo = (btn.data == str(valor))
             btn.bgcolor = COR_PETROLEO if is_ativo else "#1f2937"
             btn.content.color = "white" if is_ativo else "#94a3b8"
-        page.update()
+        modal_avaliacao.update()
 
     for n in range(1, 11):
         s_val = str(n)
@@ -348,7 +352,6 @@ def main(page: ft.Page):
             height=40,
             shape=ft.BoxShape.CIRCLE,
             bgcolor=COR_PETROLEO if is_padrao else "#1f2937",
-            ink=True,
             data=s_val,
             on_click=lambda e, v=s_val: selecionar_nota_valor(v)
         )
@@ -531,7 +534,7 @@ def main(page: ft.Page):
 
         marcar_botao_home_como_salvo(chave_tmdb_orig, fid)
         atualizar_contador_biblioteca()
-        page.update()
+        conteudo_modal.update()
 
     btn_salvar.on_click = salvar_filme_ativo
 
@@ -547,7 +550,7 @@ def main(page: ft.Page):
         dt_meta.value = "Obtendo dados..."
         dt_stream.value = "Consultando disponibilidade..."
         dt_sinopse.value = "Carregando sinopse..."
-        txt_stremio.value = "🔍 Checando qualidade..."
+        txt_stremio.value = "🔍 Verificando lançamento..."
         txt_stremio.color = "#93c5fd"
         dt_stremio_status.bgcolor = "#1e293b"
         dt_imdb.content.value = "⭐ .."
@@ -573,7 +576,7 @@ def main(page: ft.Page):
 
         abrir_dialogo(modal_detalhes)
         progresso.visible = True
-        page.update()
+        progresso.update()
 
         c = carregar_config()
         tmdb_key = c.get("tmdb_key", "").strip()
@@ -767,8 +770,8 @@ def main(page: ft.Page):
                 print(f"Erro ao obter detalhes: {ex}")
             finally:
                 progresso.visible = False
+                progresso.update()
                 conteudo_modal.update()
-                page.update()
 
         threading.Thread(target=_fetch, daemon=True).start()
 
@@ -805,7 +808,7 @@ def main(page: ft.Page):
         btn_adicionar.bgcolor = "#064e3b"
         btn_adicionar.disabled = True
         btn_adicionar.tooltip = "Já está na sua biblioteca"
-        page.update()
+        btn_adicionar.update()
 
     def criar_card_filme(mid, mtype, titulo, ano, poster_url, categoria=None, nota=None):
         mtype_seguro = "tv" if mtype in ["tv", "series"] else "movie"
@@ -839,7 +842,6 @@ def main(page: ft.Page):
                     border=borda_nota,
                     padding=ft.Padding(6, 3, 6, 3),
                     border_radius=5,
-                    ink=True,
                     on_click=lambda e: abrir_modal_avaliacao(chave_id, nota)
                 )
             )
@@ -903,7 +905,6 @@ def main(page: ft.Page):
             bgcolor=COR_CARD,
             padding=5,
             border_radius=8,
-            ink=True,
             border=criar_borda(1.2, COR_BORDA),
             content=ft.Column([
                 imagem_com_badge,
@@ -932,12 +933,11 @@ def main(page: ft.Page):
 
         paginacao["carregando"] = True
         spinner_carregamento.visible = True
-        page.update()
+        spinner_carregamento.update()
 
         f_tipo = paginacao["filtro_home"]
         todos_itens = contexto_busca.get("itens_cache", [])
         
-        # Filtro estrito: se f_tipo for 'tv', exige media_type == 'tv'
         if f_tipo == "movie":
             filtrados = [i for i in todos_itens if i.get("media_type") == "movie"]
         elif f_tipo == "tv":
@@ -946,14 +946,15 @@ def main(page: ft.Page):
             filtrados = todos_itens
 
         offset = contexto_busca.get("offset", 0)
-        proxima_fatia = filtrados[offset : offset + 20]
+        proxima_fatia = filtrados[offset : offset + 16]
 
         if not proxima_fatia:
             paginacao["fim"] = True
             btn_carregar_mais.visible = False
             paginacao["carregando"] = False
             spinner_carregamento.visible = False
-            page.update()
+            btn_carregar_mais.update()
+            spinner_carregamento.update()
             return
 
         novos_cards = [
@@ -978,7 +979,9 @@ def main(page: ft.Page):
 
         paginacao["carregando"] = False
         spinner_carregamento.visible = False
-        page.update()
+        grade_populares.update()
+        btn_carregar_mais.update()
+        spinner_carregamento.update()
 
     def acao_carregar_mais(e):
         if paginacao["modo_busca_ativo"]:
@@ -1001,14 +1004,10 @@ def main(page: ft.Page):
         on_click=acao_carregar_mais
     )
 
-    # -------------------------------------------------------------
-    # RENDERIZAÇÃO ESTÁVEL DA PESQUISA COM FILTRO RÍGIDO DE TIPO
-    # -------------------------------------------------------------
     def renderizar_itens_busca_contexto():
         f_tipo = paginacao["filtro_home"]
         todos_itens = contexto_busca.get("itens_cache", [])
         
-        # Filtro estrito: se f_tipo for 'tv', exige media_type == 'tv'
         if f_tipo == "movie":
             filtrados = [i for i in todos_itens if i.get("media_type") == "movie"]
         elif f_tipo == "tv":
@@ -1035,10 +1034,11 @@ def main(page: ft.Page):
                 )
             )
             btn_carregar_mais.visible = False
-            page.update()
+            grade_populares.update()
+            btn_carregar_mais.update()
             return
 
-        primeira_fatia = filtrados[:20]
+        primeira_fatia = filtrados[:16]
         contexto_busca["offset"] = len(primeira_fatia)
 
         cards = [
@@ -1054,18 +1054,16 @@ def main(page: ft.Page):
 
         grade_populares.controls.extend(cards)
 
-        if len(filtrados) > 20:
+        if len(filtrados) > 16:
             paginacao["fim"] = False
             btn_carregar_mais.visible = True
         else:
             paginacao["fim"] = True
             btn_carregar_mais.visible = False
 
-        page.update()
+        grade_populares.update()
+        btn_carregar_mais.update()
 
-    # -------------------------------------------------------------
-    # POPULARES E ROLAGEM INFINITA
-    # -------------------------------------------------------------
     def carregar_populares(incrementar=False):
         c = carregar_config()
         tmdb_key = c.get("tmdb_key", "").strip()
@@ -1078,7 +1076,7 @@ def main(page: ft.Page):
                     padding=20
                 )
             )
-            page.update()
+            grade_populares.update()
             return
 
         if paginacao["carregando"] or paginacao["fim"] or paginacao["modo_busca_ativo"]:
@@ -1090,14 +1088,14 @@ def main(page: ft.Page):
 
         spinner_carregamento.visible = True
         btn_carregar_mais.visible = False
-        page.update()
+        spinner_carregamento.update()
+        btn_carregar_mais.update()
 
         def _fetch():
             try:
                 p = paginacao["pagina_atual"]
                 f_home = paginacao["filtro_home"]
 
-                # Separação rígida de endpoints para nunca misturar filmes e séries no modo trending
                 if f_home == "movie":
                     url = f"https://api.themoviedb.org/3/trending/movie/week?api_key={tmdb_key}&language=pt-BR&page={p}"
                 elif f_home == "tv":
@@ -1119,7 +1117,6 @@ def main(page: ft.Page):
                     for it in itens:
                         mid = it.get("id")
                         
-                        # Atribuição estrita do media_type baseada na aba ativa
                         if f_home == "tv":
                             media_t = "tv"
                         elif f_home == "movie":
@@ -1148,7 +1145,9 @@ def main(page: ft.Page):
                 paginacao["carregando"] = False
                 spinner_carregamento.visible = False
                 btn_carregar_mais.visible = not paginacao["fim"]
-                page.update()
+                grade_populares.update()
+                spinner_carregamento.update()
+                btn_carregar_mais.update()
 
         threading.Thread(target=_fetch, daemon=True).start()
 
@@ -1157,7 +1156,6 @@ def main(page: ft.Page):
         paginacao["filtro_home"] = novo_filtro
         atualizar_botoes_filtro_home()
 
-        # Se houver busca de pessoa ou tema em andamento, filtra estritamente a busca em memória
         if paginacao["modo_busca_ativo"] and contexto_busca.get("tipo"):
             renderizar_itens_busca_contexto()
             return
@@ -1168,6 +1166,7 @@ def main(page: ft.Page):
         botoes_add_home.clear()
         grade_populares.controls.clear()
         txt_titulo_home.value = "Em Alta (TMDb Trends)"
+        txt_titulo_home.update()
         carregar_populares()
 
     def atualizar_botoes_filtro_home():
@@ -1193,7 +1192,7 @@ def main(page: ft.Page):
             shape=ft.RoundedRectangleBorder(radius=20),
             side=ft.BorderSide(1.8, COR_ATIVO_BORDA) if atual == "tv" else ft.BorderSide(1, COR_BORDA)
         )
-        page.update()
+        linha_controles_unificados.update()
 
     btn_home_todos = ft.Button(
         content=ft.Text("Todos", size=11, weight="bold", color="white"),
@@ -1245,7 +1244,7 @@ def main(page: ft.Page):
                 if conn:
                     conn.close()
         txt_contador_bib.value = f"BIBLIOTECA ({total})"
-        page.update()
+        txt_contador_bib.update()
 
     btn_tab_bib = ft.Container(
         content=txt_contador_bib,
@@ -1253,7 +1252,6 @@ def main(page: ft.Page):
         border=criar_borda(1.2, COR_BORDA),
         border_radius=10,
         padding=ft.Padding(12, 8, 12, 8),
-        ink=True,
         on_click=lambda e: alternar_tela(1)
     )
 
@@ -1267,6 +1265,11 @@ def main(page: ft.Page):
 
     def ao_rolar_inicio(e: ft.OnScrollEvent):
         ocultar_sugestoes()
+        agora = time.time()
+        if agora - ultimo_disparo_scroll["tempo"] < 0.25:
+            return
+        ultimo_disparo_scroll["tempo"] = agora
+
         if paginacao["carregando"] or paginacao["fim"]:
             return
 
@@ -1303,7 +1306,7 @@ def main(page: ft.Page):
                 btn.bgcolor = "#0d1419cc"
                 btn.disabled = False
                 btn.tooltip = "Adicionar à Biblioteca"
-            
+
             atualizar_contador_biblioteca()
             carregar_biblioteca()
 
@@ -1508,7 +1511,7 @@ def main(page: ft.Page):
                     padding=ft.Padding(10, 30, 10, 20)
                 )
             )
-            page.update()
+            coluna_biblioteca_itens.update()
             return
 
         def renderizar_secao(titulo_secao, icone, cor, lista):
@@ -1666,7 +1669,7 @@ def main(page: ft.Page):
                 texto_info="★ Ordenado por Sua Nota Pessoal (10 a 1)"
             )
 
-        page.update()
+        coluna_biblioteca_itens.update()
 
     coluna_sugestoes = ft.Column(spacing=4, scroll=ft.ScrollMode.AUTO)
 
@@ -1688,12 +1691,12 @@ def main(page: ft.Page):
     def ocultar_sugestoes():
         if container_sugestoes.visible:
             container_sugestoes.visible = False
-            page.update()
+            container_sugestoes.update()
 
-    # FILTRAGEM INTELIGENTE DE ARTISTA (COM CLASSIFICAÇÃO RÍGIDA DE TV/MOVIE)
     def exibir_filmografia_pessoa(person_id, nome_pessoa):
         ocultar_sugestoes()
         campo_busca.value = nome_pessoa
+        campo_busca.update()
         paginacao["modo_busca_ativo"] = True
         paginacao["fim"] = False
         btn_carregar_mais.visible = False
@@ -1706,9 +1709,10 @@ def main(page: ft.Page):
         contexto_busca["offset"] = 0
         
         txt_titulo_home.value = nome_pessoa
+        txt_titulo_home.update()
         alternar_tela(0)
         progresso.visible = True
-        page.update()
+        progresso.update()
 
         c = carregar_config()
         tmdb_key = c.get("tmdb_key", "").strip()
@@ -1735,7 +1739,6 @@ def main(page: ft.Page):
                     if 99 in generos or "self" in personagem or "himself" in personagem or "herself" in personagem:
                         continue
                         
-                    # Detecção rígida: se tem 'name' ou 'first_air_date', é TV
                     if item.get("media_type") == "tv" or "name" in item or "first_air_date" in item:
                         mtype = "tv"
                     else:
@@ -1779,6 +1782,7 @@ def main(page: ft.Page):
                 print(f"Erro filmografia filtrada: {ex}")
             finally:
                 progresso.visible = False
+                progresso.update()
                 renderizar_itens_busca_contexto()
 
         threading.Thread(target=_fetch, daemon=True).start()
@@ -1790,6 +1794,7 @@ def main(page: ft.Page):
             return
 
         campo_busca.value = termo_limpo
+        campo_busca.update()
         paginacao["modo_busca_ativo"] = True
         paginacao["fim"] = False
         btn_carregar_mais.visible = False
@@ -1802,9 +1807,10 @@ def main(page: ft.Page):
         contexto_busca["offset"] = 0
         
         txt_titulo_home.value = termo_limpo.title()
+        txt_titulo_home.update()
         alternar_tela(0)
         progresso.visible = True
-        page.update()
+        progresso.update()
 
         c = carregar_config()
         tmdb_key = c.get("tmdb_key", "").strip()
@@ -1891,6 +1897,7 @@ def main(page: ft.Page):
                 print(f"Erro pesquisa tema: {ex}")
             finally:
                 progresso.visible = False
+                progresso.update()
                 renderizar_itens_busca_contexto()
 
         threading.Thread(target=_fetch, daemon=True).start()
@@ -1898,7 +1905,7 @@ def main(page: ft.Page):
     def selecionar_sugestao_filme(mid, mtype, tit, ano, p_url):
         ocultar_sugestoes()
         campo_busca.value = tit
-        page.update()
+        campo_busca.update()
         abrir_detalhes(mid, mtype, tit, ano, p_url, tela_atual="home")
 
     def buscar_sugestoes_api(termo, epoch_disparo):
@@ -1932,7 +1939,6 @@ def main(page: ft.Page):
             linha_tema_universal = ft.Container(
                 padding=8,
                 border_radius=6,
-                ink=True,
                 bgcolor="#164e63",
                 on_click=lambda e, t=termo_limpo: executar_pesquisa_tema_ou_termo(t),
                 content=ft.Row([
@@ -1957,7 +1963,6 @@ def main(page: ft.Page):
                 linha_p = ft.Container(
                     padding=6,
                     border_radius=6,
-                    ink=True,
                     bgcolor="#1e293b",
                     on_click=lambda e, person_id=pid, name=pnome: exibir_filmografia_pessoa(person_id, name),
                     content=ft.Row([
@@ -1988,7 +1993,6 @@ def main(page: ft.Page):
                 linha_item = ft.Container(
                     padding=6,
                     border_radius=6,
-                    ink=True,
                     bgcolor=COR_CARD,
                     on_click=lambda e, m=mid, mt=mtype, t=tit, a=ano, p=p_url: selecionar_sugestao_filme(m, mt, t, a, p),
                     content=ft.Row([
@@ -2021,7 +2025,7 @@ def main(page: ft.Page):
             else:
                 ocultar_sugestoes()
 
-            page.update()
+            container_sugestoes.update()
         except Exception as ex:
             print(f"Erro busca expandida: {ex}")
 
@@ -2070,11 +2074,13 @@ def main(page: ft.Page):
 
     def clicar_no_logo(e):
         btn_logo_interativo.scale = 0.94
-        page.update()
+        btn_logo_interativo.update()
         time.sleep(0.06)
         btn_logo_interativo.scale = 1.0
+        btn_logo_interativo.update()
         
         campo_busca.value = ""
+        campo_busca.update()
         paginacao["modo_busca_ativo"] = False
         contexto_busca["tipo"] = None
         contexto_busca["id"] = None
@@ -2083,6 +2089,7 @@ def main(page: ft.Page):
         contexto_busca["offset"] = 0
         
         txt_titulo_home.value = "Em Alta (TMDb Trends)"
+        txt_titulo_home.update()
         btn_carregar_mais.visible = True
         alternar_tela(0)
         alternar_filtro_home("todos")
@@ -2091,7 +2098,6 @@ def main(page: ft.Page):
 
     btn_logo_interativo = ft.Container(
         content=img_logo,
-        ink=True,
         padding=2,
         scale=1.0,
         animate_scale=ft.Animation(100, ft.AnimationCurve.EASE_OUT),
@@ -2319,7 +2325,7 @@ def main(page: ft.Page):
         nome = txt_novo_perfil_nome.value.strip() if txt_novo_perfil_nome.value else ""
         if len(nome) < 2:
             txt_novo_perfil_erro.value = "Digite pelo menos 2 caracteres."
-            page.update()
+            modal_novo_perfil.update()
             return
 
         conn = None
@@ -2329,7 +2335,7 @@ def main(page: ft.Page):
             c.execute("SELECT id FROM usuarios WHERE username = ?", (nome,))
             if c.fetchone():
                 txt_novo_perfil_erro.value = "Este perfil já existe."
-                page.update()
+                modal_novo_perfil.update()
                 return
 
             c.execute("SELECT COUNT(*) FROM usuarios")
@@ -2347,7 +2353,7 @@ def main(page: ft.Page):
             entrar_com_perfil(novo_id, nome, cor_escolhida)
         except Exception as err:
             txt_novo_perfil_erro.value = f"Erro: {err}"
-            page.update()
+            modal_novo_perfil.update()
         finally:
             if conn:
                 conn.close()
@@ -2389,14 +2395,13 @@ def main(page: ft.Page):
         def on_hover_card(e):
             avatar_box.border = criar_borda(2, "white" if e.data == "true" else "transparent")
             card_item.scale = 1.05 if e.data == "true" else 1.0
-            page.update()
+            card_item.update()
 
         card_item = ft.Container(
             content=ft.Column([
                 avatar_box,
                 ft.Text(nome, size=14, weight="bold", color="#94a3b8", text_align=ft.TextAlign.CENTER, width=110)
             ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10),
-            ink=True,
             border_radius=12,
             padding=4,
             scale=1.0,
@@ -2421,14 +2426,13 @@ def main(page: ft.Page):
             box_add.border = criar_borda(1.5, "white" if e.data == "true" else "#334155")
             box_add.content.color = "white" if e.data == "true" else "#64748b"
             card_add.scale = 1.05 if e.data == "true" else 1.0
-            page.update()
+            card_add.update()
 
         card_add = ft.Container(
             content=ft.Column([
                 box_add,
                 ft.Text("Adicionar Perfil", size=13, color="#64748b", text_align=ft.TextAlign.CENTER, width=110)
             ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10),
-            ink=True,
             border_radius=12,
             padding=4,
             scale=1.0,
