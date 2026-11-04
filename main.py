@@ -215,7 +215,8 @@ def main(page: ft.Page):
         "tipo": None,
         "id": None,
         "nome": "",
-        "itens_cache": []
+        "itens_cache": [],
+        "offset": 0
     }
 
     def recarregar_ids_salvos():
@@ -937,6 +938,68 @@ def main(page: ft.Page):
         )
         return card_corpo
 
+    # -------------------------------------------------------------
+    # CARREGAMENTO INCREMENTAL NA PESQUISA
+    # -------------------------------------------------------------
+    def carregar_mais_busca():
+        if paginacao["carregando"] or paginacao["fim"]:
+            return
+
+        paginacao["carregando"] = True
+        spinner_carregamento.visible = True
+        page.update()
+
+        f_tipo = paginacao["filtro_home"]
+        todos_itens = contexto_busca.get("itens_cache", [])
+        
+        if f_tipo == "movie":
+            filtrados = [i for i in todos_itens if i.get("media_type") == "movie"]
+        elif f_tipo == "tv":
+            filtrados = [i for i in todos_itens if i.get("media_type") == "tv"]
+        else:
+            filtrados = todos_itens
+
+        offset = contexto_busca.get("offset", 0)
+        proxima_fatia = filtrados[offset : offset + 24]
+
+        if not proxima_fatia:
+            paginacao["fim"] = True
+            btn_carregar_mais.visible = False
+            paginacao["carregando"] = False
+            spinner_carregamento.visible = False
+            page.update()
+            return
+
+        novos_cards = [
+            criar_card_filme(
+                it.get("id"),
+                it.get("media_type", "movie"),
+                it.get("title") or it.get("name") or "Sem título",
+                str((it.get("release_date") or it.get("first_air_date")) or "")[:4],
+                f"https://image.tmdb.org/t/p/w185{it.get('poster_path')}"
+            )
+            for it in proxima_fatia
+        ]
+
+        contexto_busca["offset"] = offset + len(proxima_fatia)
+        grade_populares.controls.extend(novos_cards)
+
+        if contexto_busca["offset"] >= len(filtrados):
+            paginacao["fim"] = True
+            btn_carregar_mais.visible = False
+        else:
+            btn_carregar_mais.visible = True
+
+        paginacao["carregando"] = False
+        spinner_carregamento.visible = False
+        page.update()
+
+    def acao_carregar_mais(e):
+        if paginacao["modo_busca_ativo"]:
+            carregar_mais_busca()
+        else:
+            carregar_populares(incrementar=True)
+
     grade_populares = ft.Row(wrap=True, spacing=12, run_spacing=14, alignment=ft.MainAxisAlignment.CENTER)
     coluna_biblioteca_itens = ft.Column(spacing=18, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
     spinner_carregamento = ft.ProgressRing(width=28, height=28, stroke_width=2.5, color=COR_PETROLEO, visible=False)
@@ -949,7 +1012,7 @@ def main(page: ft.Page):
             shape=ft.RoundedRectangleBorder(radius=8),
             side=ft.BorderSide(1, COR_BORDA)
         ),
-        on_click=lambda e: carregar_populares(incrementar=True)
+        on_click=acao_carregar_mais
     )
 
     # -------------------------------------------------------------
@@ -968,7 +1031,9 @@ def main(page: ft.Page):
 
         grade_populares.controls.clear()
         botoes_add_home.clear()
-        
+        contexto_busca["offset"] = 0
+        paginacao["fim"] = False
+
         if not filtrados:
             rotulo = "séries" if f_tipo == "tv" else ("filmes" if f_tipo == "movie" else "obras")
             grade_populares.controls.append(
@@ -982,8 +1047,12 @@ def main(page: ft.Page):
                     padding=40
                 )
             )
+            btn_carregar_mais.visible = False
             page.update()
             return
+
+        primeira_fatia = filtrados[:24]
+        contexto_busca["offset"] = len(primeira_fatia)
 
         cards = [
             criar_card_filme(
@@ -993,10 +1062,18 @@ def main(page: ft.Page):
                 str((it.get("release_date") or it.get("first_air_date")) or "")[:4],
                 f"https://image.tmdb.org/t/p/w185{it.get('poster_path')}"
             )
-            for it in filtrados[:28]
+            for it in primeira_fatia
         ]
 
         grade_populares.controls.extend(cards)
+
+        if len(filtrados) > 24:
+            paginacao["fim"] = False
+            btn_carregar_mais.visible = True
+        else:
+            paginacao["fim"] = True
+            btn_carregar_mais.visible = False
+
         page.update()
 
     # -------------------------------------------------------------
@@ -1183,7 +1260,6 @@ def main(page: ft.Page):
         on_click=lambda e: alternar_tela(1)
     )
 
-    # Linha única de controle que agrega os filtros e a biblioteca juntos de forma compacta
     linha_controles_unificados = ft.Row(
         controls=[btn_home_todos, btn_home_filmes, btn_home_series, btn_tab_bib],
         spacing=8,
@@ -1192,16 +1268,18 @@ def main(page: ft.Page):
         wrap=True
     )
 
+    # Rolagem que pagina tanto na home quanto durante as buscas ativas
     def ao_rolar_inicio(e: ft.OnScrollEvent):
         ocultar_sugestoes()
-        if paginacao["modo_busca_ativo"]:
-            return
         distancia_do_fim = e.max_scroll_extent - e.pixels
         percentual = (e.pixels / e.max_scroll_extent) if e.max_scroll_extent > 0 else 0
 
         if (distancia_do_fim <= 1200 or percentual >= 0.75) and e.max_scroll_extent > 0:
             if not paginacao["carregando"] and not paginacao["fim"]:
-                carregar_populares(incrementar=True)
+                if paginacao["modo_busca_ativo"]:
+                    carregar_mais_busca()
+                else:
+                    carregar_populares(incrementar=True)
 
     def remover_filme_direto(fid):
         uid = sessao_usuario["id"]
@@ -1629,7 +1707,7 @@ def main(page: ft.Page):
         ocultar_sugestoes()
         campo_busca.value = nome_pessoa
         paginacao["modo_busca_ativo"] = True
-        paginacao["fim"] = True
+        paginacao["fim"] = False
         btn_carregar_mais.visible = False
         grade_populares.controls.clear()
         
@@ -1637,6 +1715,7 @@ def main(page: ft.Page):
         contexto_busca["id"] = person_id
         contexto_busca["nome"] = nome_pessoa
         contexto_busca["itens_cache"] = []
+        contexto_busca["offset"] = 0
         
         txt_titulo_home.value = f"👤 Títulos com/dirigidos por: {nome_pessoa}"
         alternar_tela(0)
@@ -1680,7 +1759,7 @@ def main(page: ft.Page):
 
         threading.Thread(target=_fetch, daemon=True).start()
 
-    # MOTOR HÍBRIDO DEFINITIVO: ASSUNTOS, PALAVRAS-CHAVE E OBRAS CLÁSSICAS
+    # MOTOR HÍBRIDO EXPANDIDO COM MÚLTIPLAS PÁGINAS DE CATALOGO
     def executar_pesquisa_tema_ou_termo(termo_busca):
         ocultar_sugestoes()
         termo_limpo = termo_busca.strip()
@@ -1689,7 +1768,7 @@ def main(page: ft.Page):
 
         campo_busca.value = termo_limpo
         paginacao["modo_busca_ativo"] = True
-        paginacao["fim"] = True
+        paginacao["fim"] = False
         btn_carregar_mais.visible = False
         grade_populares.controls.clear()
         
@@ -1697,6 +1776,7 @@ def main(page: ft.Page):
         contexto_busca["id"] = termo_limpo
         contexto_busca["nome"] = termo_limpo
         contexto_busca["itens_cache"] = []
+        contexto_busca["offset"] = 0
         
         txt_titulo_home.value = f"🏷️ Assunto: {termo_limpo.capitalize()}"
         alternar_tela(0)
@@ -1711,13 +1791,11 @@ def main(page: ft.Page):
                 norm = normalizar_texto(termo_limpo)
                 kw_ids_str = ""
 
-                # 1. Verifica no mapa curado se o tema já possui ID oficial
                 for termo_k, ids_v in MAPA_KEYWORDS_CONHECIDAS.items():
                     if termo_k in norm:
                         kw_ids_str = ids_v
                         break
 
-                # 2. Se não achou na lista curada, traduz e pesquisa na API
                 if not kw_ids_str:
                     tr = traduzir_para_ingles(termo_limpo)
                     kw_encontrados = set()
@@ -1736,49 +1814,52 @@ def main(page: ft.Page):
                 itens_totais = []
                 vistos = set()
 
-                # 3. Busca temática no discover com filtro de votos (elimina obras sem cartaz)
+                # Busca expandida em 3 páginas de filmes e 2 páginas de séries no discover
                 if kw_ids_str:
+                    for pg in [1, 2, 3]:
+                        try:
+                            url_m = f"https://api.themoviedb.org/3/discover/movie?api_key={tmdb_key}&language=pt-BR&sort_by=vote_count.desc&with_keywords={kw_ids_str}&vote_count.gte=30&page={pg}"
+                            res_m = requests.get(url_m, timeout=3.5).json().get("results", [])
+                            for item in res_m:
+                                if not item.get("poster_path"):
+                                    continue
+                                item["media_type"] = "movie"
+                                chave = f"movie_{item.get('id')}"
+                                if chave not in vistos:
+                                    vistos.add(chave)
+                                    itens_totais.append(item)
+                        except Exception:
+                            pass
+
+                    for pg in [1, 2]:
+                        try:
+                            url_t = f"https://api.themoviedb.org/3/discover/tv?api_key={tmdb_key}&language=pt-BR&sort_by=vote_count.desc&with_keywords={kw_ids_str}&vote_count.gte=10&page={pg}"
+                            res_t = requests.get(url_t, timeout=3.5).json().get("results", [])
+                            for item in res_t:
+                                if not item.get("poster_path"):
+                                    continue
+                                item["media_type"] = "tv"
+                                chave = f"tv_{item.get('id')}"
+                                if chave not in vistos:
+                                    vistos.add(chave)
+                                    itens_totais.append(item)
+                        except Exception:
+                            pass
+
+                # Busca complementar por títulos de relevância
+                for pg in [1, 2]:
                     try:
-                        url_m = f"https://api.themoviedb.org/3/discover/movie?api_key={tmdb_key}&language=pt-BR&sort_by=vote_count.desc&with_keywords={kw_ids_str}&vote_count.gte=50&page=1"
-                        res_m = requests.get(url_m, timeout=4.0).json().get("results", [])
-                        for item in res_m:
-                            if not item.get("poster_path"):
-                                continue
-                            item["media_type"] = "movie"
-                            chave = f"movie_{item.get('id')}"
-                            if chave not in vistos:
-                                vistos.add(chave)
-                                itens_totais.append(item)
+                        url_multi = f"https://api.themoviedb.org/3/search/multi?api_key={tmdb_key}&query={quote_plus(termo_limpo)}&language=pt-BR&include_adult=false&page={pg}"
+                        res_multi = requests.get(url_multi, timeout=3.0).json().get("results", [])
+                        for item in res_multi:
+                            mtype = item.get("media_type")
+                            if mtype in ["movie", "tv"] and item.get("poster_path") and item.get("vote_count", 0) >= 20:
+                                chave = f"{mtype}_{item.get('id')}"
+                                if chave not in vistos:
+                                    vistos.add(chave)
+                                    itens_totais.append(item)
                     except Exception:
                         pass
-
-                    try:
-                        url_t = f"https://api.themoviedb.org/3/discover/tv?api_key={tmdb_key}&language=pt-BR&sort_by=vote_count.desc&with_keywords={kw_ids_str}&vote_count.gte=10&page=1"
-                        res_t = requests.get(url_t, timeout=4.0).json().get("results", [])
-                        for item in res_t:
-                            if not item.get("poster_path"):
-                                continue
-                            item["media_type"] = "tv"
-                            chave = f"tv_{item.get('id')}"
-                            if chave not in vistos:
-                                vistos.add(chave)
-                                itens_totais.append(item)
-                    except Exception:
-                        pass
-
-                # 4. Busca textual complementar filtrando exclusivamente obras com pôster e votos reais
-                try:
-                    url_multi = f"https://api.themoviedb.org/3/search/multi?api_key={tmdb_key}&query={quote_plus(termo_limpo)}&language=pt-BR&include_adult=false&page=1"
-                    res_multi = requests.get(url_multi, timeout=3.5).json().get("results", [])
-                    for item in res_multi:
-                        mtype = item.get("media_type")
-                        if mtype in ["movie", "tv"] and item.get("poster_path") and item.get("vote_count", 0) >= 30:
-                            chave = f"{mtype}_{item.get('id')}"
-                            if chave not in vistos:
-                                vistos.add(chave)
-                                itens_totais.append(item)
-                except Exception:
-                    pass
 
                 contexto_busca["itens_cache"] = sorted(itens_totais, key=lambda x: x.get("vote_count", 0), reverse=True)
             except Exception as ex:
@@ -1940,7 +2021,6 @@ def main(page: ft.Page):
         timer_busca["timer"] = t
         t.start()
 
-    # Caixa de busca adaptável com ícone da lupa embutido internamente à direita
     campo_busca = ft.TextField(
         hint_text="Buscar filmes, atores, temas...",
         hint_style=ft.TextStyle(size=12, color="#64748b"),
@@ -1964,7 +2044,7 @@ def main(page: ft.Page):
     )
 
     # -------------------------------------------------------------
-    # LOGOTIPO INTERATIVO (20% MAIOR, SEM MOLDURA/CAIXA DURA)
+    # LOGOTIPO INTERATIVO
     # -------------------------------------------------------------
     def clicar_no_logo(e):
         btn_logo_interativo.scale = 0.94
@@ -1978,6 +2058,7 @@ def main(page: ft.Page):
         contexto_busca["id"] = None
         contexto_busca["nome"] = ""
         contexto_busca["itens_cache"] = []
+        contexto_busca["offset"] = 0
         
         txt_titulo_home.value = "Em Alta (TMDb Trends)"
         btn_carregar_mais.visible = True
@@ -1986,7 +2067,6 @@ def main(page: ft.Page):
 
     img_logo = ft.Image(src="logo.png", height=65, fit="contain")
 
-    # Sem bordas duras para manter a identidade visual limpa
     btn_logo_interativo = ft.Container(
         content=img_logo,
         ink=True,
@@ -2018,6 +2098,7 @@ def main(page: ft.Page):
         contexto_busca["id"] = None
         contexto_busca["nome"] = ""
         contexto_busca["itens_cache"] = []
+        contexto_busca["offset"] = 0
         
         grade_populares.controls.clear()
         
@@ -2202,6 +2283,7 @@ def main(page: ft.Page):
         contexto_busca["id"] = None
         contexto_busca["nome"] = ""
         contexto_busca["itens_cache"] = []
+        contexto_busca["offset"] = 0
         
         botoes_add_home.clear()
         grade_populares.controls.clear()
