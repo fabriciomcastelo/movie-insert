@@ -1,7 +1,8 @@
 {
   "name": "Movie Insert",
-  "short_name": "MovieInsert",
-  "start_url": "/",
+  "short_name": "Movie Insert",
+  "start_url": ".",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#070b0e",
   "theme_color": "#03434d",
