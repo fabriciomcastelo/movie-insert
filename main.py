@@ -592,7 +592,6 @@ def main(page: ft.Page):
                 stream_nomes = [p.get("provider_name") for p in br_providers]
 
                 poster_path = res.get("poster_path")
-                # Modal utiliza qualidade superior w300
                 poster_url = f"https://image.tmdb.org/t/p/w300{poster_path}" if poster_path else poster_prev
 
                 imdb_id = res.get("imdb_id") or res.get("external_ids", {}).get("imdb_id")
@@ -790,7 +789,7 @@ def main(page: ft.Page):
         page.update()
 
     # -------------------------------------------------------------
-    # CARTÕES DOS FILMES E SÉRIES (COM IMAGEM LEVE w185)
+    # CARTÕES DOS FILMES E SÉRIES (IMAGEM LEVE w185)
     # -------------------------------------------------------------
     def criar_card_filme(mid, mtype, titulo, ano, poster_url, categoria=None, nota=None):
         mtype_seguro = "tv" if mtype in ["tv", "series"] else "movie"
@@ -951,7 +950,6 @@ def main(page: ft.Page):
             page.update()
             return
 
-        # Renderização com limite de 28 itens para resposta instantânea
         cards = [
             criar_card_filme(
                 it.get("id"),
@@ -960,14 +958,14 @@ def main(page: ft.Page):
                 str((it.get("release_date") or it.get("first_air_date")) or "")[:4],
                 f"https://image.tmdb.org/t/p/w185{it.get('poster_path')}" if it.get("poster_path") else None
             )
-            for it in filtrados[:28]
+            for it in filtrados[:24]
         ]
 
         grade_populares.controls.extend(cards)
         page.update()
 
     # -------------------------------------------------------------
-    # POPULARES E ROLAGEM INFINITA (OTIMIZADA)
+    # POPULARES E ROLAGEM INFINITA (PAGINADA EM BLOCOS DE 20)
     # -------------------------------------------------------------
     def carregar_populares(incrementar=False):
         c = carregar_config()
@@ -1193,7 +1191,7 @@ def main(page: ft.Page):
         page.launch_url(f"file://{arq}")
 
     # -------------------------------------------------------------
-    # BIBLIOTECA COM RENDERIZAÇÃO EM LOTE
+    # BIBLIOTECA
     # -------------------------------------------------------------
     def mudar_aba_biblioteca(nova_aba):
         estado_biblioteca["aba"] = nova_aba
@@ -1534,7 +1532,7 @@ def main(page: ft.Page):
         page.update()
 
     # -------------------------------------------------------------
-    # SUGESTÕES DE PESQUISA EXPANDIDA
+    # SUGESTÕES DE PESQUISA EXPANDIDA (MOTOR HÍBRIDO SEM LIMITAÇÕES)
     # -------------------------------------------------------------
     coluna_sugestoes = ft.Column(spacing=4, scroll=ft.ScrollMode.AUTO)
 
@@ -1545,9 +1543,9 @@ def main(page: ft.Page):
         border=criar_borda(1.2, COR_PETROLEO),
         padding=6,
         visible=False,
-        width=230,
+        width=320,
         height=260,
-        top=170,
+        top=175,
         left=20,
         shadow=ft.BoxShadow(blur_radius=15, color="#000000")
     )
@@ -1817,13 +1815,13 @@ def main(page: ft.Page):
                 largura_atual = page.width if page.width else 1000
                 container_sugestoes.visible = True
                 if largura_atual < 720:
-                    container_sugestoes.width = max(180, int(largura_atual * 0.46))
-                    container_sugestoes.left = 18
-                    container_sugestoes.top = 175
+                    container_sugestoes.width = max(280, int(largura_atual * 0.90))
+                    container_sugestoes.left = max(10, int((largura_atual - container_sugestoes.width) / 2))
+                    container_sugestoes.top = 180
                 else:
-                    container_sugestoes.width = 230
-                    container_sugestoes.left = max(0, int((largura_atual / 2) - 170))
-                    container_sugestoes.top = 175
+                    container_sugestoes.width = 320
+                    container_sugestoes.left = max(0, int((largura_atual / 2) - 200))
+                    container_sugestoes.top = 180
             else:
                 ocultar_sugestoes()
 
@@ -1851,15 +1849,15 @@ def main(page: ft.Page):
 
     campo_busca = ft.TextField(
         hint_text="Buscar filmes, atores, temas...",
-        hint_style=ft.TextStyle(size=11, color="#64748b"),
-        text_size=12,
+        hint_style=ft.TextStyle(size=12, color="#64748b"),
+        text_size=13,
         bgcolor="#0d1419",
         border_radius=10,
         border_color=COR_BORDA,
         focused_border_color=COR_PETROLEO,
-        width=150,
+        expand=True,
         height=45,
-        content_padding=ft.Padding(10, 0, 8, 0),
+        content_padding=ft.Padding(12, 0, 10, 0),
         on_change=ao_digitar_busca,
         on_submit=disparar_busca_manual
     )
@@ -1867,13 +1865,13 @@ def main(page: ft.Page):
     btn_lupa = ft.IconButton(
         icon=ft.Icons.SEARCH,
         icon_color="#64748b",
-        icon_size=20,
+        icon_size=22,
         tooltip="Buscar filme, pessoa ou tema",
         on_click=disparar_busca_manual
     )
 
     # -------------------------------------------------------------
-    # LOGÓTIPO INTERATIVO
+    # LOGÓTIPO INTERATIVO (AUMENTADO EM 20%)
     # -------------------------------------------------------------
     def clicar_no_logo(e):
         btn_logo_interativo.scale = 0.94
@@ -1894,7 +1892,7 @@ def main(page: ft.Page):
         alternar_filtro_home("todos")
 
     btn_logo_interativo = ft.Container(
-        content=ft.Image(src="logo.png", height=65, fit="contain"),
+        content=ft.Image(src="logo.png", height=60, fit="contain"), # 60px no mobile (+20%), ajustado dinamicamente no resize
         ink=True,
         border_radius=8,
         padding=4,
@@ -1979,20 +1977,20 @@ def main(page: ft.Page):
         vertical_alignment=ft.CrossAxisAlignment.CENTER
     )
 
-    linha_busca_input = ft.Row(
-        controls=[campo_busca, btn_lupa],
-        spacing=0,
-        vertical_alignment=ft.CrossAxisAlignment.CENTER
+    # Linha dedicada da busca (com expansão completa)
+    linha_busca_input = ft.Container(
+        content=ft.Row(
+            controls=[campo_busca, btn_lupa],
+            spacing=4,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER
+        ),
+        width=340
     )
 
-    linha_inferior_menu = ft.Row(
-        controls=[
-            linha_busca_input,
-            btn_tab_bib
-        ],
-        spacing=10,
-        alignment=ft.MainAxisAlignment.CENTER,
-        vertical_alignment=ft.CrossAxisAlignment.CENTER
+    # Linha do botão da Biblioteca (no celular fica ao lado do seletor ou centralizado)
+    linha_biblioteca_topo = ft.Row(
+        controls=[btn_tab_bib],
+        alignment=ft.MainAxisAlignment.CENTER
     )
 
     cabecalho_fixo = ft.Container(
@@ -2003,23 +2001,26 @@ def main(page: ft.Page):
             progresso,
             bloco_usuario_topo,
             ft.Row([btn_logo_interativo], alignment=ft.MainAxisAlignment.CENTER),
-            linha_inferior_menu,
+            linha_busca_input,
+            linha_biblioteca_topo,
             linha_seletor_home
         ], spacing=8, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
     )
 
     # -------------------------------------------------------------
-    # ADAPTAÇÃO DINÂMICA
+    # ADAPTAÇÃO DINÂMICA (LAYOUT OTIMIZADO PARA CELULAR)
     # -------------------------------------------------------------
     def ajustar_layout_responsivo(e=None):
         largura_janela = page.width if page.width else 1000
         if largura_janela < 720:
-            campo_busca.width = max(130, int(largura_janela * 0.38))
-            btn_logo_interativo.content.height = 50
+            # No celular: logo +20% (60px), caixa larga ocupando a tela abaixo do logo
+            btn_logo_interativo.content.height = 60
+            linha_busca_input.width = max(290, int(largura_janela * 0.92))
             titulo_trends.width = None
         else:
-            campo_busca.width = 180
-            btn_logo_interativo.content.height = 65
+            # No desktop: logo +20% (78px), largura balanceada
+            btn_logo_interativo.content.height = 78
+            linha_busca_input.width = 440
             titulo_trends.width = 1100
         page.update()
 
@@ -2287,52 +2288,4 @@ def main(page: ft.Page):
 
     def carregar_perfis_tela():
         linha_cards_perfis.controls.clear()
-        perfis = []
-        conn = None
-        try:
-            conn = sqlite3.connect(DB_FILE, timeout=5)
-            c = conn.cursor()
-            c.execute("SELECT id, username, cor_avatar FROM usuarios ORDER BY id ASC")
-            perfis = c.fetchall()
-        except Exception as e:
-            print(f"Erro ao buscar perfis: {e}")
-        finally:
-            if conn:
-                conn.close()
-
-        if not perfis:
-            abrir_modal_novo_perfil()
-
-        for pid, pnome, pcor in perfis:
-            cor_final = pcor if pcor else COR_PETROLEO
-            linha_cards_perfis.controls.append(criar_card_avatar(pid, pnome, cor_final))
-
-        linha_cards_perfis.controls.append(criar_card_adicionar())
-
-    tela_perfis = ft.Container(
-        expand=True,
-        alignment=ft.Alignment(0, 0),
-        padding=ft.Padding(20, 40, 20, 40),
-        content=ft.Column([
-            ft.Image(src="logo.png", height=75, fit="contain"),
-            ft.Container(height=10),
-            ft.Text("Quem está usando?", size=26, weight="bold", color="white", text_align=ft.TextAlign.CENTER),
-            ft.Container(height=15),
-            linha_cards_perfis
-        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, alignment=ft.MainAxisAlignment.CENTER, spacing=12),
-        visible=True
-    )
-
-    page.add(tela_perfis, layout_mestre)
-    carregar_perfis_tela()
-    page.update()
-
-if __name__ == "__main__":
-    porta = int(os.environ.get("PORT", 8550))
-    ft.run(
-        main,
-        view=ft.AppView.WEB_BROWSER,
-        host="0.0.0.0",
-        port=porta,
-        assets_dir=DIR_ASSETS
-    )
+        perfis
