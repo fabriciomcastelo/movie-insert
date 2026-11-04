@@ -98,9 +98,6 @@ def traduzir_para_ingles(texto):
         pass
     return texto.strip().lower()
 
-# -------------------------------------------------------------
-# BANCO DE DADOS
-# -------------------------------------------------------------
 def init_db():
     conn = None
     try:
@@ -329,9 +326,6 @@ def main(page: ft.Page):
         txt_confirmacao_msg.value = f"Deseja remover '{titulo}' da lista de Assistidos?"
         abrir_dialogo(modal_confirmacao)
 
-    # -------------------------------------------------------------
-    # SELETOR DE AVALIAÇÃO
-    # -------------------------------------------------------------
     botoes_notas = []
     linha_notas_1_5 = ft.Row(spacing=6, alignment=ft.MainAxisAlignment.CENTER)
     linha_notas_6_10 = ft.Row(spacing=6, alignment=ft.MainAxisAlignment.CENTER)
@@ -407,9 +401,6 @@ def main(page: ft.Page):
         selecionar_nota_valor(nota_inicial)
         abrir_dialogo(modal_avaliacao)
 
-    # -------------------------------------------------------------
-    # JANELA DE DETALHES
-    # -------------------------------------------------------------
     dt_img = ft.Image(
         src="https://via.placeholder.com/130x195?text=Sem+Poster",
         width=135,
@@ -781,9 +772,6 @@ def main(page: ft.Page):
 
         threading.Thread(target=_fetch, daemon=True).start()
 
-    # -------------------------------------------------------------
-    # ADICIONAR RÁPIDO DIRETO NO CARTAZ (+)
-    # -------------------------------------------------------------
     def adicionar_rapido_poster(e, mid, mtype, titulo, ano, poster_url, chave_id, btn_adicionar):
         uid = sessao_usuario["id"]
         if not uid or chave_id in ids_salvos_usuario:
@@ -819,9 +807,6 @@ def main(page: ft.Page):
         btn_adicionar.tooltip = "Já está na sua biblioteca"
         page.update()
 
-    # -------------------------------------------------------------
-    # CARTÕES DOS FILMES E SÉRIES
-    # -------------------------------------------------------------
     def criar_card_filme(mid, mtype, titulo, ano, poster_url, categoria=None, nota=None):
         mtype_seguro = "tv" if mtype in ["tv", "series"] else "movie"
         chave_id = mid if isinstance(mid, str) and ("_" in mid or mid.startswith("tt")) else f"{mtype_seguro}_{mid}"
@@ -869,7 +854,7 @@ def main(page: ft.Page):
             )
 
         badge_tipo = None
-        if mtype == "tv":
+        if mtype_seguro == "tv":
             badge_tipo = ft.Container(
                 content=ft.Text("SÉRIE", size=9, weight="bold", color="white"),
                 bgcolor="#4338ca",
@@ -894,7 +879,7 @@ def main(page: ft.Page):
                 height=28,
                 style=ft.ButtonStyle(padding=0)
             )
-            btn_add_rapido.on_click = lambda e, m=mid, mt=mtype, t=titulo, a=ano, p=poster_url, c=chave_id, b=btn_add_rapido: adicionar_rapido_poster(e, m, mt, t, a, p, c, b)
+            btn_add_rapido.on_click = lambda e, m=mid, mt=mtype_seguro, t=titulo, a=ano, p=poster_url, c=chave_id, b=btn_add_rapido: adicionar_rapido_poster(e, m, mt, t, a, p, c, b)
             botoes_add_home[chave_id] = btn_add_rapido
 
         stack_itens = [
@@ -934,12 +919,12 @@ def main(page: ft.Page):
                 ),
                 ft.Row(acoes, spacing=3, alignment=ft.MainAxisAlignment.SPACE_BETWEEN, width=152) if acoes else ft.Container()
             ], spacing=3, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-            on_click=lambda e: abrir_detalhes(mid, mtype, titulo, ano, poster_url, tela_atual="home" if categoria is None else "biblioteca")
+            on_click=lambda e: abrir_detalhes(mid, mtype_seguro, titulo, ano, poster_url, tela_atual="home" if categoria is None else "biblioteca")
         )
         return card_corpo
 
     # -------------------------------------------------------------
-    # CARREGAMENTO INCREMENTAL OTIMIZADO (COM LIMITE DE SEGURANÇA)
+    # CARREGAMENTO INCREMENTAL OTIMIZADO
     # -------------------------------------------------------------
     def carregar_mais_busca():
         if paginacao["carregando"] or paginacao["fim"]:
@@ -952,6 +937,7 @@ def main(page: ft.Page):
         f_tipo = paginacao["filtro_home"]
         todos_itens = contexto_busca.get("itens_cache", [])
         
+        # Filtro estrito: se f_tipo for 'tv', exige media_type == 'tv'
         if f_tipo == "movie":
             filtrados = [i for i in todos_itens if i.get("media_type") == "movie"]
         elif f_tipo == "tv":
@@ -1016,12 +1002,13 @@ def main(page: ft.Page):
     )
 
     # -------------------------------------------------------------
-    # RENDERIZAÇÃO ESTÁVEL DA PESQUISA
+    # RENDERIZAÇÃO ESTÁVEL DA PESQUISA COM FILTRO RÍGIDO DE TIPO
     # -------------------------------------------------------------
     def renderizar_itens_busca_contexto():
         f_tipo = paginacao["filtro_home"]
         todos_itens = contexto_busca.get("itens_cache", [])
         
+        # Filtro estrito: se f_tipo for 'tv', exige media_type == 'tv'
         if f_tipo == "movie":
             filtrados = [i for i in todos_itens if i.get("media_type") == "movie"]
         elif f_tipo == "tv":
@@ -1039,7 +1026,7 @@ def main(page: ft.Page):
             grade_populares.controls.append(
                 ft.Container(
                     content=ft.Text(
-                        f"Nenhuma {rotulo} encontrada com o tema '{contexto_busca.get('nome')}'.",
+                        f"Nenhuma {rotulo} encontrada com o termo '{contexto_busca.get('nome')}'.",
                         size=14,
                         color="#94a3b8",
                         text_align=ft.TextAlign.CENTER
@@ -1110,6 +1097,7 @@ def main(page: ft.Page):
                 p = paginacao["pagina_atual"]
                 f_home = paginacao["filtro_home"]
 
+                # Separação rígida de endpoints para nunca misturar filmes e séries no modo trending
                 if f_home == "movie":
                     url = f"https://api.themoviedb.org/3/trending/movie/week?api_key={tmdb_key}&language=pt-BR&page={p}"
                 elif f_home == "tv":
@@ -1130,8 +1118,16 @@ def main(page: ft.Page):
                     novos = []
                     for it in itens:
                         mid = it.get("id")
-                        media_t = it.get("media_type") or ("tv" if f_home == "tv" else "movie")
-                        if media_t not in ["movie", "tv"] or not it.get("poster_path"):
+                        
+                        # Atribuição estrita do media_type baseada na aba ativa
+                        if f_home == "tv":
+                            media_t = "tv"
+                        elif f_home == "movie":
+                            media_t = "movie"
+                        else:
+                            media_t = it.get("media_type") or ("tv" if "name" in it else "movie")
+
+                        if not it.get("poster_path"):
                             continue
 
                         chave_unicidade = f"{media_t}_{mid}"
@@ -1161,6 +1157,7 @@ def main(page: ft.Page):
         paginacao["filtro_home"] = novo_filtro
         atualizar_botoes_filtro_home()
 
+        # Se houver busca de pessoa ou tema em andamento, filtra estritamente a busca em memória
         if paginacao["modo_busca_ativo"] and contexto_busca.get("tipo"):
             renderizar_itens_busca_contexto()
             return
@@ -1214,7 +1211,7 @@ def main(page: ft.Page):
         height=32,
         style=ft.ButtonStyle(
             shape=ft.RoundedRectangleBorder(radius=20),
-            side=ft.BorderSide(1, COR_BORDA)
+            side=ft.BorderSide(1.8, COR_ATIVO_BORDA) if paginacao["filtro_home"] == "movie" else ft.BorderSide(1, COR_BORDA)
         ),
         on_click=lambda e: alternar_filtro_home("movie")
     )
@@ -1224,7 +1221,7 @@ def main(page: ft.Page):
         height=32,
         style=ft.ButtonStyle(
             shape=ft.RoundedRectangleBorder(radius=20),
-            side=ft.BorderSide(1, COR_BORDA)
+            side=ft.BorderSide(1.8, COR_ATIVO_BORDA) if paginacao["filtro_home"] == "tv" else ft.BorderSide(1, COR_BORDA)
         ),
         on_click=lambda e: alternar_filtro_home("tv")
     )
@@ -1268,7 +1265,6 @@ def main(page: ft.Page):
         wrap=True
     )
 
-    # Rolagem protegida contra chamadas concorrentes
     def ao_rolar_inicio(e: ft.OnScrollEvent):
         ocultar_sugestoes()
         if paginacao["carregando"] or paginacao["fim"]:
@@ -1339,9 +1335,6 @@ def main(page: ft.Page):
             f.write(html)
         page.launch_url(f"file://{arq}")
 
-    # -------------------------------------------------------------
-    # BIBLIOTECA
-    # -------------------------------------------------------------
     def mudar_aba_biblioteca(nova_aba):
         estado_biblioteca["aba"] = nova_aba
         if nova_aba == "Para Assistir" and estado_biblioteca["modo"] == "nota_pessoal":
@@ -1583,7 +1576,6 @@ def main(page: ft.Page):
             )
             coluna_biblioteca_itens.controls.append(bloco)
 
-        # ---------------- MODO 1: STREAMING ----------------
         if modo_atual == "streaming":
             ordem_secoes = list(STREAMINGS_PADRAO) + ["Stremio", "Sem streaming no BR"]
             mapa = {s: [] for s in ordem_secoes}
@@ -1610,7 +1602,6 @@ def main(page: ft.Page):
                 ico = "🎬" if servico == "Stremio" else ("❌" if servico == "Sem streaming no BR" else "📺")
                 renderizar_secao(servico, ico, cor, mapa[servico])
 
-        # ---------------- MODO 2: ORDEM ALFABÉTICA (A-Z) ----------------
         elif modo_atual == "alfabetico":
             mapa_alfabetico = {}
             itens_ordenados = sorted(itens_filtrados, key=lambda x: normalizar_texto(x[1]))
@@ -1628,7 +1619,6 @@ def main(page: ft.Page):
             for letra in letras_ordenadas:
                 renderizar_secao(f"Letra {letra}", "🔤", COR_TEXTO_CLARO, mapa_alfabetico[letra])
 
-        # ---------------- MODO 3: GÊNEROS ----------------
         elif modo_atual == "genero":
             mapa_generos = {}
             for row in itens_filtrados:
@@ -1640,7 +1630,6 @@ def main(page: ft.Page):
             for g_nome in sorted(mapa_generos.keys()):
                 renderizar_secao(g_nome, "🏷️", "#fbbf24", mapa_generos[g_nome])
 
-        # ---------------- MODO 4: NOTA DO IMDB ----------------
         elif modo_atual == "nota":
             def pegar_imdb_float(it):
                 val = it[8]
@@ -1659,7 +1648,6 @@ def main(page: ft.Page):
                 texto_info="⭐ Ordenado por Nota do IMDb (Maior para Menor)"
             )
 
-        # ---------------- MODO 5: NOTA PESSOAL ----------------
         elif modo_atual == "nota_pessoal":
             def pegar_nota_pessoal_float(it):
                 val = it[4]
@@ -1680,9 +1668,6 @@ def main(page: ft.Page):
 
         page.update()
 
-    # -------------------------------------------------------------
-    # SUGESTÕES DE PESQUISA (SEM CORRIDA DE REDE)
-    # -------------------------------------------------------------
     coluna_sugestoes = ft.Column(spacing=4, scroll=ft.ScrollMode.AUTO)
 
     container_sugestoes = ft.Container(
@@ -1705,7 +1690,7 @@ def main(page: ft.Page):
             container_sugestoes.visible = False
             page.update()
 
-    # FILTRAGEM INTELIGENTE DE ARTISTA COM NOMENCLATURA LIMPA
+    # FILTRAGEM INTELIGENTE DE ARTISTA (COM CLASSIFICAÇÃO RÍGIDA DE TV/MOVIE)
     def exibir_filmografia_pessoa(person_id, nome_pessoa):
         ocultar_sugestoes()
         campo_busca.value = nome_pessoa
@@ -1720,7 +1705,6 @@ def main(page: ft.Page):
         contexto_busca["itens_cache"] = []
         contexto_busca["offset"] = 0
         
-        # Nomenclatura limpa: exibe apenas o nome
         txt_titulo_home.value = nome_pessoa
         alternar_tela(0)
         progresso.visible = True
@@ -1751,9 +1735,11 @@ def main(page: ft.Page):
                     if 99 in generos or "self" in personagem or "himself" in personagem or "herself" in personagem:
                         continue
                         
-                    mtype = item.get("media_type")
-                    if not mtype:
-                        mtype = "movie" if "title" in item else "tv"
+                    # Detecção rígida: se tem 'name' ou 'first_air_date', é TV
+                    if item.get("media_type") == "tv" or "name" in item or "first_air_date" in item:
+                        mtype = "tv"
+                    else:
+                        mtype = "movie"
                     item["media_type"] = mtype
                     
                     chave = f"{mtype}_{mid}"
@@ -1773,9 +1759,10 @@ def main(page: ft.Page):
                         if 99 in generos:
                             continue
                             
-                        mtype = item.get("media_type")
-                        if not mtype:
-                            mtype = "movie" if "title" in item else "tv"
+                        if item.get("media_type") == "tv" or "name" in item or "first_air_date" in item:
+                            mtype = "tv"
+                        else:
+                            mtype = "movie"
                         item["media_type"] = mtype
                         
                         chave = f"{mtype}_{mid}"
@@ -1796,7 +1783,6 @@ def main(page: ft.Page):
 
         threading.Thread(target=_fetch, daemon=True).start()
 
-    # MOTOR HÍBRIDO EXPANDIDO COM NOMENCLATURA LIMPA
     def executar_pesquisa_tema_ou_termo(termo_busca):
         ocultar_sugestoes()
         termo_limpo = termo_busca.strip()
@@ -1815,7 +1801,6 @@ def main(page: ft.Page):
         contexto_busca["itens_cache"] = []
         contexto_busca["offset"] = 0
         
-        # Nomenclatura limpa: exibe apenas o nome
         txt_titulo_home.value = termo_limpo.title()
         alternar_tela(0)
         progresso.visible = True
@@ -1889,7 +1874,11 @@ def main(page: ft.Page):
                         res_multi = requests.get(url_multi, timeout=3.0).json().get("results", [])
                         for item in res_multi:
                             mtype = item.get("media_type")
-                            if mtype in ["movie", "tv"] and item.get("poster_path") and item.get("vote_count", 0) >= 20:
+                            if mtype not in ["movie", "tv"]:
+                                mtype = "tv" if "name" in item else "movie"
+                            item["media_type"] = mtype
+
+                            if item.get("poster_path") and item.get("vote_count", 0) >= 20:
                                 chave = f"{mtype}_{item.get('id')}"
                                 if chave not in vistos:
                                     vistos.add(chave)
@@ -2057,7 +2046,6 @@ def main(page: ft.Page):
         timer_busca["timer"] = t
         t.start()
 
-    # Altura diminuída para 38px e texto perfeitamente centralizado na vertical
     campo_busca = ft.TextField(
         hint_text="Buscar filmes, atores, temas...",
         hint_style=ft.TextStyle(size=12, color="#64748b"),
@@ -2080,9 +2068,6 @@ def main(page: ft.Page):
         on_submit=disparar_busca_manual
     )
 
-    # -------------------------------------------------------------
-    # LOGOTIPO INTERATIVO
-    # -------------------------------------------------------------
     def clicar_no_logo(e):
         btn_logo_interativo.scale = 0.94
         page.update()
@@ -2186,9 +2171,6 @@ def main(page: ft.Page):
         content=coluna_conteudo_cabecalho
     )
 
-    # -------------------------------------------------------------
-    # ADAPTAÇÃO DINÂMICA
-    # -------------------------------------------------------------
     def ajustar_layout_responsivo(e=None):
         largura_janela = page.width if page.width else 1000
         if largura_janela < 720:
@@ -2203,9 +2185,6 @@ def main(page: ft.Page):
 
     page.on_resized = ajustar_layout_responsivo
 
-    # -------------------------------------------------------------
-    # VIEWS
-    # -------------------------------------------------------------
     txt_titulo_home = ft.Text("Em Alta (TMDb Trends)", size=15, weight="bold", color=COR_TEXTO_CLARO)
 
     titulo_trends = ft.Container(
@@ -2285,9 +2264,6 @@ def main(page: ft.Page):
         ]
     )
 
-    # -------------------------------------------------------------
-    # SELEÇÃO DE PERFIL ESTILO NETFLIX
-    # -------------------------------------------------------------
     linha_cards_perfis = ft.Row(
         wrap=True,
         spacing=24,
