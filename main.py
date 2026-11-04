@@ -99,7 +99,7 @@ def traduzir_para_ingles(texto):
     return texto.strip().lower()
 
 # -------------------------------------------------------------
-# BANCO DE DADOS
+# BASE DE DADOS
 # -------------------------------------------------------------
 def init_db():
     conn = None
@@ -1268,7 +1268,6 @@ def main(page: ft.Page):
         wrap=True
     )
 
-    # Rolagem que pagina tanto na home quanto durante as buscas ativas
     def ao_rolar_inicio(e: ft.OnScrollEvent):
         ocultar_sugestoes()
         distancia_do_fim = e.max_scroll_extent - e.pixels
@@ -1703,6 +1702,7 @@ def main(page: ft.Page):
             container_sugestoes.visible = False
             page.update()
 
+    # FILTRAGEM INTELIGENTE DE CRÉDITOS DE ARTISTA (EXCLUI 'SELF' E DOCUMENTÁRIOS)
     def exibir_filmografia_pessoa(person_id, nome_pessoa):
         ocultar_sugestoes()
         campo_busca.value = nome_pessoa
@@ -1729,30 +1729,66 @@ def main(page: ft.Page):
             try:
                 url = f"https://api.themoviedb.org/3/person/{person_id}/combined_credits?api_key={tmdb_key}&language=pt-BR"
                 res = requests.get(url, timeout=4.5).json()
-                itens = res.get("cast", []) + res.get("crew", [])
                 
-                itens_ordenados = sorted(itens, key=lambda x: x.get("popularity", 0), reverse=True)
+                cast_puro = res.get("cast", [])
+                crew_puro = res.get("crew", [])
+                
+                itens_filtrados = []
                 vistos = set()
-                itens_limpos = []
-                for it in itens_ordenados:
-                    mid = it.get("id")
-                    if not mid or not it.get("poster_path"):
+
+                # 1. Atuações reais como personagem (ignora entrevistas 'Self' e documentários)
+                for item in cast_puro:
+                    mid = item.get("id")
+                    if not mid or not item.get("poster_path"):
                         continue
                     
-                    mtype = it.get("media_type")
-                    if not mtype:
-                        mtype = "movie" if "title" in it else "tv"
-                    it["media_type"] = mtype
-
-                    chave = f"{mtype}_{mid}"
-                    if chave in vistos or mtype not in ["movie", "tv"]:
+                    personagem = (item.get("character") or "").lower().strip()
+                    generos = item.get("genre_ids", [])
+                    
+                    if 99 in generos or "self" in personagem or "himself" in personagem or "herself" in personagem:
                         continue
-                    vistos.add(chave)
-                    itens_limpos.append(it)
+                        
+                    mtype = item.get("media_type")
+                    if not mtype:
+                        mtype = "movie" if "title" in item else "tv"
+                    item["media_type"] = mtype
+                    
+                    chave = f"{mtype}_{mid}"
+                    if chave not in vistos:
+                        vistos.add(chave)
+                        itens_filtrados.append(item)
 
-                contexto_busca["itens_cache"] = itens_limpos
+                # 2. Direção e escrita criativa relevante (não meramente executivo)
+                for item in crew_puro:
+                    mid = item.get("id")
+                    if not mid or not item.get("poster_path"):
+                        continue
+                        
+                    job = (item.get("job") or "").lower().strip()
+                    generos = item.get("genre_ids", [])
+                    
+                    if job in ["director", "creator", "writer"]:
+                        if 99 in generos:
+                            continue
+                            
+                        mtype = item.get("media_type")
+                        if not mtype:
+                            mtype = "movie" if "title" in item else "tv"
+                        item["media_type"] = mtype
+                        
+                        chave = f"{mtype}_{mid}"
+                        if chave not in vistos:
+                            vistos.add(chave)
+                            itens_filtrados.append(item)
+
+                # Ordena pelo peso de votos e popularidade no cinema
+                contexto_busca["itens_cache"] = sorted(
+                    itens_filtrados,
+                    key=lambda x: (x.get("vote_count", 0), x.get("popularity", 0)),
+                    reverse=True
+                )
             except Exception as ex:
-                print(f"Erro filmografia: {ex}")
+                print(f"Erro filmografia filtrada: {ex}")
             finally:
                 progresso.visible = False
                 renderizar_itens_busca_contexto()
@@ -1814,7 +1850,6 @@ def main(page: ft.Page):
                 itens_totais = []
                 vistos = set()
 
-                # Busca expandida em 3 páginas de filmes e 2 páginas de séries no discover
                 if kw_ids_str:
                     for pg in [1, 2, 3]:
                         try:
@@ -1846,7 +1881,6 @@ def main(page: ft.Page):
                         except Exception:
                             pass
 
-                # Busca complementar por títulos de relevância
                 for pg in [1, 2]:
                     try:
                         url_multi = f"https://api.themoviedb.org/3/search/multi?api_key={tmdb_key}&query={quote_plus(termo_limpo)}&language=pt-BR&include_adult=false&page={pg}"
@@ -1858,8 +1892,8 @@ def main(page: ft.Page):
                                 if chave not in vistos:
                                     vistos.add(chave)
                                     itens_totais.append(item)
-                    except Exception:
-                        pass
+                        except Exception:
+                            pass
 
                 contexto_busca["itens_cache"] = sorted(itens_totais, key=lambda x: x.get("vote_count", 0), reverse=True)
             except Exception as ex:
