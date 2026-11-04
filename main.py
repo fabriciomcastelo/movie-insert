@@ -244,6 +244,7 @@ def main(page: ft.Page):
                 btn.icon_color = "white"
                 btn.bgcolor = "#0d1419cc"
                 btn.disabled = False
+                btn.tooltip = "Adicionar à Biblioteca"
 
             fechar_dialogo(modal_confirmacao)
             atualizar_contador_biblioteca()
@@ -485,7 +486,7 @@ def main(page: ft.Page):
 
     btn_salvar.on_click = salvar_filme_ativo
 
-    def abrir_detalhes(mid, mtype, titulo_prev, ano_prev, poster_prev):
+    def abrir_detalhes(mid, mtype, titulo_prev, ano_prev, poster_prev, tela_atual="home"):
         ocultar_sugestoes()
 
         mtype_seguro = "tv" if mtype in ["tv", "series"] else "movie"
@@ -506,6 +507,7 @@ def main(page: ft.Page):
         dt_metascore.content.color = "white"
         dt_user.content.value = "★ .."
         btn_salvar.disabled = True
+        btn_salvar.visible = (tela_atual == "home")
         btn_ir_lista.visible = False
 
         fallback_trailer = f"https://www.youtube.com/results?search_query={quote_plus('trailer oficial ' + titulo_prev + ' ' + ano_prev)}"
@@ -687,11 +689,17 @@ def main(page: ft.Page):
                     btn_salvar.bgcolor = "#334155"
                     btn_salvar.disabled = True
                     btn_ir_lista.visible = True
+                    btn_salvar.visible = True
                 else:
-                    btn_salvar.content = ft.Text("+ Adicionar à Biblioteca", color="white", size=12)
-                    btn_salvar.bgcolor = COR_PETROLEO
-                    btn_salvar.disabled = False
-                    btn_ir_lista.visible = False
+                    if tela_atual == "home":
+                        btn_salvar.content = ft.Text("+ Adicionar à Biblioteca", color="white", size=12)
+                        btn_salvar.bgcolor = COR_PETROLEO
+                        btn_salvar.disabled = False
+                        btn_ir_lista.visible = False
+                        btn_salvar.visible = True
+                    else:
+                        btn_salvar.visible = False
+                        btn_ir_lista.visible = False
 
             except Exception as ex:
                 print(f"Erro ao obter detalhes: {ex}")
@@ -854,7 +862,7 @@ def main(page: ft.Page):
                 ),
                 ft.Row(acoes, spacing=3, alignment=ft.MainAxisAlignment.SPACE_BETWEEN, width=152) if acoes else ft.Container()
             ], spacing=3, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-            on_click=lambda e: abrir_detalhes(mid, mtype, titulo, ano, poster_url)
+            on_click=lambda e: abrir_detalhes(mid, mtype, titulo, ano, poster_url, tela_atual="home" if categoria is None else "biblioteca")
         )
         return card_corpo
 
@@ -1060,6 +1068,7 @@ def main(page: ft.Page):
                 btn.icon_color = "white"
                 btn.bgcolor = "#0d1419cc"
                 btn.disabled = False
+                btn.tooltip = "Adicionar à Biblioteca"
             
             atualizar_contador_biblioteca()
             carregar_biblioteca()
