@@ -1,18 +1,3 @@
-A captura de ecrã com o erro The application encountered an error: name 'time' is not defined comprova que o servidor do Render ainda está a executar o código antigo. Mesmo que tenha feito a alteração, o Render não reconstruiu a aplicação ou o commit não foi registado no ramo correto.
-Diagnóstico no Render e no GitHub
- * Aceda ao GitHub:
-   * Abra o repositório do projeto e entre diretamente no ficheiro main.py.
-   * Procure pela linha 8. Se não vir import time, o commit não foi guardado no GitHub.
- * Aceda ao painel do Render (dashboard.render.com):
-   * Clique no seu Web Service e aceda à secção Events / Logs.
-   * No canto superior direito, clique em Manual Deploy \rightarrow Clear build cache & deploy.
-   * Aguarde 2 a 3 minutos até aparecer a mensagem verde "Live".
-Código Completo e Corrigido (main.py)
-Esta versão resolve em definitivo os 4 pontos:
- * import time incluído nas importações do topo (elimina o erro de ecrã vermelho ao clicar no logótipo).
- * Chamadas seguras de interface com atualização garantida dos dados do filme (sinopse, streaming e notas).
- * Diálogos devidamente adicionados a page.overlay na inicialização.
- * Parsing de streaming ajustado para mapear os serviços de streaming no Brasil.
 import flet as ft
 import sqlite3
 import json
