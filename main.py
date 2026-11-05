@@ -98,7 +98,6 @@ def init_db():
         conn = sqlite3.connect(DB_FILE, timeout=15)
         c = conn.cursor()
         c.execute("PRAGMA journal_mode=WAL;")
-        
         c.execute("""
             CREATE TABLE IF NOT EXISTS usuarios (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -106,7 +105,6 @@ def init_db():
                 cor_avatar TEXT DEFAULT '#03434d'
             )
         """)
-        
         c.execute("""
             CREATE TABLE IF NOT EXISTS filmes (
                 id TEXT,
@@ -293,6 +291,12 @@ def main(page: ft.Page):
         ],
         actions_alignment=ft.MainAxisAlignment.END
     )
+
+    def pedir_confirmacao_remocao(fid, titulo):
+        filme_para_remover["id"] = fid
+        filme_para_remover["titulo"] = titulo
+        txt_confirmacao_msg.value = f"Deseja remover '{titulo}' da lista de Assistidos?"
+        abrir_dialogo(modal_confirmacao)
 
     botoes_notas = []
     linha_notas_1_5 = ft.Row(spacing=6, alignment=ft.MainAxisAlignment.CENTER)
@@ -1798,7 +1802,6 @@ def main(page: ft.Page):
                 print(f"Erro pesquisa tema: {ex}")
             finally:
                 progresso.visible = False
-                progresso.update()
                 renderizar_itens_busca_contexto()
 
         threading.Thread(target=_fetch, daemon=True).start()
@@ -2370,4 +2373,3 @@ if __name__ == "__main__":
         port=porta,
         assets_dir=DIR_ASSETS
     )
-
