@@ -250,9 +250,6 @@ def main(page: ft.Page):
 
     progresso = ft.ProgressBar(color=COR_PETROLEO, bgcolor="transparent", visible=False)
 
-    # -------------------------------------------------------------
-    # GESTÃO SEGURA DE DIÁLOGOS (PREVINE CRASH "MUST BE ADDED FIRST")
-    # -------------------------------------------------------------
     def abrir_dialogo(modal):
         if modal not in page.overlay:
             page.overlay.append(modal)
@@ -371,9 +368,6 @@ def main(page: ft.Page):
         selecionar_nota_valor(nota_inicial)
         abrir_dialogo(modal_avaliacao)
 
-    # -------------------------------------------------------------
-    # MODAL DE DETALHES COM ATUALIZAÇÃO SEGURA
-    # -------------------------------------------------------------
     dt_img = ft.Image(
         src="https://via.placeholder.com/130x195?text=Sem+Poster",
         width=135,
@@ -737,9 +731,6 @@ def main(page: ft.Page):
 
         threading.Thread(target=_fetch, daemon=True).start()
 
-    # -------------------------------------------------------------
-    # ADICIONAR RÁPIDO COM CONSULTA REAL DE STREAMINGS
-    # -------------------------------------------------------------
     def adicionar_rapido_poster(e, mid, mtype, titulo, ano, poster_url, chave_id, btn_adicionar):
         uid = sessao_usuario["id"]
         if not uid or chave_id in ids_salvos_usuario:
@@ -1495,7 +1486,6 @@ def main(page: ft.Page):
             )
             coluna_biblioteca_itens.controls.append(bloco)
 
-        # ---------------- MODO 1: STREAMING (COM PARSING TOLERANTE) ----------------
         if modo_atual == "streaming":
             ordem_secoes = list(STREAMINGS_PADRAO) + ["Stremio", "Sem streaming no BR"]
             mapa = {s: [] for s in ordem_secoes}
@@ -1693,6 +1683,7 @@ def main(page: ft.Page):
                 print(f"Erro filmografia filtrada: {ex}")
             finally:
                 progresso.visible = False
+                progresso.update()
                 renderizar_itens_busca_contexto()
 
         threading.Thread(target=_fetch, daemon=True).start()
@@ -1807,6 +1798,7 @@ def main(page: ft.Page):
                 print(f"Erro pesquisa tema: {ex}")
             finally:
                 progresso.visible = False
+                progresso.update()
                 renderizar_itens_busca_contexto()
 
         threading.Thread(target=_fetch, daemon=True).start()
@@ -1981,9 +1973,6 @@ def main(page: ft.Page):
         on_submit=disparar_busca_manual
     )
 
-    # -------------------------------------------------------------
-    # LOGÓTIPO INTERATIVO (CORRIGIDO: SEM CRASH DE TIME)
-    # -------------------------------------------------------------
     def clicar_no_logo(e):
         campo_busca.value = ""
         paginacao["modo_busca_ativo"] = False
