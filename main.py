@@ -96,7 +96,6 @@ def init_db():
         conn = sqlite3.connect(DB_FILE, timeout=15)
         c = conn.cursor()
         c.execute("PRAGMA journal_mode=WAL;")
-        
         c.execute("""
             CREATE TABLE IF NOT EXISTS usuarios (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -104,7 +103,6 @@ def init_db():
                 cor_avatar TEXT DEFAULT '#03434d'
             )
         """)
-        
         c.execute("""
             CREATE TABLE IF NOT EXISTS filmes (
                 id TEXT,
@@ -127,26 +125,6 @@ def init_db():
                 PRIMARY KEY (id, usuario_id)
             )
         """)
-        try:
-            c.execute("ALTER TABLE filmes ADD COLUMN metascore TEXT")
-        except Exception:
-            pass
-        try:
-            c.execute("ALTER TABLE filmes ADD COLUMN generos TEXT")
-        except Exception:
-            pass
-        try:
-            c.execute("ALTER TABLE filmes ADD COLUMN usuario_id INTEGER DEFAULT 1")
-        except Exception:
-            pass
-        try:
-            c.execute("ALTER TABLE filmes ADD COLUMN tipo TEXT DEFAULT 'movie'")
-        except Exception:
-            pass
-        try:
-            c.execute("ALTER TABLE usuarios ADD COLUMN cor_avatar TEXT DEFAULT '#03434d'")
-        except Exception:
-            pass
         conn.commit()
     except Exception as e:
         print(f"Erro init_db: {e}")
@@ -190,10 +168,6 @@ def main(page: ft.Page):
     init_db()
 
     sessao_usuario = {"id": None, "username": "", "cor": COR_PETROLEO}
-    item_ativo = {"data": None}
-    filme_avaliando = {"id": None, "nota": "10"}
-    filme_para_remover = {"id": None, "titulo": ""}
-    
     ids_salvos_usuario = set()
     titulos_salvos_usuario = set()
 
@@ -246,237 +220,124 @@ def main(page: ft.Page):
 
     progresso = ft.ProgressBar(color=COR_PETROLEO, bgcolor="transparent", visible=False)
 
-    # Abertura e fechamento de modais com tratamento seguro
-    def abrir_dialogo(modal):
-        try:
-            page.open(modal)
-        except Exception:
-            modal.open = True
-            if modal not in page.overlay:
-                page.overlay.append(modal)
-            page.update()
-
-    def fechar_dialogo(modal):
-        try:
-            page.close(modal)
-        except Exception:
-            modal.open = False
-            page.update()
-
-    txt_confirmacao_msg = ft.Text("", size=14, color="#cbd5e1")
-
-    def executar_remocao(e):
-        fid = filme_para_remover["id"]
-        uid = sessao_usuario["id"]
-        if fid and uid:
-            conn = None
-            try:
-                conn = sqlite3.connect(DB_FILE, timeout=5)
-                c = conn.cursor()
-                c.execute("DELETE FROM filmes WHERE id = ? AND usuario_id = ?", (fid, uid))
-                conn.commit()
-            except Exception:
-                pass
-            finally:
-                if conn:
-                    conn.close()
-            
-            recarregar_ids_salvos()
-            fechar_dialogo(modal_confirmacao)
-            atualizar_contador_biblioteca()
-            carregar_biblioteca()
-
-    modal_confirmacao = ft.AlertDialog(
-        modal=False,
-        title=ft.Text("Confirmar Exclusão", size=16, weight="bold", color="#ef4444"),
-        content=txt_confirmacao_msg,
-        actions=[
-            ft.Button(content=ft.Text("Cancelar", color="#94a3b8"), on_click=lambda e: fechar_dialogo(modal_confirmacao)),
-            ft.Button(content=ft.Text("Sim, remover", color="white"), bgcolor=COR_VERMELHO_PLAY, on_click=executar_remocao)
-        ],
-        actions_alignment=ft.MainAxisAlignment.END
-    )
-
-    botoes_notas = []
-    linha_notas_1_5 = ft.Row(spacing=6, alignment=ft.MainAxisAlignment.CENTER)
-    linha_notas_6_10 = ft.Row(spacing=6, alignment=ft.MainAxisAlignment.CENTER)
-
-    def selecionar_nota_valor(valor):
-        filme_avaliando["nota"] = str(valor)
-        for btn in botoes_notas:
-            is_ativo = (btn.data == str(valor))
-            btn.bgcolor = COR_PETROLEO if is_ativo else "#1f2937"
-            btn.content.color = "white" if is_ativo else "#94a3b8"
-        modal_avaliacao.update()
-
-    for n in range(1, 11):
-        s_val = str(n)
-        is_padrao = (n == 10)
-        btn_n = ft.Container(
-            content=ft.Text(s_val, size=13, weight="bold", color="white" if is_padrao else "#94a3b8", text_align=ft.TextAlign.CENTER),
-            alignment=ft.Alignment(0, 0),
-            width=40,
-            height=40,
-            shape=ft.BoxShape.CIRCLE,
-            bgcolor=COR_PETROLEO if is_padrao else "#1f2937",
-            data=s_val,
-            on_click=lambda e, v=s_val: selecionar_nota_valor(v)
-        )
-        botoes_notas.append(btn_n)
-        if n <= 5:
-            linha_notas_1_5.controls.append(btn_n)
-        else:
-            linha_notas_6_10.controls.append(btn_n)
-
-    def confirmar_avaliacao(e):
-        fid = filme_avaliando["id"]
-        nota = filme_avaliando.get("nota", "10")
-        uid = sessao_usuario["id"]
-        if fid and uid:
-            conn = None
-            try:
-                conn = sqlite3.connect(DB_FILE, timeout=5)
-                c = conn.cursor()
-                c.execute("UPDATE filmes SET categoria = 'Assistidos', nota_usuario = ? WHERE id = ? AND usuario_id = ?", (nota, fid, uid))
-                conn.commit()
-            except Exception:
-                pass
-            finally:
-                if conn:
-                    conn.close()
-            fechar_dialogo(modal_avaliacao)
-            carregar_biblioteca()
-
-    modal_avaliacao = ft.AlertDialog(
-        modal=False,
-        title=ft.Text("Qual nota você dá ao título?", size=16, weight="bold"),
-        content=ft.Column([
-            ft.Text("Selecione a nota:", size=13, color="#94a3b8"),
-            linha_notas_1_5,
-            linha_notas_6_10,
-        ], tight=True, spacing=10),
-        actions=[
-            ft.Button(content=ft.Text("Cancelar", color="#94a3b8"), on_click=lambda e: fechar_dialogo(modal_avaliacao)),
-            ft.Button(content=ft.Text("Confirmar", color="white"), bgcolor=COR_PETROLEO, on_click=confirmar_avaliacao)
-        ],
-        actions_alignment=ft.MainAxisAlignment.END
-    )
-
-    def abrir_modal_avaliacao(fid, nota_atual=None):
-        filme_avaliando["id"] = fid
-        try:
-            nota_inicial = str(int(float(nota_atual))) if (nota_atual and nota_atual != "N/A") else "10"
-        except Exception:
-            nota_inicial = "10"
-        selecionar_nota_valor(nota_inicial)
-        abrir_dialogo(modal_avaliacao)
-
-    # Detalhes do Modal
-    dt_img = ft.Image(src="https://via.placeholder.com/130x195?text=Sem+Poster", width=135, height=200, border_radius=8, fit="cover")
-    dt_titulo = ft.Text("", size=17, weight="bold", color="white")
-    dt_titulo_original = ft.Text("", size=12, italic=True, color="#94a3b8", visible=False)
-    dt_meta = ft.Text("", size=11, color="#94a3b8")
-    dt_stream = ft.Text("", size=12, color="#10b981", weight="bold")
-    dt_sinopse = ft.Text("", size=12, color="#cbd5e1")
-
-    txt_stremio = ft.Text("🔍 Verificando lançamento...", size=11, weight="bold", color="#93c5fd")
-    dt_stremio_status = ft.Container(content=txt_stremio, bgcolor="#1e293b", padding=ft.Padding(6, 4, 6, 4), border_radius=6)
-
-    dt_imdb = ft.Container(content=ft.Text("⭐ --", color="black", size=11, weight="bold"), bgcolor="#f59e0b", padding=ft.Padding(5, 2, 5, 2), border_radius=5)
-    dt_rt = ft.Container(content=ft.Text("🍅 --", color="white", size=11, weight="bold"), bgcolor=COR_VERMELHO_PLAY, padding=ft.Padding(5, 2, 5, 2), border_radius=5)
-    dt_metascore = ft.Container(content=ft.Text("Ⓜ --", color="white", size=11, weight="bold"), bgcolor="#334155", padding=ft.Padding(5, 2, 5, 2), border_radius=5)
-    dt_user = ft.Container(content=ft.Text("★ --", color="white", size=11, weight="bold"), bgcolor=COR_PETROLEO, padding=ft.Padding(5, 2, 5, 2), border_radius=5)
-
-    btn_trailer = ft.Button(content=ft.Text("▶ Trailer", color="white", size=12, weight="bold"), bgcolor=COR_VERMELHO_PLAY, url="https://youtube.com")
-    btn_salvar = ft.Button(content=ft.Text("+ Adicionar à Biblioteca", color="white", size=12), bgcolor=COR_PETROLEO, disabled=True)
-    btn_ir_lista = ft.Button(content=ft.Text("📁 Ir para Biblioteca", color="white", size=12), bgcolor="#10b981", visible=False)
-
-    def fechar_detalhes(e=None):
-        fechar_dialogo(modal_detalhes)
-
-    def acao_ir_para_lista(e):
-        fechar_dialogo(modal_detalhes)
-        alternar_tela(1)
-
-    btn_ir_lista.on_click = acao_ir_para_lista
-
-    btn_fechar = ft.Button(content=ft.Text("✕ Fechar", color="white", weight="bold", size=12), bgcolor=COR_PETROLEO, on_click=fechar_detalhes)
-
-    coluna_info_topo = ft.Column([
-        dt_titulo,
-        dt_titulo_original,
-        dt_meta,
-        ft.Row([dt_imdb, dt_rt, dt_metascore, dt_user], spacing=6, wrap=True),
-        dt_stremio_status,
-        dt_stream,
-    ], spacing=3, width=310)
-
-    conteudo_modal = ft.Container(
-        width=480,
-        bgcolor=COR_CARD,
-        padding=14,
-        border_radius=12,
-        border=criar_borda(1.5, COR_PETROLEO),
-        content=ft.Column([
-            ft.Row([btn_fechar], alignment=ft.MainAxisAlignment.END),
-            ft.Row([dt_img, coluna_info_topo], alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.START, wrap=True, spacing=10),
-            ft.Row([btn_trailer, btn_salvar], spacing=8, wrap=True),
-            btn_ir_lista,
-            ft.Text("Sinopse", size=13, weight="bold", color="#94a3b8"),
-            dt_sinopse,
-        ], spacing=8, scroll=ft.ScrollMode.AUTO, tight=True)
-    )
-
-    modal_detalhes = ft.AlertDialog(content=conteudo_modal, modal=False, bgcolor="transparent", content_padding=0)
-
-    def salvar_filme_ativo(e):
-        it = item_ativo["data"]
-        uid = sessao_usuario["id"]
-        if not it or not uid:
-            return
-
-        fid = it["id"]
-        tipo_salvar = it.get("tipo", "movie")
-        
-        conn = None
-        try:
-            conn = sqlite3.connect(DB_FILE, timeout=5)
-            c = conn.cursor()
-            c.execute("SELECT categoria FROM filmes WHERE id = ? AND usuario_id = ?", (fid, uid))
-            if not c.fetchone():
-                c.execute("""
-                    INSERT INTO filmes (id, titulo, ano, diretor, elenco, sinopse, imdb, rotten, metascore, streaming, poster_url, categoria, nota_usuario, trailer_url, generos, usuario_id, tipo)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Para Assistir', ?, ?, ?, ?, ?)
-                """, (
-                    fid, it["titulo"], it["ano"], it["diretor"], it["elenco"],
-                    it["sinopse"], it["imdb"], it["rotten"], it.get("metascore", "N/A"),
-                    it["streaming"], it["poster_url"], it.get("nota_usuario"),
-                    it.get("trailer_url"), it.get("generos", ""), uid, tipo_salvar
-                ))
-                conn.commit()
-                ids_salvos_usuario.add(fid)
-                if it.get("titulo"):
-                    titulos_salvos_usuario.add(normalizar_texto(it["titulo"]))
-        except Exception as ex:
-            print(f"Erro ao salvar: {ex}")
-        finally:
-            if conn:
-                conn.close()
-
-        it["categoria_existente"] = "Para Assistir"
-        btn_salvar.content = ft.Text("✓ Na Biblioteca", color="white", size=12)
-        btn_salvar.bgcolor = "#334155"
-        btn_salvar.disabled = True
-        btn_ir_lista.visible = True
-
-        atualizar_contador_biblioteca()
+    # -------------------------------------------------------------
+    # DIÁLOGOS GERADOS DINAMICAMENTE (SEM CONFLITO DE SESSÃO)
+    # -------------------------------------------------------------
+    def fechar_dialogo_generico(modal):
+        modal.open = False
         page.update()
 
-    btn_salvar.on_click = salvar_filme_ativo
+    def abrir_modal_avaliacao(fid, nota_atual=None):
+        nota_selecionada = {"valor": str(int(float(nota_atual))) if (nota_atual and nota_atual != "N/A") else "10"}
 
-    # Consulta síncrona/direta para garantir o preenchimento dos dados
+        botoes_n = []
+        linha_1_5 = ft.Row(spacing=6, alignment=ft.MainAxisAlignment.CENTER)
+        linha_6_10 = ft.Row(spacing=6, alignment=ft.MainAxisAlignment.CENTER)
+
+        def selecionar_v(v):
+            nota_selecionada["valor"] = str(v)
+            for btn in botoes_n:
+                is_ativo = (btn.data == str(v))
+                btn.bgcolor = COR_PETROLEO if is_ativo else "#1f2937"
+                btn.content.color = "white" if is_ativo else "#94a3b8"
+            modal.update()
+
+        for n in range(1, 11):
+            s_val = str(n)
+            is_padrao = (s_val == nota_selecionada["valor"])
+            btn = ft.Container(
+                content=ft.Text(s_val, size=13, weight="bold", color="white" if is_padrao else "#94a3b8", text_align=ft.TextAlign.CENTER),
+                alignment=ft.Alignment(0, 0),
+                width=38,
+                height=38,
+                shape=ft.BoxShape.CIRCLE,
+                bgcolor=COR_PETROLEO if is_padrao else "#1f2937",
+                data=s_val,
+                on_click=lambda e, val=s_val: selecionar_v(val)
+            )
+            botoes_n.append(btn)
+            if n <= 5:
+                linha_1_5.controls.append(btn)
+            else:
+                linha_6_10.controls.append(btn)
+
+        def salvar_nota(e):
+            uid = sessao_usuario["id"]
+            if fid and uid:
+                conn = None
+                try:
+                    conn = sqlite3.connect(DB_FILE, timeout=5)
+                    c = conn.cursor()
+                    c.execute("UPDATE filmes SET categoria = 'Assistidos', nota_usuario = ? WHERE id = ? AND usuario_id = ?", (nota_selecionada["valor"], fid, uid))
+                    conn.commit()
+                except Exception as ex:
+                    print(f"Erro ao salvar nota: {ex}")
+                finally:
+                    if conn:
+                        conn.close()
+                fechar_dialogo_generico(modal)
+                carregar_biblioteca()
+
+        modal = ft.AlertDialog(
+            modal=False,
+            title=ft.Text("Qual nota você dá ao título?", size=16, weight="bold"),
+            content=ft.Column([
+                ft.Text("Selecione a nota:", size=13, color="#94a3b8"),
+                linha_1_5,
+                linha_6_10,
+            ], tight=True, spacing=10),
+            actions=[
+                ft.Button(content=ft.Text("Cancelar", color="#94a3b8"), on_click=lambda e: fechar_dialogo_generico(modal)),
+                ft.Button(content=ft.Text("Confirmar", color="white"), bgcolor=COR_PETROLEO, on_click=salvar_nota)
+            ],
+            actions_alignment=ft.MainAxisAlignment.END
+        )
+
+        page.overlay.append(modal)
+        modal.open = True
+        page.update()
+
+    def pedir_confirmacao_remocao(fid, titulo):
+        def confirmar_remocao(e):
+            uid = sessao_usuario["id"]
+            if fid and uid:
+                conn = None
+                try:
+                    conn = sqlite3.connect(DB_FILE, timeout=5)
+                    c = conn.cursor()
+                    c.execute("DELETE FROM filmes WHERE id = ? AND usuario_id = ?", (fid, uid))
+                    conn.commit()
+                except Exception:
+                    pass
+                finally:
+                    if conn:
+                        conn.close()
+                recarregar_ids_salvos()
+                fechar_dialogo_generico(modal_exclusao)
+                atualizar_contador_biblioteca()
+                carregar_biblioteca()
+
+        modal_exclusao = ft.AlertDialog(
+            modal=False,
+            title=ft.Text("Confirmar Exclusão", size=16, weight="bold", color="#ef4444"),
+            content=ft.Text(f"Deseja remover '{titulo}' da lista de Assistidos?", size=14, color="#cbd5e1"),
+            actions=[
+                ft.Button(content=ft.Text("Cancelar", color="#94a3b8"), on_click=lambda e: fechar_dialogo_generico(modal_exclusao)),
+                ft.Button(content=ft.Text("Sim, remover", color="white"), bgcolor=COR_VERMELHO_PLAY, on_click=confirmar_remocao)
+            ],
+            actions_alignment=ft.MainAxisAlignment.END
+        )
+        page.overlay.append(modal_exclusao)
+        modal_exclusao.open = True
+        page.update()
+
+    # -------------------------------------------------------------
+    # DETALHES DO FILME (CARREGAMENTO SÍNCRONO DIRETO)
+    # -------------------------------------------------------------
     def abrir_detalhes(mid, mtype, titulo_prev, ano_prev, poster_prev, tela_atual="home"):
         ocultar_sugestoes()
+        progresso.visible = True
+        page.update()
 
         mtype_seguro = "tv" if mtype in ["tv", "series"] else "movie"
         chave_tmdb_calc = f"{mtype_seguro}_{mid}"
@@ -582,73 +443,95 @@ def main(page: ft.Page):
                 if stream_nomes:
                     streamings = ", ".join(stream_nomes)
             except Exception as ex:
-                print(f"Erro ao carregar modal síncrono: {ex}")
+                print(f"Erro TMDB: {ex}")
 
-        dt_img.src = poster_url
+        progresso.visible = False
+
+        # Montagem dos controles prontos
+        dt_img = ft.Image(src=poster_url, width=135, height=200, border_radius=8, fit="cover")
         tag_tipo = "Série" if mtype_seguro == "tv" else "Filme"
-        dt_titulo.value = f"{titulo} ({ano}) • {tag_tipo}"
         
-        if titulo_orig and normalizar_texto(titulo_orig) != normalizar_texto(titulo):
-            dt_titulo_original.value = f"Original: {titulo_orig}"
-            dt_titulo_original.visible = True
-        else:
-            dt_titulo_original.visible = False
-
-        dt_meta.value = f"Direção: {diretor}\nElenco: {elenco}\nGêneros: {generos_txt}"
-        dt_imdb.content.value = f"⭐ {imdb_nota}"
-        dt_rt.content.value = f"🍅 {rt_nota}"
-        
-        if meta_nota != "N/A":
-            dt_metascore.content.value = f"Ⓜ {meta_nota}"
-            dt_metascore.bgcolor = "#54a72a" if int(meta_nota) >= 61 else "#334155"
-        else:
-            dt_metascore.content.value = "Ⓜ --"
-            dt_metascore.bgcolor = "#334155"
-
-        dt_user.content.value = "★ --"
-        dt_stream.value = f"📺 {streamings}"
-        dt_sinopse.value = sinopse
+        info_col = [
+            ft.Text(f"{titulo} ({ano}) • {tag_tipo}", size=17, weight="bold", color="white"),
+            ft.Text(f"Original: {titulo_orig}", size=12, italic=True, color="#94a3b8", visible=bool(titulo_orig and normalizar_texto(titulo_orig) != normalizar_texto(titulo))),
+            ft.Text(f"Direção: {diretor}\nElenco: {elenco}\nGêneros: {generos_txt}", size=11, color="#94a3b8"),
+            ft.Row([
+                ft.Container(content=ft.Text(f"⭐ {imdb_nota}", color="black", size=11, weight="bold"), bgcolor="#f59e0b", padding=ft.Padding(5, 2, 5, 2), border_radius=5),
+                ft.Container(content=ft.Text(f"🍅 {rt_nota}", color="white", size=11, weight="bold"), bgcolor=COR_VERMELHO_PLAY, padding=ft.Padding(5, 2, 5, 2), border_radius=5),
+                ft.Container(content=ft.Text(f"Ⓜ {meta_nota}", color="white", size=11, weight="bold"), bgcolor="#54a72a" if meta_nota != "N/A" and int(meta_nota) >= 61 else "#334155", padding=ft.Padding(5, 2, 5, 2), border_radius=5),
+            ], spacing=6, wrap=True),
+            ft.Container(
+                content=ft.Text("🎬 Stremio: HD/4K Disponível" if tem_digital else "⏳ Stremio: Apenas Cinema / CAM", size=11, weight="bold", color="#a7f3d0" if tem_digital else "#fde68a"),
+                bgcolor="#065f46" if tem_digital else "#78350f",
+                padding=ft.Padding(6, 4, 6, 4),
+                border_radius=6
+            ),
+            ft.Text(f"📺 {streamings}", size=12, color="#10b981", weight="bold"),
+        ]
 
         fallback_trailer = f"https://www.youtube.com/results?search_query={quote_plus('trailer oficial ' + titulo + ' ' + str(ano))}"
-        btn_trailer.url = trailer_url if trailer_url else fallback_trailer
-
-        if tem_digital:
-            txt_stremio.value = "🎬 Stremio: HD/4K Disponível"
-            txt_stremio.color = "#a7f3d0"
-            dt_stremio_status.bgcolor = "#065f46"
-        else:
-            txt_stremio.value = "⏳ Stremio: Apenas Cinema / CAM"
-            txt_stremio.color = "#fde68a"
-            dt_stremio_status.bgcolor = "#78350f"
-
+        btn_tr = ft.Button(content=ft.Text("▶ Trailer", color="white", size=12, weight="bold"), bgcolor=COR_VERMELHO_PLAY, url=trailer_url if trailer_url else fallback_trailer)
+        
         ja_esta = (chave_tmdb_calc in ids_salvos_usuario) or (normalizar_texto(titulo) in titulos_salvos_usuario)
-        if tela_atual == "biblioteca":
-            btn_salvar.visible = False
-            btn_ir_lista.visible = False
-        elif ja_esta:
-            btn_salvar.content = ft.Text("✓ Na Biblioteca", color="white", size=12)
-            btn_salvar.bgcolor = "#334155"
-            btn_salvar.disabled = True
-            btn_salvar.visible = True
-            btn_ir_lista.visible = True
-        else:
-            btn_salvar.content = ft.Text("+ Adicionar à Biblioteca", color="white", size=12)
-            btn_salvar.bgcolor = COR_PETROLEO
-            btn_salvar.disabled = False
-            btn_salvar.visible = True
-            btn_ir_lista.visible = False
+        btn_slv = ft.Button(content=ft.Text("✓ Na Biblioteca" if ja_esta else "+ Adicionar à Biblioteca", color="white", size=12), bgcolor="#334155" if ja_esta else COR_PETROLEO, disabled=ja_esta)
+        btn_ir = ft.Button(content=ft.Text("📁 Ir para Biblioteca", color="white", size=12), bgcolor="#10b981", visible=(ja_esta and tela_atual != "biblioteca"))
 
-        item_ativo["data"] = {
-            "id": chave_tmdb_calc, "titulo": titulo, "ano": ano, 
-            "diretor": diretor, "elenco": elenco, "sinopse": sinopse, "imdb": imdb_nota, 
-            "rotten": rt_nota, "metascore": meta_nota, "streaming": streamings, 
-            "poster_url": poster_url, "nota_usuario": None, "trailer_url": trailer_url, 
-            "categoria_existente": None, "generos": generos_txt, "tipo": mtype_seguro
-        }
+        def acao_salvar_modal(e):
+            if uid:
+                conn = None
+                try:
+                    conn = sqlite3.connect(DB_FILE, timeout=5)
+                    c = conn.cursor()
+                    c.execute("SELECT categoria FROM filmes WHERE id = ? AND usuario_id = ?", (chave_tmdb_calc, uid))
+                    if not c.fetchone():
+                        c.execute("""
+                            INSERT INTO filmes (id, titulo, ano, diretor, elenco, sinopse, imdb, rotten, metascore, streaming, poster_url, categoria, nota_usuario, trailer_url, generos, usuario_id, tipo)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Para Assistir', ?, ?, ?, ?, ?)
+                        """, (
+                            chave_tmdb_calc, titulo, ano, diretor, elenco, sinopse,
+                            imdb_nota, rt_nota, meta_nota, streamings, poster_url,
+                            None, trailer_url, generos_txt, uid, mtype_seguro
+                        ))
+                        conn.commit()
+                        ids_salvos_usuario.add(chave_tmdb_calc)
+                        titulos_salvos_usuario.add(normalizar_texto(titulo))
+                except Exception as ex_db:
+                    print(f"Erro ao salvar: {ex_db}")
+                finally:
+                    if conn:
+                        conn.close()
+            btn_slv.content = ft.Text("✓ Na Biblioteca", color="white", size=12)
+            btn_slv.bgcolor = "#334155"
+            btn_slv.disabled = True
+            btn_ir.visible = True
+            atualizar_contador_biblioteca()
+            modal_det.update()
 
-        abrir_dialogo(modal_detalhes)
+        btn_slv.on_click = acao_salvar_modal
+        btn_ir.on_click = lambda e: (fechar_dialogo_generico(modal_det), alternar_tela(1))
 
-    # Adicionar rápido direto no cartaz com busca imediata de provedores
+        conteudo = ft.Container(
+            width=480,
+            bgcolor=COR_CARD,
+            padding=14,
+            border_radius=12,
+            border=criar_borda(1.5, COR_PETROLEO),
+            content=ft.Column([
+                ft.Row([ft.Button(content=ft.Text("✕ Fechar", color="white", weight="bold", size=12), bgcolor=COR_PETROLEO, on_click=lambda e: fechar_dialogo_generico(modal_det))], alignment=ft.MainAxisAlignment.END),
+                ft.Row([dt_img, ft.Column(info_col, spacing=3, width=310)], alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.START, wrap=True, spacing=10),
+                ft.Row([btn_tr, btn_slv], spacing=8, wrap=True) if tela_atual != "biblioteca" else ft.Row([btn_tr]),
+                btn_ir,
+                ft.Text("Sinopse", size=13, weight="bold", color="#94a3b8"),
+                ft.Text(sinopse, size=12, color="#cbd5e1"),
+            ], spacing=8, scroll=ft.ScrollMode.AUTO, tight=True)
+        )
+
+        modal_det = ft.AlertDialog(content=conteudo, modal=False, bgcolor="transparent", content_padding=0)
+        page.overlay.append(modal_det)
+        modal_det.open = True
+        page.update()
+
+    # Adicionar rápido direto no cartaz
     def adicionar_rapido_poster(e, mid, mtype, titulo, ano, poster_url, chave_id, btn_adicionar):
         uid = sessao_usuario["id"]
         if not uid or chave_id in ids_salvos_usuario:
@@ -883,10 +766,7 @@ def main(page: ft.Page):
         content=ft.Text("Carregar Mais Títulos", size=12, weight="bold", color=COR_TEXTO_CLARO),
         bgcolor=COR_CARD,
         height=38,
-        style=ft.ButtonStyle(
-            shape=ft.RoundedRectangleBorder(radius=8),
-            side=ft.BorderSide(1, COR_BORDA)
-        ),
+        style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8), side=ft.BorderSide(1, COR_BORDA)),
         on_click=acao_carregar_mais
     )
 
@@ -909,12 +789,7 @@ def main(page: ft.Page):
             rotulo = "séries" if f_tipo == "tv" else ("filmes" if f_tipo == "movie" else "obras")
             grade_populares.controls.append(
                 ft.Container(
-                    content=ft.Text(
-                        f"Nenhuma {rotulo} encontrada com o termo '{contexto_busca.get('nome')}'.",
-                        size=14,
-                        color="#94a3b8",
-                        text_align=ft.TextAlign.CENTER
-                    ),
+                    content=ft.Text(f"Nenhuma {rotulo} encontrada com o termo '{contexto_busca.get('nome')}'.", size=14, color="#94a3b8", text_align=ft.TextAlign.CENTER),
                     padding=40
                 )
             )
@@ -956,10 +831,7 @@ def main(page: ft.Page):
         if not tmdb_key:
             grade_populares.controls.clear()
             grade_populares.controls.append(
-                ft.Container(
-                    content=ft.Text("⚠️ Chave do TMDb ausente. Adicione TMDB_KEY no Render.", color="#f87171", size=13, text_align=ft.TextAlign.CENTER),
-                    padding=20
-                )
+                ft.Container(content=ft.Text("⚠️ Chave do TMDb ausente. Adicione TMDB_KEY no Render.", color="#f87171", size=13, text_align=ft.TextAlign.CENTER), padding=20)
             )
             grade_populares.update()
             return
@@ -1151,7 +1023,6 @@ def main(page: ft.Page):
             finally:
                 if conn:
                     conn.close()
-            
             recarregar_ids_salvos()
             atualizar_contador_biblioteca()
             carregar_biblioteca()
@@ -1239,11 +1110,7 @@ def main(page: ft.Page):
         else:
             itens_filtrados = itens_aba
 
-        btn_print = ft.Button(
-            content=ft.Text("🖨️ Imprimir", color="white", size=11, weight="bold"),
-            bgcolor=COR_CHUMBO,
-            on_click=lambda e: imprimir_lista()
-        )
+        btn_print = ft.Button(content=ft.Text("🖨️ Imprimir", color="white", size=11, weight="bold"), bgcolor=COR_CHUMBO, on_click=lambda e: imprimir_lista())
 
         is_para_assistir_ativo = (aba_atual == "Para Assistir")
         btn_aba_para_assistir = ft.Button(
@@ -1446,6 +1313,7 @@ def main(page: ft.Page):
         left=20,
         shadow=ft.BoxShadow(blur_radius=15, color="#000000")
     )
+    page.overlay.append(container_sugestoes)
 
     def ocultar_sugestoes():
         if container_sugestoes.visible:
@@ -1807,7 +1675,7 @@ def main(page: ft.Page):
         on_submit=disparar_busca_manual
     )
 
-    # Clique do logo 100% nativo (sem dependência de módulos ausentes)
+    # Clique do logo 100% nativo sem dependências temporais
     def clicar_no_logo(e):
         campo_busca.value = ""
         campo_busca.update()
@@ -1824,7 +1692,6 @@ def main(page: ft.Page):
         alternar_filtro_home("todos")
 
     img_logo = ft.Image(src="logo.png", height=65, fit="contain")
-
     btn_logo_interativo = ft.Container(content=img_logo, padding=2, tooltip="Voltar ao Início", on_click=clicar_no_logo)
 
     lbl_user_tag = ft.Text("", size=12, color="#64748b", weight="bold")
@@ -1956,7 +1823,6 @@ def main(page: ft.Page):
     )
 
     def alternar_tela(indice):
-        fechar_dialogo(modal_detalhes)
         ocultar_sugestoes()
 
         if indice == 0:
@@ -2020,81 +1886,75 @@ def main(page: ft.Page):
         contexto_busca["offset"] = 0
         
         grade_populares.controls.clear()
-
         carregar_populares()
 
-    txt_novo_perfil_nome = ft.TextField(
-        label="Nome do Perfil",
-        label_style=ft.TextStyle(color="#94a3b8"),
-        bgcolor=COR_FUNDO,
-        dense=True,
-        border_radius=8,
-        border_color=COR_BORDA,
-        focused_border_color=COR_PETROLEO,
-        width=280
-    )
-    txt_novo_perfil_erro = ft.Text("", size=12, color="#ef4444")
+    def abrir_modal_novo_perfil(e=None):
+        txt_novo_perfil_nome = ft.TextField(
+            label="Nome do Perfil",
+            label_style=ft.TextStyle(color="#94a3b8"),
+            bgcolor=COR_FUNDO,
+            dense=True,
+            border_radius=8,
+            border_color=COR_BORDA,
+            focused_border_color=COR_PETROLEO,
+            width=280
+        )
+        txt_novo_perfil_erro = ft.Text("", size=12, color="#ef4444")
 
-    def salvar_novo_perfil(e):
-        nome = txt_novo_perfil_nome.value.strip() if txt_novo_perfil_nome.value else ""
-        if len(nome) < 2:
-            txt_novo_perfil_erro.value = "Digite pelo menos 2 caracteres."
-            modal_novo_perfil.update()
-            return
-
-        conn = None
-        try:
-            conn = sqlite3.connect(DB_FILE, timeout=5)
-            c = conn.cursor()
-            c.execute("SELECT id FROM usuarios WHERE username = ?", (nome,))
-            if c.fetchone():
-                txt_novo_perfil_erro.value = "Este perfil já existe."
-                modal_novo_perfil.update()
+        def salvar_novo_perfil(ev):
+            nome = txt_novo_perfil_nome.value.strip() if txt_novo_perfil_nome.value else ""
+            if len(nome) < 2:
+                txt_novo_perfil_erro.value = "Digite pelo menos 2 caracteres."
+                modal_perfil.update()
                 return
 
-            c.execute("SELECT COUNT(*) FROM usuarios")
-            qtd = c.fetchone()[0]
-            cor_escolhida = CORES_AVATAR[qtd % len(CORES_AVATAR)]
+            conn = None
+            try:
+                conn = sqlite3.connect(DB_FILE, timeout=5)
+                c = conn.cursor()
+                c.execute("SELECT id FROM usuarios WHERE username = ?", (nome,))
+                if c.fetchone():
+                    txt_novo_perfil_erro.value = "Este perfil já existe."
+                    modal_perfil.update()
+                    return
 
-            c.execute("INSERT INTO usuarios (username, cor_avatar) VALUES (?, ?)", (nome, cor_escolhida))
-            novo_id = c.lastrowid
-            conn.commit()
+                c.execute("SELECT COUNT(*) FROM usuarios")
+                qtd = c.fetchone()[0]
+                cor_escolhida = CORES_AVATAR[qtd % len(CORES_AVATAR)]
 
-            fechar_dialogo(modal_novo_perfil)
-            txt_novo_perfil_nome.value = ""
-            txt_novo_perfil_erro.value = ""
+                c.execute("INSERT INTO usuarios (username, cor_avatar) VALUES (?, ?)", (nome, cor_escolhida))
+                novo_id = c.lastrowid
+                conn.commit()
 
-            entrar_com_perfil(novo_id, nome, cor_escolhida)
-        except Exception as err:
-            txt_novo_perfil_erro.value = f"Erro: {err}"
-            modal_novo_perfil.update()
-        finally:
-            if conn:
-                conn.close()
+                fechar_dialogo_generico(modal_perfil)
+                entrar_com_perfil(novo_id, nome, cor_escolhida)
+            except Exception as err:
+                txt_novo_perfil_erro.value = f"Erro: {err}"
+                modal_perfil.update()
+            finally:
+                if conn:
+                    conn.close()
 
-    modal_novo_perfil = ft.AlertDialog(
-        modal=False,
-        title=ft.Text("Adicionar Novo Perfil", size=16, weight="bold", color="white"),
-        content=ft.Column([
-            ft.Text("Como deseja chamar este perfil?", size=13, color="#94a3b8"),
-            txt_novo_perfil_erro,
-            txt_novo_perfil_nome
-        ], tight=True, spacing=10),
-        actions=[
-            ft.Button(content=ft.Text("Cancelar", color="#94a3b8"), on_click=lambda e: fechar_dialogo(modal_novo_perfil)),
-            ft.Button(content=ft.Text("Salvar Perfil", color="white"), bgcolor=COR_PETROLEO, on_click=salvar_novo_perfil)
-        ],
-        actions_alignment=ft.MainAxisAlignment.END
-    )
-
-    def abrir_modal_novo_perfil(e=None):
-        txt_novo_perfil_nome.value = ""
-        txt_novo_perfil_erro.value = ""
-        abrir_dialogo(modal_novo_perfil)
+        modal_perfil = ft.AlertDialog(
+            modal=False,
+            title=ft.Text("Adicionar Novo Perfil", size=16, weight="bold", color="white"),
+            content=ft.Column([
+                ft.Text("Como deseja chamar este perfil?", size=13, color="#94a3b8"),
+                txt_novo_perfil_erro,
+                txt_novo_perfil_nome
+            ], tight=True, spacing=10),
+            actions=[
+                ft.Button(content=ft.Text("Cancelar", color="#94a3b8"), on_click=lambda ev: fechar_dialogo_generico(modal_perfil)),
+                ft.Button(content=ft.Text("Salvar Perfil", color="white"), bgcolor=COR_PETROLEO, on_click=salvar_novo_perfil)
+            ],
+            actions_alignment=ft.MainAxisAlignment.END
+        )
+        page.overlay.append(modal_perfil)
+        modal_perfil.open = True
+        page.update()
 
     def criar_card_avatar(uid, nome, cor):
         iniciais = (nome[:2] if len(nome) >= 2 else nome).upper()
-        
         avatar_box = ft.Container(
             content=ft.Text(iniciais, size=32, weight="bold", color="white"),
             alignment=ft.Alignment(0, 0),
@@ -2104,7 +1964,6 @@ def main(page: ft.Page):
             bgcolor=cor,
             border=criar_borda(2, "transparent")
         )
-
         card_item = ft.Container(
             content=ft.Column([
                 avatar_box,
@@ -2126,7 +1985,6 @@ def main(page: ft.Page):
             bgcolor="#0d1419",
             border=criar_borda(1.5, "#334155")
         )
-
         card_add = ft.Container(
             content=ft.Column([
                 box_add,
@@ -2176,7 +2034,6 @@ def main(page: ft.Page):
         visible=True
     )
 
-    page.overlay.extend([modal_detalhes, modal_avaliacao, modal_confirmacao, modal_novo_perfil])
     page.add(tela_perfis, layout_mestre)
     carregar_perfis_tela()
     ajustar_layout_responsivo()
