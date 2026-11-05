@@ -172,8 +172,10 @@ def main(page: ft.Page):
     sessao_usuario = {"id": None, "username": "", "cor": COR_PETROLEO}
     ids_salvos_usuario = set()
     titulos_salvos_usuario = set()
+    botoes_add_home = {}
 
-    roteador_acoes = {"carregar_biblioteca": lambda: None}
+    timer_busca = {"timer": None}
+    versao_busca_atual = {"epoch": 0}
 
     contexto_busca = {
         "tipo": None,
@@ -206,6 +208,16 @@ def main(page: ft.Page):
             finally:
                 if conn:
                     conn.close()
+
+    def marcar_botao_home_como_salvo(chave_id):
+        if chave_id in botoes_add_home and botoes_add_home[chave_id]:
+            btn = botoes_add_home[chave_id]
+            btn.icon = ft.Icons.CHECK
+            btn.icon_color = "#10b981"
+            btn.bgcolor = "#064e3b"
+            btn.disabled = True
+            btn.tooltip = "Já está na sua biblioteca"
+            btn.update()
 
     estado_biblioteca = {
         "aba": "Para Assistir",
@@ -252,6 +264,9 @@ def main(page: ft.Page):
         modal.open = False
         page.update()
 
+    # -------------------------------------------------------------
+    # BIBLIOTECA
+    # -------------------------------------------------------------
     def carregar_biblioteca():
         coluna_biblioteca_itens.controls.clear()
         todos_itens = []
@@ -479,8 +494,71 @@ def main(page: ft.Page):
 
         coluna_biblioteca_itens.update()
 
-    roteador_acoes["carregar_biblioteca"] = carregar_biblioteca
+    def mudar_aba_biblioteca(nova_aba):
+        estado_biblioteca["aba"] = nova_aba
+        if nova_aba == "Para Assistir" and estado_biblioteca["modo"] == "nota_pessoal":
+            estado_biblioteca["modo"] = "nota"
+        elif nova_aba == "Assistidos" and estado_biblioteca["modo"] == "nota":
+            estado_biblioteca["modo"] = "nota_pessoal"
+        carregar_biblioteca()
 
+    def mudar_modo_filtro(novo_modo):
+        estado_biblioteca["modo"] = novo_modo
+        carregar_biblioteca()
+
+    def mudar_filtro_tipo_bib(novo_tipo):
+        estado_biblioteca["filtro_tipo"] = novo_tipo
+        carregar_biblioteca()
+
+    def imprimir_lista():
+        uid = sessao_usuario["id"]
+        filmes = []
+        if uid:
+            conn = None
+            try:
+                conn = sqlite3.connect(DB_FILE, timeout=5)
+                c = conn.cursor()
+                c.execute("SELECT titulo, ano, imdb, rotten, streaming, diretor, tipo FROM filmes WHERE categoria = 'Para Assistir' AND usuario_id = ? ORDER BY titulo ASC", (uid,))
+                filmes = c.fetchall()
+            except Exception:
+                pass
+            finally:
+                if conn:
+                    conn.close()
+
+        if not filmes:
+            return
+
+        linhas = "".join([f"<tr><td>{i}</td><td><b>{t}</b> ({a})</td><td>{'Série' if tp == 'tv' else 'Filme'}</td><td>⭐ {im}</td><td>🍅 {rt}</td><td>{st}</td><td>{dr}</td></tr>" for i, (t, a, im, rt, st, dr, tp) in enumerate(filmes, 1)])
+        html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><title>Para Assistir</title>
+        <style>body{{font-family:sans-serif;margin:20px;}}table{{width:100%;border-collapse:collapse;}}th,td{{border:1px solid #ccc;padding:8px;text-align:left;}}th{{background:#f1f5f9;}}</style>
+        </head><body><h2>🎬 Lista Para Assistir ({len(filmes)})</h2><table><thead><tr><th>#</th><th>Título</th><th>Tipo</th><th>IMDb</th><th>RT</th><th>Streaming</th><th>Direção/Criação</th></tr></thead><tbody>{linhas}</tbody></table><script>window.onload=function(){{window.print();}}</script></body></html>"""
+        arq = os.path.abspath("lista_para_assistir.html")
+        with open(arq, "w", encoding="utf-8") as f:
+            f.write(html)
+        page.launch_url(f"file://{arq}")
+
+    def remover_filme_direto(fid):
+        uid = sessao_usuario["id"]
+        if uid:
+            conn = None
+            try:
+                conn = sqlite3.connect(DB_FILE, timeout=5)
+                c = conn.cursor()
+                c.execute("DELETE FROM filmes WHERE id = ? AND usuario_id = ?", (fid, uid))
+                conn.commit()
+            except Exception:
+                pass
+            finally:
+                if conn:
+                    conn.close()
+            recarregar_ids_salvos()
+            atualizar_contador_biblioteca()
+            carregar_biblioteca()
+
+    # -------------------------------------------------------------
+    # DIÁLOGOS DINÂMICOS
+    # -------------------------------------------------------------
     def abrir_modal_avaliacao(fid, nota_atual=None):
         nota_selecionada = {"valor": str(int(float(nota_atual))) if (nota_atual and nota_atual != "N/A") else "10"}
 
@@ -530,7 +608,7 @@ def main(page: ft.Page):
                     if conn:
                         conn.close()
                 fechar_dialogo_generico(modal)
-                roteador_acoes["carregar_biblioteca"]()
+                carregar_biblioteca()
 
         modal = ft.AlertDialog(
             modal=False,
@@ -569,7 +647,7 @@ def main(page: ft.Page):
                 recarregar_ids_salvos()
                 fechar_dialogo_generico(modal_exclusao)
                 atualizar_contador_biblioteca()
-                roteador_acoes["carregar_biblioteca"]()
+                carregar_biblioteca()
 
         modal_exclusao = ft.AlertDialog(
             modal=False,
@@ -750,10 +828,13 @@ def main(page: ft.Page):
                 finally:
                     if conn:
                         conn.close()
+
             btn_slv.content = ft.Text("✓ Na Biblioteca", color="white", size=12)
             btn_slv.bgcolor = "#334155"
             btn_slv.disabled = True
             btn_ir.visible = True
+
+            marcar_botao_home_como_salvo(chave_tmdb_calc)
             atualizar_contador_biblioteca()
             modal_det.update()
 
@@ -906,6 +987,7 @@ def main(page: ft.Page):
                 style=ft.ButtonStyle(padding=0)
             )
             btn_add_rapido.on_click = lambda e, m=mid, mt=mtype_seguro, t=titulo, a=ano, p=poster_url, c=chave_id, b=btn_add_rapido: adicionar_rapido_poster(e, m, mt, t, a, p, c, b)
+            botoes_add_home[chave_id] = btn_add_rapido
 
         stack_itens = [
             ft.Image(
@@ -1027,6 +1109,7 @@ def main(page: ft.Page):
             filtrados = todos_itens
 
         grade_populares.controls.clear()
+        botoes_add_home.clear()
         contexto_busca["offset"] = 0
         paginacao["fim"] = False
 
@@ -1164,6 +1247,7 @@ def main(page: ft.Page):
         paginacao["pagina_atual"] = 1
         paginacao["fim"] = False
         paginacao["ids_carregados"].clear()
+        botoes_add_home.clear()
         grade_populares.controls.clear()
         txt_titulo_home.value = "Em Alta (TMDb Trends)"
         txt_titulo_home.update()
@@ -1316,6 +1400,7 @@ def main(page: ft.Page):
         sessao_usuario["username"] = ""
         ids_salvos_usuario.clear()
         titulos_salvos_usuario.clear()
+        botoes_add_home.clear()
         
         campo_busca.value = ""
         paginacao["pagina_atual"] = 1
@@ -1435,4 +1520,551 @@ def main(page: ft.Page):
             spacing=14,
             controls=[coluna_biblioteca_itens]
         )
+    )
+
+    def alternar_tela(indice):
+        ocultar_sugestoes()
+
+        if indice == 0:
+            view_inicio.visible = True
+            view_biblioteca.visible = False
+            linha_controles_unificados.visible = True
+            btn_tab_bib.border = criar_borda(1.2, COR_BORDA)
+        elif indice == 1:
+            carregar_biblioteca()
+            view_inicio.visible = False
+            view_biblioteca.visible = True
+            linha_controles_unificados.visible = False
+            btn_tab_bib.border = criar_borda(2, COR_ATIVO_BORDA)
+
+        page.update()
+
+    layout_mestre = ft.Column(
+        expand=True,
+        spacing=0,
+        visible=False,
+        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+        controls=[
+            cabecalho_fixo,
+            view_inicio,
+            view_biblioteca
+        ]
+    )
+
+    linha_cards_perfis = ft.Row(
+        wrap=True,
+        spacing=24,
+        run_spacing=24,
+        alignment=ft.MainAxisAlignment.CENTER,
+        vertical_alignment=ft.CrossAxisAlignment.CENTER
+    )
+
+    def entrar_com_perfil(uid, nome, cor):
+        sessao_usuario["id"] = int(uid)
+        sessao_usuario["username"] = str(nome)
+        sessao_usuario["cor"] = cor
+        lbl_user_tag.value = f"👤 {nome}"
+        
+        recarregar_ids_salvos()
+        tela_perfis.visible = False
+        layout_mestre.visible = True
+        ajustar_layout_responsivo()
+        atualizar_contador_biblioteca()
+        page.update()
+
+        paginacao["pagina_atual"] = 1
+        paginacao["carregando"] = False
+        paginacao["fim"] = False
+        paginacao["filtro_home"] = "todos"
+        paginacao["modo_busca_ativo"] = False
+        paginacao["ids_carregados"].clear()
+        botoes_add_home.clear()
+        
+        contexto_busca["tipo"] = None
+        contexto_busca["id"] = None
+        contexto_busca["nome"] = ""
+        contexto_busca["itens_cache"] = []
+        contexto_busca["offset"] = 0
+        
+        grade_populares.controls.clear()
+        carregar_populares()
+
+    def abrir_modal_novo_perfil(e=None):
+        txt_novo_perfil_nome = ft.TextField(
+            label="Nome do Perfil",
+            label_style=ft.TextStyle(color="#94a3b8"),
+            bgcolor=COR_FUNDO,
+            dense=True,
+            border_radius=8,
+            border_color=COR_BORDA,
+            focused_border_color=COR_PETROLEO,
+            width=280
+        )
+        txt_novo_perfil_erro = ft.Text("", size=12, color="#ef4444")
+
+        def salvar_novo_perfil(ev):
+            nome = txt_novo_perfil_nome.value.strip() if txt_novo_perfil_nome.value else ""
+            if len(nome) < 2:
+                txt_novo_perfil_erro.value = "Digite pelo menos 2 caracteres."
+                modal_perfil.update()
+                return
+
+            conn = None
+            try:
+                conn = sqlite3.connect(DB_FILE, timeout=5)
+                c = conn.cursor()
+                c.execute("SELECT id FROM usuarios WHERE username = ?", (nome,))
+                if c.fetchone():
+                    txt_novo_perfil_erro.value = "Este perfil já existe."
+                    modal_perfil.update()
+                    return
+
+                c.execute("SELECT COUNT(*) FROM usuarios")
+                qtd = c.fetchone()[0]
+                cor_escolhida = CORES_AVATAR[qtd % len(CORES_AVATAR)]
+
+                c.execute("INSERT INTO usuarios (username, cor_avatar) VALUES (?, ?)", (nome, cor_escolhida))
+                novo_id = c.lastrowid
+                conn.commit()
+
+                fechar_dialogo_generico(modal_perfil)
+                entrar_com_perfil(novo_id, nome, cor_escolhida)
+            except Exception as err:
+                txt_novo_perfil_erro.value = f"Erro: {err}"
+                modal_perfil.update()
+            finally:
+                if conn:
+                    conn.close()
+
+        modal_perfil = ft.AlertDialog(
+            modal=False,
+            title=ft.Text("Adicionar Novo Perfil", size=16, weight="bold", color="white"),
+            content=ft.Column([
+                ft.Text("Como deseja chamar este perfil?", size=13, color="#94a3b8"),
+                txt_novo_perfil_erro,
+                txt_novo_perfil_nome
+            ], tight=True, spacing=10),
+            actions=[
+                ft.Button(content=ft.Text("Cancelar", color="#94a3b8"), on_click=lambda ev: fechar_dialogo_generico(modal_perfil)),
+                ft.Button(content=ft.Text("Salvar Perfil", color="white"), bgcolor=COR_PETROLEO, on_click=salvar_novo_perfil)
+            ],
+            actions_alignment=ft.MainAxisAlignment.END
+        )
+        page.overlay.append(modal_perfil)
+        modal_perfil.open = True
+        page.update()
+
+    def criar_card_avatar(uid, nome, cor):
+        iniciais = (nome[:2] if len(nome) >= 2 else nome).upper()
+        avatar_box = ft.Container(
+            content=ft.Text(iniciais, size=32, weight="bold", color="white"),
+            alignment=ft.Alignment(0, 0),
+            width=110,
+            height=110,
+            border_radius=12,
+            bgcolor=cor,
+            border=criar_borda(2, "transparent")
+        )
+        card_item = ft.Container(
+            content=ft.Column([
+                avatar_box,
+                ft.Text(nome, size=14, weight="bold", color="#94a3b8", text_align=ft.TextAlign.CENTER, width=110)
+            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10),
+            border_radius=12,
+            padding=4,
+            on_click=lambda e, u=uid, n=nome, c=cor: entrar_com_perfil(u, n, c)
+        )
+        return card_item
+
+    def criar_card_adicionar():
+        box_add = ft.Container(
+            content=ft.Icon(ft.Icons.ADD_ROUNDED, size=48, color="#64748b"),
+            alignment=ft.Alignment(0, 0),
+            width=110,
+            height=110,
+            border_radius=12,
+            bgcolor="#0d1419",
+            border=criar_borda(1.5, "#334155")
+        )
+        card_add = ft.Container(
+            content=ft.Column([
+                box_add,
+                ft.Text("Adicionar Perfil", size=13, color="#64748b", text_align=ft.TextAlign.CENTER, width=110)
+            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10),
+            border_radius=12,
+            padding=4,
+            on_click=abrir_modal_novo_perfil
+        )
+        return card_add
+
+    def carregar_perfis_tela():
+        linha_cards_perfis.controls.clear()
+        perfis = []
+        conn = None
+        try:
+            conn = sqlite3.connect(DB_FILE, timeout=5)
+            c = conn.cursor()
+            c.execute("SELECT id, username, cor_avatar FROM usuarios ORDER BY id ASC")
+            perfis = c.fetchall()
+        except Exception as e:
+            print(f"Erro ao buscar perfis: {e}")
+        finally:
+            if conn:
+                conn.close()
+
+        if not perfis:
+            abrir_modal_novo_perfil()
+
+        for pid, pnome, pcor in perfis:
+            cor_final = pcor if pcor else COR_PETROLEO
+            linha_cards_perfis.controls.append(criar_card_avatar(pid, pnome, cor_final))
+
+        linha_cards_perfis.controls.append(criar_card_adicionar())
+
+    def exibir_filmografia_pessoa(person_id, nome_pessoa):
+        ocultar_sugestoes()
+        campo_busca.value = nome_pessoa
+        campo_busca.update()
+        paginacao["modo_busca_ativo"] = True
+        paginacao["fim"] = False
+        btn_carregar_mais.visible = False
+        grade_populares.controls.clear()
+        botoes_add_home.clear()
+        
+        contexto_busca["tipo"] = "person"
+        contexto_busca["id"] = person_id
+        contexto_busca["nome"] = nome_pessoa
+        contexto_busca["itens_cache"] = []
+        contexto_busca["offset"] = 0
+        
+        txt_titulo_home.value = nome_pessoa
+        txt_titulo_home.update()
+        alternar_tela(0)
+        progresso.visible = True
+        progresso.update()
+
+        c = carregar_config()
+        tmdb_key = c.get("tmdb_key", "").strip()
+
+        def _fetch():
+            try:
+                url = f"https://api.themoviedb.org/3/person/{person_id}/combined_credits?api_key={tmdb_key}&language=pt-BR"
+                res = requests.get(url, timeout=4.5).json()
+                
+                cast_puro = res.get("cast", [])
+                crew_puro = res.get("crew", [])
+                
+                itens_filtrados = []
+                vistos = set()
+
+                for item in cast_puro:
+                    mid = item.get("id")
+                    if not mid or not item.get("poster_path"):
+                        continue
+                    
+                    personagem = (item.get("character") or "").lower().strip()
+                    generos = item.get("genre_ids", [])
+                    
+                    if 99 in generos or "self" in personagem or "himself" in personagem or "herself" in personagem:
+                        continue
+                        
+                    if item.get("media_type") == "tv" or "name" in item or "first_air_date" in item:
+                        mtype = "tv"
+                    else:
+                        mtype = "movie"
+                    item["media_type"] = mtype
+                    
+                    chave = f"{mtype}_{mid}"
+                    if chave not in vistos:
+                        vistos.add(chave)
+                        itens_filtrados.append(item)
+
+                for item in crew_puro:
+                    mid = item.get("id")
+                    if not mid or not item.get("poster_path"):
+                        continue
+                        
+                    job = (item.get("job") or "").lower().strip()
+                    generos = item.get("genre_ids", [])
+                    
+                    if job in ["director", "creator", "writer"]:
+                        if 99 in generos:
+                            continue
+                            
+                        if item.get("media_type") == "tv" or "name" in item or "first_air_date" in item:
+                            mtype = "tv"
+                        else:
+                            mtype = "movie"
+                        item["media_type"] = mtype
+                        
+                        chave = f"{mtype}_{mid}"
+                        if chave not in vistos:
+                            vistos.add(chave)
+                            itens_filtrados.append(item)
+
+                contexto_busca["itens_cache"] = sorted(
+                    itens_filtrados,
+                    key=lambda x: (x.get("vote_count", 0), x.get("popularity", 0)),
+                    reverse=True
+                )
+            except Exception as ex:
+                print(f"Erro filmografia filtrada: {ex}")
+            finally:
+                progresso.visible = False
+                renderizar_itens_busca_contexto()
+
+        threading.Thread(target=_fetch, daemon=True).start()
+
+    def executar_pesquisa_tema_ou_termo(termo_busca):
+        ocultar_sugestoes()
+        termo_limpo = termo_busca.strip()
+        if not termo_limpo:
+            return
+
+        campo_busca.value = termo_limpo
+        campo_busca.update()
+        paginacao["modo_busca_ativo"] = True
+        paginacao["fim"] = False
+        btn_carregar_mais.visible = False
+        grade_populares.controls.clear()
+        botoes_add_home.clear()
+        
+        contexto_busca["tipo"] = "tema"
+        contexto_busca["id"] = termo_limpo
+        contexto_busca["nome"] = termo_limpo
+        contexto_busca["itens_cache"] = []
+        contexto_busca["offset"] = 0
+        
+        txt_titulo_home.value = termo_limpo.title()
+        txt_titulo_home.update()
+        alternar_tela(0)
+        progresso.visible = True
+        progresso.update()
+
+        c = carregar_config()
+        tmdb_key = c.get("tmdb_key", "").strip()
+
+        def _fetch():
+            try:
+                norm = normalizar_texto(termo_limpo)
+                kw_ids_str = ""
+
+                for termo_k, ids_v in MAPA_KEYWORDS_CONHECIDAS.items():
+                    if termo_k in norm:
+                        kw_ids_str = ids_v
+                        break
+
+                if not kw_ids_str:
+                    tr = traduzir_para_ingles(termo_limpo)
+                    kw_encontrados = set()
+                    for q in [tr, norm]:
+                        try:
+                            kw_url = f"https://api.themoviedb.org/3/search/keyword?api_key={tmdb_key}&query={quote_plus(q)}&page=1"
+                            r = requests.get(kw_url, timeout=2.0)
+                            if r.status_code == 200:
+                                for k in r.json().get("results", [])[:3]:
+                                    kw_encontrados.add(str(k.get("id")))
+                        except Exception:
+                            pass
+                    if kw_encontrados:
+                        kw_ids_str = "|".join(list(kw_encontrados)[:5])
+
+                itens_totais = []
+                vistos = set()
+
+                if kw_ids_str:
+                    for pg in [1, 2, 3]:
+                        try:
+                            url_m = f"https://api.themoviedb.org/3/discover/movie?api_key={tmdb_key}&language=pt-BR&sort_by=vote_count.desc&with_keywords={kw_ids_str}&vote_count.gte=30&page={pg}"
+                            res_m = requests.get(url_m, timeout=3.5).json().get("results", [])
+                            for item in res_m:
+                                if not item.get("poster_path"):
+                                    continue
+                                item["media_type"] = "movie"
+                                chave = f"movie_{item.get('id')}"
+                                if chave not in vistos:
+                                    vistos.add(chave)
+                                    itens_totais.append(item)
+                        except Exception:
+                            pass
+
+                    for pg in [1, 2]:
+                        try:
+                            url_t = f"https://api.themoviedb.org/3/discover/tv?api_key={tmdb_key}&language=pt-BR&sort_by=vote_count.desc&with_keywords={kw_ids_str}&vote_count.gte=10&page={pg}"
+                            res_t = requests.get(url_t, timeout=3.5).json().get("results", [])
+                            for item in res_t:
+                                if not item.get("poster_path"):
+                                    continue
+                                item["media_type"] = "tv"
+                                chave = f"tv_{item.get('id')}"
+                                if chave not in vistos:
+                                    vistos.add(chave)
+                                    itens_totais.append(item)
+                        except Exception:
+                            pass
+
+                for pg in [1, 2]:
+                    try:
+                        url_multi = f"https://api.themoviedb.org/3/search/multi?api_key={tmdb_key}&query={quote_plus(termo_limpo)}&language=pt-BR&include_adult=false&page={pg}"
+                        res_multi = requests.get(url_multi, timeout=3.0).json().get("results", [])
+                        for item in res_multi:
+                            mtype = item.get("media_type")
+                            if mtype not in ["movie", "tv"]:
+                                mtype = "tv" if "name" in item else "movie"
+                            item["media_type"] = mtype
+
+                            if item.get("poster_path") and item.get("vote_count", 0) >= 20:
+                                chave = f"{mtype}_{item.get('id')}"
+                                if chave not in vistos:
+                                    vistos.add(chave)
+                                    itens_totais.append(item)
+                        except Exception:
+                            pass
+
+                contexto_busca["itens_cache"] = sorted(itens_totais, key=lambda x: x.get("vote_count", 0), reverse=True)
+            except Exception as ex:
+                print(f"Erro pesquisa tema: {ex}")
+            finally:
+                progresso.visible = False
+                renderizar_itens_busca_contexto()
+
+        threading.Thread(target=_fetch, daemon=True).start()
+
+    def selecionar_sugestao_filme(mid, mtype, tit, ano, p_url):
+        ocultar_sugestoes()
+        campo_busca.value = tit
+        campo_busca.update()
+        abrir_detalhes(mid, mtype, tit, ano, p_url, tela_atual="home")
+
+    def buscar_sugestoes_api(termo, epoch_disparo):
+        if epoch_disparo != versao_busca_atual["epoch"]:
+            return
+
+        c = carregar_config()
+        tmdb_key = c.get("tmdb_key", "").strip()
+        termo_limpo = termo.strip()
+        if not tmdb_key or len(termo_limpo) < 2:
+            ocultar_sugestoes()
+            return
+
+        try:
+            url_multi = "https://api.themoviedb.org/3/search/multi"
+            params_multi = {"api_key": tmdb_key, "query": termo_limpo, "language": "pt-BR", "include_adult": "false"}
+            resp_multi = requests.get(url_multi, params=params_multi, timeout=3.0)
+            
+            if epoch_disparo != versao_busca_atual["epoch"]:
+                return
+
+            itens_multi = resp_multi.json().get("results", []) if resp_multi.status_code == 200 else []
+
+            coluna_sugestoes.controls.clear()
+
+            linha_tema_universal = ft.Container(
+                padding=8,
+                border_radius=6,
+                bgcolor="#164e63",
+                on_click=lambda e, t=termo_limpo: executar_pesquisa_tema_ou_termo(t),
+                content=ft.Row([
+                    ft.Icon(ft.Icons.SEARCH, size=18, color="#38bdf8"),
+                    ft.Column([
+                        ft.Text(f'Ver catálogo sobre "{termo_limpo}"', size=12, weight="bold", color="white", max_lines=1, overflow="ellipsis"),
+                        ft.Text("🏷️ Assunto, contexto ou tema", size=10, color="#7dd3fc")
+                    ], spacing=2, expand=True)
+                ], spacing=8)
+            )
+            coluna_sugestoes.controls.append(linha_tema_universal)
+
+            pessoas = [i for i in itens_multi if i.get("media_type") == "person"][:2]
+            for p in pessoas:
+                pid = p.get("id")
+                pnome = p.get("name") or "Artista"
+                dept = p.get("known_for_department") or "Atuação"
+                dept_traduzido = "Direção" if dept == "Directing" else "Ator/Atriz"
+                pic = p.get("profile_path")
+                pic_url = f"https://image.tmdb.org/t/p/w185{pic}" if pic else None
+
+                linha_p = ft.Container(
+                    padding=6,
+                    border_radius=6,
+                    bgcolor="#1e293b",
+                    on_click=lambda e, person_id=pid, name=pnome: exibir_filmografia_pessoa(person_id, name),
+                    content=ft.Row([
+                        ft.Image(src=pic_url if pic_url else "https://via.placeholder.com/32x46?text=👤", width=32, height=46, border_radius=4, fit="cover"),
+                        ft.Column([
+                            ft.Text(pnome, size=12, weight="bold", color="white", max_lines=1, overflow="ellipsis"),
+                            ft.Text(f"👤 {dept_traduzido} • Filmografia", size=10, color="#38bdf8")
+                        ], spacing=2, expand=True)
+                    ], spacing=8)
+                )
+                coluna_sugestoes.controls.append(linha_p)
+
+            obras = [i for i in itens_multi if i.get("media_type") in ["movie", "tv"] and i.get("poster_path")][:4]
+            for item in obras:
+                mtype = item.get("media_type", "movie")
+                mid = item.get("id")
+                tit = item.get("title") or item.get("name") or "Sem título"
+                ano = str((item.get("release_date") or item.get("first_air_date")) or "")[:4]
+                p_path = item.get("poster_path")
+                p_url = f"https://image.tmdb.org/t/p/w185{p_path}" if p_path else None
+
+                linha_item = ft.Container(
+                    padding=6,
+                    border_radius=6,
+                    bgcolor=COR_CARD,
+                    on_click=lambda e, m=mid, mt=mtype, t=tit, a=ano, p=p_url: selecionar_sugestao_filme(m, mt, t, a, p),
+                    content=ft.Row([
+                        ft.Image(src=p_url if p_url else "https://via.placeholder.com/40x60?text=-", width=32, height=46, border_radius=4, fit="cover"),
+                        ft.Column([
+                            ft.Text(tit, size=12, weight="bold", color="white", max_lines=1, overflow="ellipsis"),
+                            ft.Text(f"{ano} • {'Série' if mtype == 'tv' else 'Filme'}", size=10, color="#94a3b8")
+                        ], spacing=2, expand=True)
+                    ], spacing=8)
+                )
+                coluna_sugestoes.controls.append(linha_item)
+
+            if len(coluna_sugestoes.controls) > 0 and epoch_disparo == versao_busca_atual["epoch"]:
+                largura_atual = page.width if page.width else 1000
+                container_sugestoes.visible = True
+                if largura_atual < 720:
+                    container_sugestoes.width = min(int(largura_atual * 0.90), 380)
+                    container_sugestoes.left = max(10, int((largura_atual - container_sugestoes.width) / 2))
+                    container_sugestoes.top = 165
+                else:
+                    container_sugestoes.width = 320
+                    container_sugestoes.left = max(0, int((largura_atual / 2) - 160))
+                    container_sugestoes.top = 165
+            else:
+                ocultar_sugestoes()
+
+            container_sugestoes.update()
+        except Exception as ex:
+            print(f"Erro busca expandida: {ex}")
+
+    tela_perfis = ft.Container(
+        expand=True,
+        alignment=ft.Alignment(0, 0),
+        padding=ft.Padding(20, 40, 20, 40),
+        content=ft.Column([
+            ft.Image(src="logo.png", height=75, fit="contain"),
+            ft.Container(height=10),
+            ft.Text("Quem está usando?", size=26, weight="bold", color="white", text_align=ft.TextAlign.CENTER),
+            ft.Container(height=15),
+            linha_cards_perfis
+        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, alignment=ft.MainAxisAlignment.CENTER, spacing=12),
+        visible=True
+    )
+
+    page.add(tela_perfis, layout_mestre)
+    carregar_perfis_tela()
+    ajustar_layout_responsivo()
+    page.update()
+
+if __name__ == "__main__":
+    porta = int(os.environ.get("PORT", 8550))
+    ft.run(
+        main,
+        view=ft.AppView.WEB_BROWSER,
+        host="0.0.0.0",
+        port=porta,
+        assets_dir=DIR_ASSETS
     )
