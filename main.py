@@ -189,26 +189,16 @@ def main(page: ft.Page):
         largura = page.width if page.width else 1000
         return largura < 720
 
-    def abrir_dialogo_generico(modal):
-        if hasattr(page, "open"):
-            page.open(modal)
-        else:
-            page.dialog = modal
-            modal.open = True
-            page.update()
+    def abrir_dialogo(modal):
+        page.dialog = modal
+        modal.open = True
+        page.update()
 
-    def fechar_dialogo_generico(modal=None):
-        if hasattr(page, "close") and modal:
-            try:
-                page.close(modal)
-            except Exception:
-                pass
+    def fechar_dialogo(modal=None):
         if page.dialog:
             page.dialog.open = False
         if modal:
             modal.open = False
-            if modal in page.overlay:
-                page.overlay.remove(modal)
         page.update()
 
     def recarregar_ids_salvos():
@@ -626,7 +616,7 @@ def main(page: ft.Page):
                     if conn:
                         conn.close()
 
-            fechar_dialogo_generico(modal)
+            fechar_dialogo(modal)
             carregar_biblioteca()
 
         modal = ft.AlertDialog(
@@ -638,13 +628,13 @@ def main(page: ft.Page):
                 linha_6_10,
             ], tight=True, spacing=10),
             actions=[
-                ft.Button(content=ft.Text("Cancelar", color="#94a3b8"), on_click=lambda e: fechar_dialogo_generico(modal)),
+                ft.Button(content=ft.Text("Cancelar", color="#94a3b8"), on_click=lambda e: fechar_dialogo(modal)),
                 ft.Button(content=ft.Text("Confirmar", color="white"), bgcolor=COR_PETROLEO, on_click=salvar_nota)
             ],
             actions_alignment=ft.MainAxisAlignment.END
         )
 
-        abrir_dialogo_generico(modal)
+        abrir_dialogo(modal)
 
     def pedir_confirmacao_remocao(fid, titulo):
         def confirmar_remocao(e):
@@ -664,7 +654,7 @@ def main(page: ft.Page):
                 recarregar_ids_salvos()
                 atualizar_contador_biblioteca()
 
-            fechar_dialogo_generico(modal_exclusao)
+            fechar_dialogo(modal_exclusao)
             carregar_biblioteca()
 
         modal_exclusao = ft.AlertDialog(
@@ -672,12 +662,12 @@ def main(page: ft.Page):
             title=ft.Text("Confirmar Exclusão", size=16, weight="bold", color="#ef4444"),
             content=ft.Text(f"Deseja remover '{titulo}' da lista de Assistidos?", size=14, color="#cbd5e1"),
             actions=[
-                ft.Button(content=ft.Text("Cancelar", color="#94a3b8"), on_click=lambda e: fechar_dialogo_generico(modal_exclusao)),
+                ft.Button(content=ft.Text("Cancelar", color="#94a3b8"), on_click=lambda e: fechar_dialogo(modal_exclusao)),
                 ft.Button(content=ft.Text("Sim, remover", color="white"), bgcolor=COR_VERMELHO_PLAY, on_click=confirmar_remocao)
             ],
             actions_alignment=ft.MainAxisAlignment.END
         )
-        abrir_dialogo_generico(modal_exclusao)
+        abrir_dialogo(modal_exclusao)
 
     def abrir_detalhes(mid, mtype, titulo_prev, ano_prev, poster_prev, tela_atual="home"):
         ocultar_sugestoes()
@@ -855,7 +845,7 @@ def main(page: ft.Page):
             modal_det.update()
 
         btn_slv.on_click = acao_salvar_modal
-        btn_ir.on_click = lambda e: (fechar_dialogo_generico(modal_det), alternar_tela(1))
+        btn_ir.on_click = lambda e: (fechar_dialogo(modal_det), alternar_tela(1))
 
         conteudo = ft.Container(
             width=480,
@@ -864,7 +854,7 @@ def main(page: ft.Page):
             border_radius=12,
             border=criar_borda(1.5, COR_PETROLEO),
             content=ft.Column([
-                ft.Row([ft.Button(content=ft.Text("✕ Fechar", color="white", weight="bold", size=12), bgcolor=COR_PETROLEO, on_click=lambda e: fechar_dialogo_generico(modal_det))], alignment=ft.MainAxisAlignment.END),[cite: 1]
+                ft.Row([ft.Button(content=ft.Text("✕ Fechar", color="white", weight="bold", size=12), bgcolor=COR_PETROLEO, on_click=lambda e: fechar_dialogo(modal_det))], alignment=ft.MainAxisAlignment.END),[cite: 1]
                 ft.Row([dt_img, ft.Column(info_col, spacing=3, width=310)], alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.START, wrap=True, spacing=10),
                 ft.Row([btn_tr, btn_slv], spacing=8, wrap=True) if tela_atual != "biblioteca" else ft.Row([btn_tr]),
                 btn_ir,
@@ -874,7 +864,7 @@ def main(page: ft.Page):
         )
 
         modal_det = ft.AlertDialog(content=conteudo, modal=False, bgcolor="transparent", content_padding=0)
-        abrir_dialogo_generico(modal_det)
+        abrir_dialogo(modal_det)
 
     def adicionar_rapido_poster(e, mid, mtype, titulo, ano, poster_url, chave_id, btn_adicionar):
         uid = sessao_usuario["id"]
@@ -1584,118 +1574,111 @@ def main(page: ft.Page):
         page.update()
         carregar_populares()
 
-    def abrir_modal_novo_perfil(e=None):
-        txt_novo_perfil_nome = ft.TextField(
-            label="Nome do Perfil",
-            label_style=ft.TextStyle(color="#94a3b8"),
-            bgcolor=COR_FUNDO,
-            dense=True,
-            border_radius=8,
-            border_color=COR_BORDA,
-            focused_border_color=COR_PETROLEO,
-            width=280,
-            autofocus=True
-        )
-        txt_novo_perfil_erro = ft.Text("", size=12, color="#ef4444")
+    # Modal de Novo Perfil unificado e persistente
+    txt_novo_perfil_nome = ft.TextField(
+        label="Nome do Perfil",
+        label_style=ft.TextStyle(color="#94a3b8"),
+        bgcolor=COR_FUNDO,
+        dense=True,
+        border_radius=8,
+        border_color=COR_BORDA,
+        focused_border_color=COR_PETROLEO,
+        width=280,
+        autofocus=True
+    )
+    txt_novo_perfil_erro = ft.Text("", size=12, color="#ef4444")
 
-        def salvar_novo_perfil(ev):
-            nome = txt_novo_perfil_nome.value.strip() if txt_novo_perfil_nome.value else ""
-            if len(nome) < 2:
-                txt_novo_perfil_erro.value = "Digite pelo menos 2 caracteres."
-                modal_perfil.update()
+    def acao_salvar_novo_perfil(e):
+        nome = txt_novo_perfil_nome.value.strip() if txt_novo_perfil_nome.value else ""
+        if len(nome) < 2:
+            txt_novo_perfil_erro.value = "Digite pelo menos 2 caracteres."
+            modal_novo_perfil.update()
+            return
+
+        conn = None
+        try:
+            conn = sqlite3.connect(DB_FILE, timeout=5)
+            c = conn.cursor()
+            c.execute("SELECT id FROM usuarios WHERE username = ?", (nome,))
+            if c.fetchone():
+                txt_novo_perfil_erro.value = "Este perfil já existe."
+                modal_novo_perfil.update()
                 return
 
-            conn = None
-            try:
-                conn = sqlite3.connect(DB_FILE, timeout=5)
-                c = conn.cursor()
-                c.execute("SELECT id FROM usuarios WHERE username = ?", (nome,))
-                if c.fetchone():
-                    txt_novo_perfil_erro.value = "Este perfil já existe."
-                    modal_perfil.update()
-                    return
+            c.execute("SELECT COUNT(*) FROM usuarios")
+            qtd = c.fetchone()[0]
+            cor_escolhida = CORES_AVATAR[qtd % len(CORES_AVATAR)]
 
-                c.execute("SELECT COUNT(*) FROM usuarios")
-                qtd = c.fetchone()[0]
-                cor_escolhida = CORES_AVATAR[qtd % len(CORES_AVATAR)]
+            c.execute("INSERT INTO usuarios (username, cor_avatar) VALUES (?, ?)", (nome, cor_escolhida))
+            novo_id = c.lastrowid
+            conn.commit()
 
-                c.execute("INSERT INTO usuarios (username, cor_avatar) VALUES (?, ?)", (nome, cor_escolhida))
-                novo_id = c.lastrowid
-                conn.commit()
+            fechar_dialogo(modal_novo_perfil)
+            entrar_com_perfil(novo_id, nome, cor_escolhida)
+        except Exception as err:
+            txt_novo_perfil_erro.value = f"Erro: {err}"
+            modal_novo_perfil.update()
+        finally:
+            if conn:
+                conn.close()
 
-                fechar_dialogo_generico(modal_perfil)
-                entrar_com_perfil(novo_id, nome, cor_escolhida)
-            except Exception as err:
-                txt_novo_perfil_erro.value = f"Erro: {err}"
-                modal_perfil.update()
-            finally:
-                if conn:
-                    conn.close()
+    txt_novo_perfil_nome.on_submit = acao_salvar_novo_perfil
 
-        txt_novo_perfil_nome.on_submit = salvar_novo_perfil
+    modal_novo_perfil = ft.AlertDialog(
+        modal=False,
+        title=ft.Text("Adicionar Novo Perfil", size=16, weight="bold", color="white"),
+        content=ft.Column([
+            ft.Text("Como deseja chamar este perfil?", size=13, color="#94a3b8"),
+            txt_novo_perfil_erro,
+            txt_novo_perfil_nome
+        ], tight=True, spacing=10),
+        actions=[
+            ft.Button(content=ft.Text("Cancelar", color="#94a3b8"), on_click=lambda e: fechar_dialogo(modal_novo_perfil)),
+            ft.Button(content=ft.Text("Salvar Perfil", color="white"), bgcolor=COR_PETROLEO, on_click=acao_salvar_novo_perfil)[cite: 4, 5]
+        ],
+        actions_alignment=ft.MainAxisAlignment.END
+    )
 
-        modal_perfil = ft.AlertDialog(
-            modal=False,
-            title=ft.Text("Adicionar Novo Perfil", size=16, weight="bold", color="white"),
-            content=ft.Column([
-                ft.Text("Como deseja chamar este perfil?", size=13, color="#94a3b8"),
-                txt_novo_perfil_erro,
-                txt_novo_perfil_nome
-            ], tight=True, spacing=10),
-            actions=[
-                ft.Button(content=ft.Text("Cancelar", color="#94a3b8"), on_click=lambda ev: fechar_dialogo_generico(modal_perfil)),
-                ft.Button(content=ft.Text("Salvar Perfil", color="white"), bgcolor=COR_PETROLEO, on_click=salvar_novo_perfil)[cite: 4, 5]
-            ],
-            actions_alignment=ft.MainAxisAlignment.END
-        )
-        abrir_dialogo_generico(modal_perfil)
+    def abrir_modal_novo_perfil(e=None):
+        txt_novo_perfil_nome.value = ""
+        txt_novo_perfil_erro.value = ""
+        abrir_dialogo(modal_novo_perfil)
 
     def criar_card_avatar(uid, nome, cor):
         iniciais = (nome[:2] if len(nome) >= 2 else nome).upper()
-        avatar_box = ft.Container(
-            content=ft.Text(iniciais, size=32, weight="bold", color="white"),
-            alignment=ft.Alignment(0, 0),
+        btn_box = ft.ElevatedButton(
+            content=ft.Text(iniciais, size=28, weight="bold", color="white"),
             width=110,
             height=110,
-            border_radius=12,
             bgcolor=cor,
-            border=criar_borda(2, "transparent")
-        )
-        card_item = ft.Container(
-            content=ft.Column([
-                avatar_box,
-                ft.Text(nome, size=14, weight="bold", color="#94a3b8", text_align=ft.TextAlign.CENTER, width=110)
-            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10),
-            border_radius=12,
-            padding=4,
-            ink=True,
+            style=ft.ButtonStyle(
+                shape=ft.RoundedRectangleBorder(radius=12),
+                padding=0
+            ),
             on_click=lambda e, u=uid, n=nome, c=cor: entrar_com_perfil(u, n, c)
         )
-        return card_item
+        return ft.Column([
+            btn_box,
+            ft.Text(nome, size=14, weight="bold", color="#94a3b8", text_align=ft.TextAlign.CENTER, width=110)
+        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=8)
 
     def criar_card_adicionar():
-        box_add = ft.Container(
-            content=ft.Icon(ft.Icons.ADD_ROUNDED, size=48, color="#64748b"),
-            alignment=ft.Alignment(0, 0),
+        btn_add = ft.ElevatedButton(
+            content=ft.Icon(ft.Icons.ADD_ROUNDED, size=46, color="#64748b"),
             width=110,
             height=110,
-            border_radius=12,
             bgcolor="#0d1419",
-            border=criar_borda(1.5, "#334155"),
-            ink=True,
+            style=ft.ButtonStyle(
+                shape=ft.RoundedRectangleBorder(radius=12),
+                side=ft.BorderSide(1.5, "#334155"),
+                padding=0
+            ),
             on_click=lambda e: abrir_modal_novo_perfil(e)
         )
-        card_add = ft.Container(
-            content=ft.Column([
-                box_add,
-                ft.Text("Adicionar Perfil", size=13, color="#64748b", text_align=ft.TextAlign.CENTER, width=110)
-            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10),
-            border_radius=12,
-            padding=4,
-            ink=True,
-            on_click=lambda e: abrir_modal_novo_perfil(e)
-        )
-        return card_add
+        return ft.Column([
+            btn_add,
+            ft.Text("Adicionar Perfil", size=13, color="#64748b", text_align=ft.TextAlign.CENTER, width=110)
+        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=8)
 
     def carregar_perfis_tela():
         linha_cards_perfis.controls.clear()
@@ -1711,9 +1694,6 @@ def main(page: ft.Page):
         finally:
             if conn:
                 conn.close()
-
-        if not perfis:
-            abrir_modal_novo_perfil()
 
         for pid, pnome, pcor in perfis:
             cor_final = pcor if pcor else COR_PETROLEO
