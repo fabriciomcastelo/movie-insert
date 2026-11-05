@@ -173,6 +173,9 @@ def main(page: ft.Page):
     ids_salvos_usuario = set()
     titulos_salvos_usuario = set()
 
+    # Ponteiro mutável para evitar qualquer erro de resolução de escopo
+    cb_biblioteca = {"fn": lambda: None}
+
     contexto_busca = {
         "tipo": None,
         "id": None,
@@ -251,280 +254,6 @@ def main(page: ft.Page):
         page.update()
 
     # -------------------------------------------------------------
-    # BIBLIOTECA (DECLARADA ANTES DE SER CHAMADA)
-    # -------------------------------------------------------------
-    def mudar_aba_biblioteca(nova_aba):
-        estado_biblioteca["aba"] = nova_aba
-        if nova_aba == "Para Assistir" and estado_biblioteca["modo"] == "nota_pessoal":
-            estado_biblioteca["modo"] = "nota"
-        elif nova_aba == "Assistidos" and estado_biblioteca["modo"] == "nota":
-            estado_biblioteca["modo"] = "nota_pessoal"
-        carregar_biblioteca()
-
-    def mudar_modo_filtro(novo_modo):
-        estado_biblioteca["modo"] = novo_modo
-        carregar_biblioteca()
-
-    def mudar_filtro_tipo_bib(novo_tipo):
-        estado_biblioteca["filtro_tipo"] = novo_tipo
-        carregar_biblioteca()
-
-    def imprimir_lista():
-        uid = sessao_usuario["id"]
-        filmes = []
-        if uid:
-            conn = None
-            try:
-                conn = sqlite3.connect(DB_FILE, timeout=5)
-                c = conn.cursor()
-                c.execute("SELECT titulo, ano, imdb, rotten, streaming, diretor, tipo FROM filmes WHERE categoria = 'Para Assistir' AND usuario_id = ? ORDER BY titulo ASC", (uid,))
-                filmes = c.fetchall()
-            except Exception:
-                pass
-            finally:
-                if conn:
-                    conn.close()
-
-        if not filmes:
-            return
-
-        linhas = "".join([f"<tr><td>{i}</td><td><b>{t}</b> ({a})</td><td>{'Série' if tp == 'tv' else 'Filme'}</td><td>⭐ {im}</td><td>🍅 {rt}</td><td>{st}</td><td>{dr}</td></tr>" for i, (t, a, im, rt, st, dr, tp) in enumerate(filmes, 1)])
-        html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><title>Para Assistir</title>
-        <style>body{{font-family:sans-serif;margin:20px;}}table{{width:100%;border-collapse:collapse;}}th,td{{border:1px solid #ccc;padding:8px;text-align:left;}}th{{background:#f1f5f9;}}</style>
-        </head><body><h2>🎬 Lista Para Assistir ({len(filmes)})</h2><table><thead><tr><th>#</th><th>Título</th><th>Tipo</th><th>IMDb</th><th>RT</th><th>Streaming</th><th>Direção/Criação</th></tr></thead><tbody>{linhas}</tbody></table><script>window.onload=function(){{window.print();}}</script></body></html>"""
-        arq = os.path.abspath("lista_para_assistir.html")
-        with open(arq, "w", encoding="utf-8") as f:
-            f.write(html)
-        page.launch_url(f"file://{arq}")
-
-    def carregar_biblioteca():
-        coluna_biblioteca_itens.controls.clear()
-        todos_itens = []
-        uid = sessao_usuario["id"]
-
-        if uid:
-            conn = None
-            try:
-                conn = sqlite3.connect(DB_FILE, timeout=5)
-                c = conn.cursor()
-                c.execute("""
-                    SELECT id, titulo, ano, poster_url, nota_usuario, categoria, streaming, generos, imdb, tipo 
-                    FROM filmes 
-                    WHERE usuario_id = ? 
-                    ORDER BY rowid DESC
-                """, (uid,))
-                todos_itens = c.fetchall()
-            except Exception:
-                pass
-            finally:
-                if conn:
-                    conn.close()
-
-        total_para_assistir = sum(1 for it in todos_itens if it[5] == "Para Assistir")
-        total_assistidos = sum(1 for it in todos_itens if it[5] == "Assistidos")
-
-        aba_atual = estado_biblioteca["aba"]
-        modo_atual = estado_biblioteca["modo"]
-        tipo_atual = estado_biblioteca["filtro_tipo"]
-
-        itens_aba = [it for it in todos_itens if it[5] == aba_atual]
-
-        if tipo_atual == "movie":
-            itens_filtrados = [it for it in itens_aba if (it[9] or "movie") == "movie"]
-        elif tipo_atual == "tv":
-            itens_filtrados = [it for it in itens_aba if it[9] == "tv"]
-        else:
-            itens_filtrados = itens_aba
-
-        btn_print = ft.Button(content=ft.Text("🖨️ Imprimir", color="white", size=11, weight="bold"), bgcolor=COR_CHUMBO, on_click=lambda e: imprimir_lista())
-
-        is_para_assistir_ativo = (aba_atual == "Para Assistir")
-        btn_aba_para_assistir = ft.Button(
-            content=ft.Text(f"⏳ Para Assistir ({total_para_assistir})", color="white" if is_para_assistir_ativo else "#94a3b8", weight="bold"),
-            bgcolor=COR_PETROLEO if is_para_assistir_ativo else "#141d24",
-            style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10), side=ft.BorderSide(2, COR_ATIVO_BORDA) if is_para_assistir_ativo else ft.BorderSide(1, COR_BORDA)),
-            on_click=lambda e: mudar_aba_biblioteca("Para Assistir")
-        )
-
-        btn_aba_assistidos = ft.Button(
-            content=ft.Text(f"✓ Assistidos ({total_assistidos})", color="white" if not is_para_assistir_ativo else "#94a3b8", weight="bold"),
-            bgcolor=COR_PETROLEO if not is_para_assistir_ativo else "#141d24",
-            style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10), side=ft.BorderSide(2, COR_ATIVO_BORDA) if not is_para_assistir_ativo else ft.BorderSide(1, COR_BORDA)),
-            on_click=lambda e: mudar_aba_biblioteca("Assistidos")
-        )
-
-        linha_abas_biblioteca = ft.Row(spacing=10, alignment=ft.MainAxisAlignment.CENTER, controls=[btn_aba_para_assistir, btn_aba_assistidos])
-
-        def criar_botao_tipo(rotulo, valor_tipo):
-            ativo = (tipo_atual == valor_tipo)
-            return ft.Button(
-                content=ft.Text(rotulo, color="white" if ativo else "#94a3b8", size=11, weight="bold"),
-                bgcolor=COR_PETROLEO if ativo else COR_CARD,
-                height=32,
-                style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=20), side=ft.BorderSide(1.8, COR_ATIVO_BORDA) if ativo else ft.BorderSide(1, COR_BORDA)),
-                on_click=lambda e, t=valor_tipo: mudar_filtro_tipo_bib(t)
-            )
-
-        barra_tipo = ft.Row(
-            spacing=6,
-            alignment=ft.MainAxisAlignment.CENTER,
-            controls=[
-                ft.Text("Tipo:", size=11, color="#cbd5e1", weight="bold"),
-                criar_botao_tipo("Todos", "todos"),
-                criar_botao_tipo("🎬 Filmes", "movie"),
-                criar_botao_tipo("📺 Séries", "tv"),
-            ]
-        )
-
-        def criar_botao_filtro(rotulo, modo_alvo):
-            ativo = (modo_atual == modo_alvo)
-            return ft.Button(
-                content=ft.Text(rotulo, color="white" if ativo else "#94a3b8", size=11, weight="bold"),
-                bgcolor="#055663" if ativo else COR_CARD,
-                height=32,
-                style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8), side=ft.BorderSide(2, "#38bdf8") if ativo else ft.BorderSide(1, COR_BORDA)),
-                on_click=lambda e, m=modo_alvo: mudar_modo_filtro(m)
-            )
-
-        controles_filtros = [
-            ft.Text("Organizar:", size=11, color="#cbd5e1", weight="bold"),
-            criar_botao_filtro("Streaming", "streaming"),
-            criar_botao_filtro("A-Z", "alfabetico"),
-            criar_botao_filtro("Gênero", "genero"),
-        ]
-
-        if aba_atual == "Para Assistir":
-            controles_filtros.append(criar_botao_filtro("Nota IMDb", "nota"))
-        else:
-            controles_filtros.append(criar_botao_filtro("Nota Pessoal", "nota_pessoal"))
-
-        barra_filtros = ft.Row(spacing=8, wrap=True, alignment=ft.MainAxisAlignment.CENTER, controls=controles_filtros)
-
-        topo_biblioteca = ft.Container(
-            content=ft.Column([
-                ft.Row([ft.Text(f"Biblioteca ({len(todos_itens)})", size=20, weight="bold", color=COR_TEXTO_CLARO), btn_print], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                linha_abas_biblioteca,
-                barra_tipo,
-                barra_filtros
-            ], spacing=10, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-            width=1000
-        )
-
-        coluna_biblioteca_itens.controls.append(topo_biblioteca)
-
-        if not itens_filtrados:
-            coluna_biblioteca_itens.controls.append(
-                ft.Container(content=ft.Text("Nenhum título encontrado com os filtros selecionados.", color="#94a3b8", size=14), padding=ft.Padding(10, 30, 10, 20))
-            )
-            coluna_biblioteca_itens.update()
-            return
-
-        def renderizar_secao(titulo_secao, icone, cor, lista):
-            if not lista:
-                return
-            grade_cards = ft.Row(
-                wrap=True,
-                spacing=10,
-                run_spacing=12,
-                alignment=ft.MainAxisAlignment.CENTER,
-                controls=[
-                    criar_card_filme(mid, tp, tit, ano, p_url, categoria=cat, nota=nota)
-                    for mid, tit, ano, p_url, nota, cat, tp in lista
-                ]
-            )
-            bloco = ft.Container(
-                content=ft.Column([
-                    ft.Row([
-                        ft.Text(f"{icone} {titulo_secao}", size=15, weight="bold", color=cor),
-                        ft.Container(content=ft.Text(f"{len(lista)}", size=11, color="white", weight="bold"), bgcolor=COR_CARD, border=criar_borda(1, COR_BORDA), padding=ft.Padding(5, 2, 5, 2), border_radius=8)
-                    ], spacing=6, alignment=ft.MainAxisAlignment.CENTER),
-                    grade_cards
-                ], spacing=10, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-                width=1000
-            )
-            coluna_biblioteca_itens.controls.append(bloco)
-
-        if modo_atual == "streaming":
-            ordem_secoes = list(STREAMINGS_PADRAO) + ["Stremio", "Sem streaming no BR"]
-            mapa = {s: [] for s in ordem_secoes}
-
-            for row in itens_filtrados:
-                mid, tit, ano, p_url, nota, cat, streaming_txt, tp = row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[9]
-                st_str = (streaming_txt or "").lower()
-                alocado_oficial = False
-
-                for st_nome in STREAMINGS_PADRAO:
-                    termo = st_nome.lower().replace(" plus", "").replace("+", "")
-                    if termo in st_str:
-                        mapa[st_nome].append((mid, tit, ano, p_url, nota, cat, tp or "movie"))
-                        alocado_oficial = True
-
-                if not alocado_oficial:
-                    if "stremio" in st_str:
-                        mapa["Stremio"].append((mid, tit, ano, p_url, nota, cat, tp or "movie"))
-                    else:
-                        mapa["Sem streaming no BR"].append((mid, tit, ano, p_url, nota, cat, tp or "movie"))
-
-            for servico in ordem_secoes:
-                cor = "#a78bfa" if servico == "Stremio" else ("#94a3b8" if servico == "Sem streaming no BR" else COR_TEXTO_CLARO)
-                ico = "🎬" if servico == "Stremio" else ("❌" if servico == "Sem streaming no BR" else "📺")
-                renderizar_secao(servico, ico, cor, mapa[servico])
-
-        elif modo_atual == "alfabetico":
-            mapa_alfabetico = {}
-            itens_ordenados = sorted(itens_filtrados, key=lambda x: normalizar_texto(x[1]))
-            for row in itens_ordenados:
-                mid, tit, ano, p_url, nota, cat, tp = row[0], row[1], row[2], row[3], row[4], row[5], row[9]
-                letra = normalizar_texto(tit)[:1].upper() if tit else "#"
-                if not letra.isalpha():
-                    letra = "#"
-                mapa_alfabetico.setdefault(letra, []).append((mid, tit, ano, p_url, nota, cat, tp or "movie"))
-
-            letras_ordenadas = sorted([k for k in mapa_alfabetico.keys() if k != "#"])
-            if "#" in mapa_alfabetico:
-                letras_ordenadas.append("#")
-
-            for letra in letras_ordenadas:
-                renderizar_secao(f"Letra {letra}", "🔤", COR_TEXTO_CLARO, mapa_alfabetico[letra])
-
-        elif modo_atual == "genero":
-            mapa_generos = {}
-            for row in itens_filtrados:
-                mid, tit, ano, p_url, nota, cat, gens, tp = row[0], row[1], row[2], row[3], row[4], row[5], row[7], row[9]
-                lista_g = [g.strip() for g in gens.split(",")] if gens else ["Outros"]
-                for g in lista_g:
-                    mapa_generos.setdefault(g, []).append((mid, tit, ano, p_url, nota, cat, tp or "movie"))
-
-            for g_nome in sorted(mapa_generos.keys()):
-                renderizar_secao(g_nome, "🏷️", "#fbbf24", mapa_generos[g_nome])
-
-        elif modo_atual == "nota":
-            def pegar_imdb_float(it):
-                val = it[8]
-                try:
-                    return float(str(val).replace(",", ".")) if (val and val != "N/A") else 0.0
-                except Exception:
-                    return 0.0
-
-            itens_ordenados_imdb = sorted(itens_filtrados, key=pegar_imdb_float, reverse=True)
-            lista_cards = [(row[0], row[1], row[2], row[3], row[4], row[5], row[9] or "movie") for row in itens_ordenados_imdb]
-            renderizar_secao("Ordenado por IMDb", "⭐", COR_TEXTO_CLARO, lista_cards)
-
-        elif modo_atual == "nota_pessoal":
-            def pegar_nota_pessoal_float(it):
-                val = it[4]
-                try:
-                    return float(str(val).replace(",", ".")) if (val and val != "N/A") else 0.0
-                except Exception:
-                    return 0.0
-
-            itens_ordenados_pessoal = sorted(itens_filtrados, key=pegar_nota_pessoal_float, reverse=True)
-            lista_cards = [(row[0], row[1], row[2], row[3], row[4], row[5], row[9] or "movie") for row in itens_ordenados_pessoal]
-            renderizar_secao("Sua Nota Pessoal", "★", COR_TEXTO_CLARO, lista_cards)
-
-        coluna_biblioteca_itens.update()
-
-    # -------------------------------------------------------------
     # DIÁLOGOS DINÂMICOS
     # -------------------------------------------------------------
     def abrir_modal_avaliacao(fid, nota_atual=None):
@@ -576,7 +305,7 @@ def main(page: ft.Page):
                     if conn:
                         conn.close()
                 fechar_dialogo_generico(modal)
-                carregar_biblioteca()
+                cb_biblioteca["fn"]()
 
         modal = ft.AlertDialog(
             modal=False,
@@ -615,7 +344,7 @@ def main(page: ft.Page):
                 recarregar_ids_salvos()
                 fechar_dialogo_generico(modal_exclusao)
                 atualizar_contador_biblioteca()
-                carregar_biblioteca()
+                cb_biblioteca["fn"]()
 
         modal_exclusao = ft.AlertDialog(
             modal=False,
@@ -647,7 +376,7 @@ def main(page: ft.Page):
                     conn.close()
             recarregar_ids_salvos()
             atualizar_contador_biblioteca()
-            carregar_biblioteca()
+            cb_biblioteca["fn"]()
 
     def abrir_detalhes(mid, mtype, titulo_prev, ano_prev, poster_prev, tela_atual="home"):
         ocultar_sugestoes()
@@ -687,12 +416,10 @@ def main(page: ft.Page):
                         if cr.get("job") == "Director":
                             diretor = cr.get("name")
                             break
-                    info_criacao = f"Direção: {diretor}"
                 else:
                     criadores = [cr.get("name") for cr in res.get("created_by", [])]
                     temporadas = res.get("number_of_seasons", 1)
-                    info_criacao = f"Criador(es): {', '.join(criadores) if criadores else 'Não informado'} • {temporadas} Temporada(s)"
-                    diretor = info_criacao
+                    diretor = f"Criador(es): {', '.join(criadores) if criadores else 'Não informado'} • {temporadas} Temporada(s)"
 
                 credits_data = res.get("credits", {})
                 elenco_list = [a.get("name") for a in credits_data.get("cast", [])[:4]]
@@ -1009,6 +736,9 @@ def main(page: ft.Page):
         )
         return card_corpo
 
+    # Ligação definitiva da função de biblioteca com a referência compartilhada
+    cb_biblioteca["fn"] = carregar_biblioteca
+
     def carregar_mais_busca():
         if paginacao["carregando"] or paginacao["fim"]:
             return
@@ -1297,6 +1027,22 @@ def main(page: ft.Page):
         wrap=True
     )
 
+    coluna_sugestoes = ft.Column(spacing=4, scroll=ft.ScrollMode.AUTO)
+    container_sugestoes = ft.Container(
+        content=coluna_sugestoes,
+        bgcolor="#111827",
+        border_radius=8,
+        border=criar_borda(1.2, COR_PETROLEO),
+        padding=6,
+        visible=False,
+        width=320,
+        height=260,
+        top=160,
+        left=20,
+        shadow=ft.BoxShadow(blur_radius=15, color="#000000")
+    )
+    page.overlay.append(container_sugestoes)
+
     def ocultar_sugestoes():
         if container_sugestoes.visible:
             container_sugestoes.visible = False
@@ -1494,7 +1240,7 @@ def main(page: ft.Page):
             linha_controles_unificados.visible = True
             btn_tab_bib.border = criar_borda(1.2, COR_BORDA)
         elif indice == 1:
-            carregar_biblioteca()
+            cb_biblioteca["fn"]()
             view_inicio.visible = False
             view_biblioteca.visible = True
             linha_controles_unificados.visible = False
