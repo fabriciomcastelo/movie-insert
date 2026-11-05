@@ -5,6 +5,7 @@ import os
 import requests
 import threading
 import unicodedata
+import time
 from urllib.parse import quote_plus
 
 CONFIG_FILE = "config.json"
@@ -247,9 +248,9 @@ def main(page: ft.Page):
     progresso = ft.ProgressBar(color=COR_PETROLEO, bgcolor="transparent", visible=False)
 
     def abrir_dialogo(modal):
-        modal.open = True
         if modal not in page.overlay:
             page.overlay.append(modal)
+        modal.open = True
         page.update()
 
     def fechar_dialogo(modal):
@@ -306,7 +307,7 @@ def main(page: ft.Page):
             is_ativo = (btn.data == str(valor))
             btn.bgcolor = COR_PETROLEO if is_ativo else "#1f2937"
             btn.content.color = "white" if is_ativo else "#94a3b8"
-        modal_avaliacao.update()
+        page.update()
 
     for n in range(1, 11):
         s_val = str(n)
@@ -498,7 +499,7 @@ def main(page: ft.Page):
         btn_ir_lista.visible = True
 
         atualizar_contador_biblioteca()
-        conteudo_modal.update()
+        page.update()
 
     btn_salvar.on_click = salvar_filme_ativo
 
@@ -550,7 +551,7 @@ def main(page: ft.Page):
         def _fetch():
             try:
                 url_tmdb = f"https://api.themoviedb.org/3/{mtype_seguro}/{mid}?api_key={tmdb_key}&language=pt-BR&append_to_response=credits,watch/providers,external_ids,videos,release_dates"
-                res = requests.get(url_tmdb, timeout=3.5).json()
+                res = requests.get(url_tmdb, timeout=4.0).json()
 
                 if mtype_seguro == "movie":
                     diretor = "N/A"
@@ -588,7 +589,7 @@ def main(page: ft.Page):
 
                 if omdb_key and imdb_id:
                     try:
-                        res_omdb = requests.get(f"https://www.omdbapi.com/?i={imdb_id}&apikey={omdb_key}", timeout=2.0).json()
+                        res_omdb = requests.get(f"https://www.omdbapi.com/?i={imdb_id}&apikey={omdb_key}", timeout=2.5).json()
                         if res_omdb.get("Response") == "True":
                             imdb_nota = res_omdb.get("imdbRating", "N/A")
                             m_raw = res_omdb.get("Metascore", "N/A")
@@ -628,7 +629,6 @@ def main(page: ft.Page):
                     stream_nomes.append("Stremio")
 
                 streamings = ", ".join(stream_nomes) if stream_nomes else "Sem streaming no BR"
-
                 chave_id = imdb_id or chave_tmdb_calc
 
                 nota_usr = None
@@ -731,7 +731,7 @@ def main(page: ft.Page):
             finally:
                 progresso.visible = False
                 progresso.update()
-                conteudo_modal.update()
+                page.update()
 
         threading.Thread(target=_fetch, daemon=True).start()
 
@@ -742,6 +742,21 @@ def main(page: ft.Page):
 
         mtype_seguro = "tv" if mtype in ["tv", "series"] else "movie"
 
+        c_cfg = carregar_config()
+        tmdb_key = c_cfg.get("tmdb_key", "").strip()
+        stream_nomes = []
+        if tmdb_key:
+            try:
+                raw_mid = mid.split("_")[1] if "_" in str(mid) else mid
+                url_wp = f"https://api.themoviedb.org/3/{mtype_seguro}/{raw_mid}/watch/providers?api_key={tmdb_key}"
+                res_wp = requests.get(url_wp, timeout=2.5).json()
+                br_providers = res_wp.get("results", {}).get("BR", {}).get("flatrate", [])
+                stream_nomes = [p.get("provider_name") for p in br_providers]
+            except Exception:
+                pass
+
+        streamings_txt = ", ".join(stream_nomes) if stream_nomes else "Sem streaming no BR"
+
         conn = None
         try:
             conn = sqlite3.connect(DB_FILE, timeout=5)
@@ -750,8 +765,8 @@ def main(page: ft.Page):
             if not c.fetchone():
                 c.execute("""
                     INSERT INTO filmes (id, titulo, ano, diretor, elenco, sinopse, imdb, rotten, metascore, streaming, poster_url, categoria, nota_usuario, trailer_url, generos, usuario_id, tipo)
-                    VALUES (?, ?, ?, 'N/A', 'N/A', 'Adicionado diretamente da tela inicial.', 'N/A', 'N/A', 'N/A', 'Consultando...', ?, 'Para Assistir', NULL, NULL, 'Outros', ?, ?)
-                """, (chave_id, titulo, str(ano), poster_url, uid, mtype_seguro))
+                    VALUES (?, ?, ?, 'N/A', 'N/A', 'Adicionado diretamente da tela inicial.', 'N/A', 'N/A', 'N/A', ?, ?, 'Para Assistir', NULL, NULL, 'Outros', ?, ?)
+                """, (chave_id, titulo, str(ano), streamings_txt, poster_url, uid, mtype_seguro))
                 conn.commit()
                 ids_salvos_usuario.add(chave_id)
                 if titulo:
@@ -775,7 +790,6 @@ def main(page: ft.Page):
         chave_id = mid if isinstance(mid, str) and ("_" in mid or mid.startswith("tt")) else f"{mtype_seguro}_{mid}"
         mobile = eh_mobile()
         
-        # Largura adaptativa: no celular aproveita melhor o ecrã
         largura_card = 160 if mobile else 162
         altura_img = 225 if mobile else 216
 
@@ -1780,8 +1794,8 @@ def main(page: ft.Page):
                                 if chave not in vistos:
                                     vistos.add(chave)
                                     itens_totais.append(item)
-                    except Exception:
-                        pass
+                        except Exception:
+                            pass
 
                 contexto_busca["itens_cache"] = sorted(itens_totais, key=lambda x: x.get("vote_count", 0), reverse=True)
             except Exception as ex:
@@ -2357,7 +2371,6 @@ def main(page: ft.Page):
 
     page.add(tela_perfis, layout_mestre)
     carregar_perfis_tela()
-    ajustar_layout_responsivo()
     page.update()
 
 if __name__ == "__main__":
