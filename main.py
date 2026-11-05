@@ -6,7 +6,6 @@ import requests
 import threading
 import unicodedata
 from urllib.parse import quote_plus
-from datetime import datetime
 
 CONFIG_FILE = "config.json"
 DB_FILE = "filmes.db"
@@ -63,14 +62,8 @@ def criar_borda(espessura, cor):
     return ft.Border(top=bs, right=bs, bottom=bs, left=bs)
 
 STREAMINGS_PADRAO = [
-    "Netflix",
-    "Max",
-    "Amazon Prime Video",
-    "Disney Plus",
-    "Apple TV Plus",
-    "Globoplay",
-    "Paramount Plus",
-    "Telecine"
+    "Netflix", "Max", "Amazon Prime Video", "Disney Plus",
+    "Apple TV Plus", "Globoplay", "Paramount Plus", "Telecine"
 ]
 
 def carregar_config():
@@ -103,7 +96,6 @@ def init_db():
         conn = sqlite3.connect(DB_FILE, timeout=15)
         c = conn.cursor()
         c.execute("PRAGMA journal_mode=WAL;")
-        
         c.execute("""
             CREATE TABLE IF NOT EXISTS usuarios (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -111,7 +103,6 @@ def init_db():
                 cor_avatar TEXT DEFAULT '#03434d'
             )
         """)
-        
         c.execute("""
             CREATE TABLE IF NOT EXISTS filmes (
                 id TEXT,
@@ -213,6 +204,10 @@ def main(page: ft.Page):
         "itens_cache": [],
         "offset": 0
     }
+
+    def eh_mobile():
+        largura = page.width if page.width else 1000
+        return largura < 720
 
     def recarregar_ids_salvos():
         ids_salvos_usuario.clear()
@@ -778,7 +773,12 @@ def main(page: ft.Page):
     def criar_card_filme(mid, mtype, titulo, ano, poster_url, categoria=None, nota=None):
         mtype_seguro = "tv" if mtype in ["tv", "series"] else "movie"
         chave_id = mid if isinstance(mid, str) and ("_" in mid or mid.startswith("tt")) else f"{mtype_seguro}_{mid}"
+        mobile = eh_mobile()
         
+        # Largura adaptativa: no celular aproveita melhor o ecrã
+        largura_card = 160 if mobile else 162
+        altura_img = 225 if mobile else 216
+
         acoes = []
         if categoria == "Para Assistir":
             acoes.append(
@@ -842,8 +842,8 @@ def main(page: ft.Page):
                 disabled=ja_esta_salvo,
                 bottom=6,
                 right=6,
-                width=28,
-                height=28,
+                width=32 if mobile else 28,
+                height=32 if mobile else 28,
                 style=ft.ButtonStyle(padding=0)
             )
             btn_add_rapido.on_click = lambda e, m=mid, mt=mtype_seguro, t=titulo, a=ano, p=poster_url, c=chave_id, b=btn_add_rapido: adicionar_rapido_poster(e, m, mt, t, a, p, c, b)
@@ -851,8 +851,8 @@ def main(page: ft.Page):
         stack_itens = [
             ft.Image(
                 src=poster_url if poster_url else "https://via.placeholder.com/152x216?text=Sem+Poster",
-                width=152,
-                height=216,
+                width=largura_card - 10,
+                height=altura_img,
                 border_radius=6,
                 fit="cover"
             )
@@ -865,7 +865,7 @@ def main(page: ft.Page):
         imagem_com_badge = ft.Stack(stack_itens)
 
         card_corpo = ft.Container(
-            width=162,
+            width=largura_card,
             bgcolor=COR_CARD,
             padding=5,
             border_radius=8,
@@ -878,11 +878,11 @@ def main(page: ft.Page):
                     weight="bold",
                     max_lines=2,
                     overflow="ellipsis",
-                    width=152,
+                    width=largura_card - 10,
                     text_align=ft.TextAlign.CENTER,
                     color=COR_TEXTO_CLARO
                 ),
-                ft.Row(acoes, spacing=3, alignment=ft.MainAxisAlignment.SPACE_BETWEEN, width=152) if acoes else ft.Container()
+                ft.Row(acoes, spacing=3, alignment=ft.MainAxisAlignment.SPACE_BETWEEN, width=largura_card - 10) if acoes else ft.Container()
             ], spacing=3, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
             on_click=lambda e: abrir_detalhes(mid, mtype_seguro, titulo, ano, poster_url, tela_atual="home" if categoria is None else "biblioteca")
         )
@@ -950,14 +950,14 @@ def main(page: ft.Page):
         else:
             carregar_populares(incrementar=True)
 
-    grade_populares = ft.Row(wrap=True, spacing=12, run_spacing=14, alignment=ft.MainAxisAlignment.CENTER)
+    grade_populares = ft.Row(wrap=True, spacing=10, run_spacing=12, alignment=ft.MainAxisAlignment.CENTER)
     coluna_biblioteca_itens = ft.Column(spacing=18, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
     spinner_carregamento = ft.ProgressRing(width=28, height=28, stroke_width=2.5, color=COR_PETROLEO, visible=False)
 
     btn_carregar_mais = ft.Button(
         content=ft.Text("Carregar Mais Títulos", size=12, weight="bold", color=COR_TEXTO_CLARO),
         bgcolor=COR_CARD,
-        height=36,
+        height=38,
         style=ft.ButtonStyle(
             shape=ft.RoundedRectangleBorder(radius=8),
             side=ft.BorderSide(1, COR_BORDA)
@@ -1450,8 +1450,8 @@ def main(page: ft.Page):
                 return
             grade_cards = ft.Row(
                 wrap=True,
-                spacing=12,
-                run_spacing=14,
+                spacing=10,
+                run_spacing=12,
                 alignment=ft.MainAxisAlignment.CENTER,
                 controls=[
                     criar_card_filme(mid, tp, tit, ano, p_url, categoria=cat, nota=nota)
@@ -1472,40 +1472,6 @@ def main(page: ft.Page):
                     ], spacing=6, alignment=ft.MainAxisAlignment.CENTER),
                     grade_cards
                 ], spacing=10, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-                width=1000
-            )
-            coluna_biblioteca_itens.controls.append(bloco)
-
-        def renderizar_grade_lado_a_lado(lista, texto_info=None):
-            if not lista:
-                return
-            grade = ft.Row(
-                wrap=True,
-                spacing=12,
-                run_spacing=14,
-                alignment=ft.MainAxisAlignment.CENTER,
-                controls=[
-                    criar_card_filme(mid, tp, tit, ano, p_url, categoria=cat, nota=nota)
-                    for mid, tit, ano, p_url, nota, cat, tp in lista
-                ]
-            )
-            elementos = []
-            if texto_info:
-                elementos.append(
-                    ft.Row([
-                        ft.Text(texto_info, size=15, weight="bold", color=COR_TEXTO_CLARO),
-                        ft.Container(
-                            content=ft.Text(f"{len(lista)}", size=11, color="white", weight="bold"),
-                            bgcolor=COR_CARD,
-                            border=criar_borda(1, COR_BORDA),
-                            padding=ft.Padding(5, 2, 5, 2),
-                            border_radius=8
-                        )
-                    ], spacing=6, alignment=ft.MainAxisAlignment.CENTER)
-                )
-            elementos.append(grade)
-            bloco = ft.Container(
-                content=ft.Column(elementos, spacing=10, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
                 width=1000
             )
             coluna_biblioteca_itens.controls.append(bloco)
@@ -1577,10 +1543,7 @@ def main(page: ft.Page):
                 (row[0], row[1], row[2], row[3], row[4], row[5], row[9] or "movie")
                 for row in itens_ordenados_imdb
             ]
-            renderizar_grade_lado_a_lado(
-                lista_cards,
-                texto_info="⭐ Ordenado por Nota do IMDb (Maior para Menor)"
-            )
+            renderizar_secao("Ordenado por IMDb", "⭐", COR_TEXTO_CLARO, lista_cards)
 
         elif modo_atual == "nota_pessoal":
             def pegar_nota_pessoal_float(it):
@@ -1595,10 +1558,7 @@ def main(page: ft.Page):
                 (row[0], row[1], row[2], row[3], row[4], row[5], row[9] or "movie")
                 for row in itens_ordenados_pessoal
             ]
-            renderizar_grade_lado_a_lado(
-                lista_cards,
-                texto_info="★ Ordenado por Sua Nota Pessoal (10 a 1)"
-            )
+            renderizar_secao("Sua Nota Pessoal", "★", COR_TEXTO_CLARO, lista_cards)
 
         coluna_biblioteca_itens.update()
 
@@ -1820,8 +1780,8 @@ def main(page: ft.Page):
                                 if chave not in vistos:
                                     vistos.add(chave)
                                     itens_totais.append(item)
-                        except Exception:
-                            pass
+                    except Exception:
+                        pass
 
                 contexto_busca["itens_cache"] = sorted(itens_totais, key=lambda x: x.get("vote_count", 0), reverse=True)
             except Exception as ex:
@@ -2108,15 +2068,20 @@ def main(page: ft.Page):
     )
 
     def ajustar_layout_responsivo(e=None):
+        mobile = eh_mobile()
         largura_janela = page.width if page.width else 1000
-        if largura_janela < 720:
+        if mobile:
             img_logo.height = 60
             container_input_busca.width = min(int(largura_janela * 0.92), 380)
             titulo_trends.width = None
+            grade_populares.spacing = 8
+            grade_populares.run_spacing = 10
         else:
             img_logo.height = 68
             container_input_busca.width = 340
             titulo_trends.width = 1100
+            grade_populares.spacing = 12
+            grade_populares.run_spacing = 14
         page.update()
 
     page.on_resized = ajustar_layout_responsivo
@@ -2138,7 +2103,6 @@ def main(page: ft.Page):
         spacing=8
     )
 
-    # Removido o on_scroll contínuo para acabar com o congestionamento do WebSocket no telemóvel
     view_inicio = ft.Container(
         expand=True,
         padding=ft.Padding(8, 0, 8, 10),
@@ -2317,14 +2281,8 @@ def main(page: ft.Page):
             height=110,
             border_radius=12,
             bgcolor=cor,
-            border=criar_borda(2, "transparent"),
-            animate=ft.Animation(150, ft.AnimationCurve.EASE_OUT)
+            border=criar_borda(2, "transparent")
         )
-
-        def on_hover_card(e):
-            avatar_box.border = criar_borda(2, "white" if e.data == "true" else "transparent")
-            card_item.scale = 1.05 if e.data == "true" else 1.0
-            card_item.update()
 
         card_item = ft.Container(
             content=ft.Column([
@@ -2333,9 +2291,6 @@ def main(page: ft.Page):
             ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10),
             border_radius=12,
             padding=4,
-            scale=1.0,
-            animate_scale=ft.Animation(150, ft.AnimationCurve.EASE_OUT),
-            on_hover=on_hover_card,
             on_click=lambda e, u=uid, n=nome, c=cor: entrar_com_perfil(u, n, c)
         )
         return card_item
@@ -2351,12 +2306,6 @@ def main(page: ft.Page):
             border=criar_borda(1.5, "#334155")
         )
 
-        def on_hover_add(e):
-            box_add.border = criar_borda(1.5, "white" if e.data == "true" else "#334155")
-            box_add.content.color = "white" if e.data == "true" else "#64748b"
-            card_add.scale = 1.05 if e.data == "true" else 1.0
-            card_add.update()
-
         card_add = ft.Container(
             content=ft.Column([
                 box_add,
@@ -2364,9 +2313,6 @@ def main(page: ft.Page):
             ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10),
             border_radius=12,
             padding=4,
-            scale=1.0,
-            animate_scale=ft.Animation(150, ft.AnimationCurve.EASE_OUT),
-            on_hover=on_hover_add,
             on_click=abrir_modal_novo_perfil
         )
         return card_add
@@ -2411,6 +2357,7 @@ def main(page: ft.Page):
 
     page.add(tela_perfis, layout_mestre)
     carregar_perfis_tela()
+    ajustar_layout_responsivo()
     page.update()
 
 if __name__ == "__main__":
