@@ -159,13 +159,30 @@ def obter_estilo_nota(nota_str):
     return "#1e1b4b", "#a78bfa", None
 
 def main(page: ft.Page):
-    page.title = "Movie Insert v2.5"
+    page.title = "Movie Insert"
     page.favicon = "favicon.png"
     page.theme_mode = ft.ThemeMode.DARK
     page.bgcolor = COR_FUNDO
     page.padding = 0
     page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
     page.scroll = None
+
+    # Ecrã de carregamento personalizado com o logótipo da aplicação
+    page.splash = ft.Container(
+        content=ft.Column(
+            controls=[
+                ft.Image(src="logo.png", width=180, fit="contain"),
+                ft.Container(height=12),
+                ft.ProgressRing(width=28, height=28, stroke_width=2.5, color=COR_ATIVO_BORDA)
+            ],
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            alignment=ft.MainAxisAlignment.CENTER,
+            spacing=4
+        ),
+        alignment=ft.Alignment(0, 0),
+        bgcolor=COR_FUNDO
+    )
+    page.update()
 
     init_db()
 
@@ -650,10 +667,9 @@ def main(page: ft.Page):
                     if conn:
                         conn.close()
                 recarregar_ids_salvos()
+                fechar_dialogo(modal_exclusao)
                 atualizar_contador_biblioteca()
-
-            fechar_dialogo(modal_exclusao)
-            carregar_biblioteca()
+                carregar_biblioteca()
 
         modal_exclusao = ft.AlertDialog(
             modal=False,
@@ -1323,7 +1339,6 @@ def main(page: ft.Page):
             container_sugestoes.visible = False
             container_sugestoes.update()
 
-    # Seleção Inteligente na Lupa / Enter
     def disparar_busca_manual(e=None):
         if primeira_acao_sugestao["callback"]:
             cb = primeira_acao_sugestao["callback"]
@@ -2034,6 +2049,9 @@ def main(page: ft.Page):
     page.add(tela_perfis, layout_mestre)
     carregar_perfis_tela()
     ajustar_layout_responsivo()
+
+    # Desativa o ecrã de carregamento assim que a interface estiver montada
+    page.splash = None
     page.update()
 
 if __name__ == "__main__":
