@@ -189,6 +189,14 @@ def main(page: ft.Page):
         largura = page.width if page.width else 1000
         return largura < 720
 
+    def abrir_dialogo_generico(modal):
+        if hasattr(page, "open"):
+            page.open(modal)
+        else:
+            page.dialog = modal
+            modal.open = True
+            page.update()
+
     def fechar_dialogo_generico(modal=None):
         if hasattr(page, "close") and modal:
             try:
@@ -636,9 +644,7 @@ def main(page: ft.Page):
             actions_alignment=ft.MainAxisAlignment.END
         )
 
-        page.dialog = modal
-        modal.open = True
-        page.update()
+        abrir_dialogo_generico(modal)
 
     def pedir_confirmacao_remocao(fid, titulo):
         def confirmar_remocao(e):
@@ -671,9 +677,7 @@ def main(page: ft.Page):
             ],
             actions_alignment=ft.MainAxisAlignment.END
         )
-        page.dialog = modal_exclusao
-        modal_exclusao.open = True
-        page.update()
+        abrir_dialogo_generico(modal_exclusao)
 
     def abrir_detalhes(mid, mtype, titulo_prev, ano_prev, poster_prev, tela_atual="home"):
         ocultar_sugestoes()
@@ -789,7 +793,7 @@ def main(page: ft.Page):
         progresso.visible = False
 
         dt_img = ft.Image(src=poster_url, width=135, height=200, border_radius=8, fit="cover")
-        tag_tipo = "Série" if mtype_seguro == "tv" else "Filme"
+        tag_tipo = "Série" if mtype_seguro == "tv" else "Filme"[cite: 1]
         
         info_col = [
             ft.Text(f"{titulo} ({ano}) • {tag_tipo}", size=17, weight="bold", color="white"),
@@ -860,7 +864,7 @@ def main(page: ft.Page):
             border_radius=12,
             border=criar_borda(1.5, COR_PETROLEO),
             content=ft.Column([
-                ft.Row([ft.Button(content=ft.Text("✕ Fechar", color="white", weight="bold", size=12), bgcolor=COR_PETROLEO, on_click=lambda e: fechar_dialogo_generico(modal_det))], alignment=ft.MainAxisAlignment.END),
+                ft.Row([ft.Button(content=ft.Text("✕ Fechar", color="white", weight="bold", size=12), bgcolor=COR_PETROLEO, on_click=lambda e: fechar_dialogo_generico(modal_det))], alignment=ft.MainAxisAlignment.END),[cite: 1]
                 ft.Row([dt_img, ft.Column(info_col, spacing=3, width=310)], alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.START, wrap=True, spacing=10),
                 ft.Row([btn_tr, btn_slv], spacing=8, wrap=True) if tela_atual != "biblioteca" else ft.Row([btn_tr]),
                 btn_ir,
@@ -870,9 +874,7 @@ def main(page: ft.Page):
         )
 
         modal_det = ft.AlertDialog(content=conteudo, modal=False, bgcolor="transparent", content_padding=0)
-        page.dialog = modal_det
-        modal_det.open = True
-        page.update()
+        abrir_dialogo_generico(modal_det)
 
     def adicionar_rapido_poster(e, mid, mtype, titulo, ano, poster_url, chave_id, btn_adicionar):
         uid = sessao_usuario["id"]
@@ -1591,7 +1593,8 @@ def main(page: ft.Page):
             border_radius=8,
             border_color=COR_BORDA,
             focused_border_color=COR_PETROLEO,
-            width=280
+            width=280,
+            autofocus=True
         )
         txt_novo_perfil_erro = ft.Text("", size=12, color="#ef4444")
 
@@ -1629,6 +1632,8 @@ def main(page: ft.Page):
                 if conn:
                     conn.close()
 
+        txt_novo_perfil_nome.on_submit = salvar_novo_perfil
+
         modal_perfil = ft.AlertDialog(
             modal=False,
             title=ft.Text("Adicionar Novo Perfil", size=16, weight="bold", color="white"),
@@ -1639,13 +1644,11 @@ def main(page: ft.Page):
             ], tight=True, spacing=10),
             actions=[
                 ft.Button(content=ft.Text("Cancelar", color="#94a3b8"), on_click=lambda ev: fechar_dialogo_generico(modal_perfil)),
-                ft.Button(content=ft.Text("Salvar Perfil", color="white"), bgcolor=COR_PETROLEO, on_click=salvar_novo_perfil)
+                ft.Button(content=ft.Text("Salvar Perfil", color="white"), bgcolor=COR_PETROLEO, on_click=salvar_novo_perfil)[cite: 4, 5]
             ],
             actions_alignment=ft.MainAxisAlignment.END
         )
-        page.dialog = modal_perfil
-        modal_perfil.open = True
-        page.update()
+        abrir_dialogo_generico(modal_perfil)
 
     def criar_card_avatar(uid, nome, cor):
         iniciais = (nome[:2] if len(nome) >= 2 else nome).upper()
@@ -1665,6 +1668,7 @@ def main(page: ft.Page):
             ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10),
             border_radius=12,
             padding=4,
+            ink=True,
             on_click=lambda e, u=uid, n=nome, c=cor: entrar_com_perfil(u, n, c)
         )
         return card_item
@@ -1677,7 +1681,9 @@ def main(page: ft.Page):
             height=110,
             border_radius=12,
             bgcolor="#0d1419",
-            border=criar_borda(1.5, "#334155")
+            border=criar_borda(1.5, "#334155"),
+            ink=True,
+            on_click=lambda e: abrir_modal_novo_perfil(e)
         )
         card_add = ft.Container(
             content=ft.Column([
@@ -1686,7 +1692,8 @@ def main(page: ft.Page):
             ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10),
             border_radius=12,
             padding=4,
-            on_click=abrir_modal_novo_perfil
+            ink=True,
+            on_click=lambda e: abrir_modal_novo_perfil(e)
         )
         return card_add
 
