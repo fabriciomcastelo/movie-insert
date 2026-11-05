@@ -190,9 +190,17 @@ def main(page: ft.Page):
         return largura < 720
 
     def fechar_dialogo_generico(modal):
-        modal.open = False
-        if modal in page.overlay:
-            page.overlay.remove(modal)
+        try:
+            if hasattr(page, "close"):
+                page.close(modal)
+            else:
+                modal.open = False
+                if modal in page.overlay:
+                    page.overlay.remove(modal)
+        except Exception:
+            modal.open = False
+            if modal in page.overlay:
+                page.overlay.remove(modal)
         page.update()
 
     def recarregar_ids_salvos():
@@ -779,7 +787,7 @@ def main(page: ft.Page):
         progresso.visible = False
 
         dt_img = ft.Image(src=poster_url, width=135, height=200, border_radius=8, fit="cover")
-        tag_tipo = "Série" if mtype_seguro == "tv" else "Filme"
+        tag_tipo = "Série" if mtype_seguro == "tv" else "Filme"[cite: 1]
         
         info_col = [
             ft.Text(f"{titulo} ({ano}) • {tag_tipo}", size=17, weight="bold", color="white"),
@@ -850,7 +858,7 @@ def main(page: ft.Page):
             border_radius=12,
             border=criar_borda(1.5, COR_PETROLEO),
             content=ft.Column([
-                ft.Row([ft.Button(content=ft.Text("✕ Fechar", color="white", weight="bold", size=12), bgcolor=COR_PETROLEO, on_click=lambda e: fechar_dialogo_generico(modal_det))], alignment=ft.MainAxisAlignment.END),
+                ft.Row([ft.Button(content=ft.Text("✕ Fechar", color="white", weight="bold", size=12), bgcolor=COR_PETROLEO, on_click=lambda e: fechar_dialogo_generico(modal_det))], alignment=ft.MainAxisAlignment.END),[cite: 1]
                 ft.Row([dt_img, ft.Column(info_col, spacing=3, width=310)], alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.START, wrap=True, spacing=10),
                 ft.Row([btn_tr, btn_slv], spacing=8, wrap=True) if tela_atual != "biblioteca" else ft.Row([btn_tr]),
                 btn_ir,
@@ -1629,7 +1637,7 @@ def main(page: ft.Page):
             ], tight=True, spacing=10),
             actions=[
                 ft.Button(content=ft.Text("Cancelar", color="#94a3b8"), on_click=lambda ev: fechar_dialogo_generico(modal_perfil)),
-                ft.Button(content=ft.Text("Salvar Perfil", color="white"), bgcolor=COR_PETROLEO, on_click=salvar_novo_perfil)
+                ft.Button(content=ft.Text("Salvar Perfil", color="white"), bgcolor=COR_PETROLEO, on_click=salvar_novo_perfil)[cite: 4]
             ],
             actions_alignment=ft.MainAxisAlignment.END
         )
