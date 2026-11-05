@@ -5,7 +5,6 @@ import os
 import requests
 import threading
 import unicodedata
-import time
 from urllib.parse import quote_plus
 from datetime import datetime
 
@@ -201,11 +200,9 @@ def main(page: ft.Page):
     item_ativo = {"data": None}
     timer_busca = {"timer": None}
     versao_busca_atual = {"epoch": 0}
-    ultimo_disparo_scroll = {"tempo": 0.0}
     filme_avaliando = {"id": None, "nota": "10"}
     filme_para_remover = {"id": None, "titulo": ""}
     
-    botoes_add_home = {}
     ids_salvos_usuario = set()
     titulos_salvos_usuario = set()
 
@@ -236,23 +233,6 @@ def main(page: ft.Page):
             finally:
                 if conn:
                     conn.close()
-
-    def marcar_botao_home_como_salvo(chave_tmdb, chave_imdb=None):
-        chaves = [chave_tmdb]
-        if chave_imdb:
-            chaves.append(chave_imdb)
-        alterou = False
-        for k in chaves:
-            if k in botoes_add_home and botoes_add_home[k]:
-                btn = botoes_add_home[k]
-                btn.icon = ft.Icons.CHECK
-                btn.icon_color = "#10b981"
-                btn.bgcolor = "#064e3b"
-                btn.disabled = True
-                btn.tooltip = "Já está na sua biblioteca"
-                alterou = True
-        if alterou:
-            grade_populares.update()
 
     estado_biblioteca = {
         "aba": "Para Assistir",
@@ -300,15 +280,6 @@ def main(page: ft.Page):
                     conn.close()
             
             recarregar_ids_salvos()
-            
-            if fid in botoes_add_home and botoes_add_home[fid]:
-                btn = botoes_add_home[fid]
-                btn.icon = ft.Icons.ADD
-                btn.icon_color = "white"
-                btn.bgcolor = "#0d1419cc"
-                btn.disabled = False
-                btn.tooltip = "Adicionar à Biblioteca"
-
             fechar_dialogo(modal_confirmacao)
             atualizar_contador_biblioteca()
             carregar_biblioteca()
@@ -498,7 +469,6 @@ def main(page: ft.Page):
             return
 
         fid = it["id"]
-        chave_tmdb_orig = it.get("tmdb_orig_key")
         tipo_salvar = it.get("tipo", "movie")
         
         conn = None
@@ -532,7 +502,6 @@ def main(page: ft.Page):
         btn_salvar.disabled = True
         btn_ir_lista.visible = True
 
-        marcar_botao_home_como_salvo(chave_tmdb_orig, fid)
         atualizar_contador_biblioteca()
         conteudo_modal.update()
 
@@ -666,9 +635,6 @@ def main(page: ft.Page):
                 streamings = ", ".join(stream_nomes) if stream_nomes else "Sem streaming no BR"
 
                 chave_id = imdb_id or chave_tmdb_calc
-                
-                if chave_tmdb_calc in botoes_add_home:
-                    botoes_add_home[chave_id] = botoes_add_home[chave_tmdb_calc]
 
                 nota_usr = None
                 cat_exist = None
@@ -758,7 +724,6 @@ def main(page: ft.Page):
                     btn_salvar.disabled = True
                     btn_salvar.visible = True
                     btn_ir_lista.visible = True
-                    marcar_botao_home_como_salvo(chave_tmdb_calc, chave_id)
                 else:
                     btn_salvar.content = ft.Text("+ Adicionar à Biblioteca", color="white", size=12)
                     btn_salvar.bgcolor = COR_PETROLEO
@@ -882,7 +847,6 @@ def main(page: ft.Page):
                 style=ft.ButtonStyle(padding=0)
             )
             btn_add_rapido.on_click = lambda e, m=mid, mt=mtype_seguro, t=titulo, a=ano, p=poster_url, c=chave_id, b=btn_add_rapido: adicionar_rapido_poster(e, m, mt, t, a, p, c, b)
-            botoes_add_home[chave_id] = btn_add_rapido
 
         stack_itens = [
             ft.Image(
@@ -924,9 +888,6 @@ def main(page: ft.Page):
         )
         return card_corpo
 
-    # -------------------------------------------------------------
-    # CARREGAMENTO INCREMENTAL OTIMIZADO
-    # -------------------------------------------------------------
     def carregar_mais_busca():
         if paginacao["carregando"] or paginacao["fim"]:
             return
@@ -1016,7 +977,6 @@ def main(page: ft.Page):
             filtrados = todos_itens
 
         grade_populares.controls.clear()
-        botoes_add_home.clear()
         contexto_busca["offset"] = 0
         paginacao["fim"] = False
 
@@ -1163,7 +1123,6 @@ def main(page: ft.Page):
         paginacao["pagina_atual"] = 1
         paginacao["fim"] = False
         paginacao["ids_carregados"].clear()
-        botoes_add_home.clear()
         grade_populares.controls.clear()
         txt_titulo_home.value = "Em Alta (TMDb Trends)"
         txt_titulo_home.update()
@@ -1183,14 +1142,14 @@ def main(page: ft.Page):
         btn_home_filmes.content.color = "white" if atual == "movie" else "#94a3b8"
         btn_home_filmes.style = ft.ButtonStyle(
             shape=ft.RoundedRectangleBorder(radius=20),
-            side=ft.BorderSide(1.8, COR_ATIVO_BORDA) if atual == "movie" else ft.BorderSide(1, COR_BORDA)
+            side=ft.BorderSide(1.8, COR_ATIVO_BORDA) if paginacao["filtro_home"] == "movie" else ft.BorderSide(1, COR_BORDA)
         )
 
         btn_home_series.bgcolor = COR_PETROLEO if atual == "tv" else COR_CARD
         btn_home_series.content.color = "white" if atual == "tv" else "#94a3b8"
         btn_home_series.style = ft.ButtonStyle(
             shape=ft.RoundedRectangleBorder(radius=20),
-            side=ft.BorderSide(1.8, COR_ATIVO_BORDA) if atual == "tv" else ft.BorderSide(1, COR_BORDA)
+            side=ft.BorderSide(1.8, COR_ATIVO_BORDA) if paginacao["filtro_home"] == "tv" else ft.BorderSide(1, COR_BORDA)
         )
         linha_controles_unificados.update()
 
@@ -1263,25 +1222,6 @@ def main(page: ft.Page):
         wrap=True
     )
 
-    def ao_rolar_inicio(e: ft.OnScrollEvent):
-        ocultar_sugestoes()
-        agora = time.time()
-        if agora - ultimo_disparo_scroll["tempo"] < 0.25:
-            return
-        ultimo_disparo_scroll["tempo"] = agora
-
-        if paginacao["carregando"] or paginacao["fim"]:
-            return
-
-        distancia_do_fim = e.max_scroll_extent - e.pixels
-        percentual = (e.pixels / e.max_scroll_extent) if e.max_scroll_extent > 0 else 0
-
-        if (distancia_do_fim <= 1000 or percentual >= 0.80) and e.max_scroll_extent > 0:
-            if paginacao["modo_busca_ativo"]:
-                carregar_mais_busca()
-            else:
-                carregar_populares(incrementar=True)
-
     def remover_filme_direto(fid):
         uid = sessao_usuario["id"]
         if uid:
@@ -1298,15 +1238,6 @@ def main(page: ft.Page):
                     conn.close()
             
             recarregar_ids_salvos()
-            
-            if fid in botoes_add_home and botoes_add_home[fid]:
-                btn = botoes_add_home[fid]
-                btn.icon = ft.Icons.ADD
-                btn.icon_color = "white"
-                btn.bgcolor = "#0d1419cc"
-                btn.disabled = False
-                btn.tooltip = "Adicionar à Biblioteca"
-
             atualizar_contador_biblioteca()
             carregar_biblioteca()
 
@@ -1889,8 +1820,8 @@ def main(page: ft.Page):
                                 if chave not in vistos:
                                     vistos.add(chave)
                                     itens_totais.append(item)
-                    except Exception:
-                        pass
+                        except Exception:
+                            pass
 
                 contexto_busca["itens_cache"] = sorted(itens_totais, key=lambda x: x.get("vote_count", 0), reverse=True)
             except Exception as ex:
@@ -2112,7 +2043,6 @@ def main(page: ft.Page):
         sessao_usuario["username"] = ""
         ids_salvos_usuario.clear()
         titulos_salvos_usuario.clear()
-        botoes_add_home.clear()
         
         campo_busca.value = ""
         paginacao["pagina_atual"] = 1
@@ -2208,12 +2138,12 @@ def main(page: ft.Page):
         spacing=8
     )
 
+    # Removido o on_scroll contínuo para acabar com o congestionamento do WebSocket no telemóvel
     view_inicio = ft.Container(
         expand=True,
         padding=ft.Padding(8, 0, 8, 10),
         content=ft.Column(
             scroll=ft.ScrollMode.AUTO,
-            on_scroll=ao_rolar_inicio,
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
             spacing=14,
             controls=[
@@ -2304,7 +2234,6 @@ def main(page: ft.Page):
         contexto_busca["itens_cache"] = []
         contexto_busca["offset"] = 0
         
-        botoes_add_home.clear()
         grade_populares.controls.clear()
 
         carregar_populares()
