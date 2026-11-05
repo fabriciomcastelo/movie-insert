@@ -189,15 +189,15 @@ def main(page: ft.Page):
         largura = page.width if page.width else 1000
         return largura < 720
 
-    def fechar_dialogo_generico(modal):
-        try:
-            if hasattr(page, "close"):
+    def fechar_dialogo_generico(modal=None):
+        if hasattr(page, "close") and modal:
+            try:
                 page.close(modal)
-            else:
-                modal.open = False
-                if modal in page.overlay:
-                    page.overlay.remove(modal)
-        except Exception:
+            except Exception:
+                pass
+        if page.dialog:
+            page.dialog.open = False
+        if modal:
             modal.open = False
             if modal in page.overlay:
                 page.overlay.remove(modal)
@@ -617,8 +617,9 @@ def main(page: ft.Page):
                 finally:
                     if conn:
                         conn.close()
-                fechar_dialogo_generico(modal)
-                carregar_biblioteca()
+
+            fechar_dialogo_generico(modal)
+            carregar_biblioteca()
 
         modal = ft.AlertDialog(
             modal=False,
@@ -635,7 +636,7 @@ def main(page: ft.Page):
             actions_alignment=ft.MainAxisAlignment.END
         )
 
-        page.overlay.append(modal)
+        page.dialog = modal
         modal.open = True
         page.update()
 
@@ -655,9 +656,10 @@ def main(page: ft.Page):
                     if conn:
                         conn.close()
                 recarregar_ids_salvos()
-                fechar_dialogo_generico(modal_exclusao)
                 atualizar_contador_biblioteca()
-                carregar_biblioteca()
+
+            fechar_dialogo_generico(modal_exclusao)
+            carregar_biblioteca()
 
         modal_exclusao = ft.AlertDialog(
             modal=False,
@@ -669,7 +671,7 @@ def main(page: ft.Page):
             ],
             actions_alignment=ft.MainAxisAlignment.END
         )
-        page.overlay.append(modal_exclusao)
+        page.dialog = modal_exclusao
         modal_exclusao.open = True
         page.update()
 
@@ -787,7 +789,7 @@ def main(page: ft.Page):
         progresso.visible = False
 
         dt_img = ft.Image(src=poster_url, width=135, height=200, border_radius=8, fit="cover")
-        tag_tipo = "Série" if mtype_seguro == "tv" else "Filme"[cite: 1]
+        tag_tipo = "Série" if mtype_seguro == "tv" else "Filme"
         
         info_col = [
             ft.Text(f"{titulo} ({ano}) • {tag_tipo}", size=17, weight="bold", color="white"),
@@ -858,7 +860,7 @@ def main(page: ft.Page):
             border_radius=12,
             border=criar_borda(1.5, COR_PETROLEO),
             content=ft.Column([
-                ft.Row([ft.Button(content=ft.Text("✕ Fechar", color="white", weight="bold", size=12), bgcolor=COR_PETROLEO, on_click=lambda e: fechar_dialogo_generico(modal_det))], alignment=ft.MainAxisAlignment.END),[cite: 1]
+                ft.Row([ft.Button(content=ft.Text("✕ Fechar", color="white", weight="bold", size=12), bgcolor=COR_PETROLEO, on_click=lambda e: fechar_dialogo_generico(modal_det))], alignment=ft.MainAxisAlignment.END),
                 ft.Row([dt_img, ft.Column(info_col, spacing=3, width=310)], alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.START, wrap=True, spacing=10),
                 ft.Row([btn_tr, btn_slv], spacing=8, wrap=True) if tela_atual != "biblioteca" else ft.Row([btn_tr]),
                 btn_ir,
@@ -868,7 +870,7 @@ def main(page: ft.Page):
         )
 
         modal_det = ft.AlertDialog(content=conteudo, modal=False, bgcolor="transparent", content_padding=0)
-        page.overlay.append(modal_det)
+        page.dialog = modal_det
         modal_det.open = True
         page.update()
 
@@ -1637,11 +1639,11 @@ def main(page: ft.Page):
             ], tight=True, spacing=10),
             actions=[
                 ft.Button(content=ft.Text("Cancelar", color="#94a3b8"), on_click=lambda ev: fechar_dialogo_generico(modal_perfil)),
-                ft.Button(content=ft.Text("Salvar Perfil", color="white"), bgcolor=COR_PETROLEO, on_click=salvar_novo_perfil)[cite: 4]
+                ft.Button(content=ft.Text("Salvar Perfil", color="white"), bgcolor=COR_PETROLEO, on_click=salvar_novo_perfil)
             ],
             actions_alignment=ft.MainAxisAlignment.END
         )
-        page.overlay.append(modal_perfil)
+        page.dialog = modal_perfil
         modal_perfil.open = True
         page.update()
 
