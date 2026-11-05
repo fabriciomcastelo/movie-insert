@@ -176,6 +176,7 @@ def main(page: ft.Page):
 
     timer_busca = {"timer": None}
     versao_busca_atual = {"epoch": 0}
+    primeira_acao_sugestao = {"callback": None}
 
     contexto_busca = {
         "tipo": None,
@@ -649,9 +650,10 @@ def main(page: ft.Page):
                     if conn:
                         conn.close()
                 recarregar_ids_salvos()
-                fechar_dialogo(modal_exclusao)
                 atualizar_contador_biblioteca()
-                carregar_biblioteca()
+
+            fechar_dialogo(modal_exclusao)
+            carregar_biblioteca()
 
         modal_exclusao = ft.AlertDialog(
             modal=False,
@@ -1321,10 +1323,16 @@ def main(page: ft.Page):
             container_sugestoes.visible = False
             container_sugestoes.update()
 
+    # Seleção Inteligente na Lupa / Enter
     def disparar_busca_manual(e=None):
-        termo = campo_busca.value
-        if termo and len(termo.strip()) >= 2:
-            executar_pesquisa_tema_ou_termo(termo)
+        if primeira_acao_sugestao["callback"]:
+            cb = primeira_acao_sugestao["callback"]
+            ocultar_sugestoes()
+            cb()
+        else:
+            termo = campo_busca.value
+            if termo and len(termo.strip()) >= 2:
+                executar_pesquisa_tema_ou_termo(termo)
 
     def ao_digitar_busca(e):
         termo = campo_busca.value
@@ -1335,6 +1343,7 @@ def main(page: ft.Page):
             timer_busca["timer"].cancel()
 
         if not termo or len(termo.strip()) < 2:
+            primeira_acao_sugestao["callback"] = None
             ocultar_sugestoes()
             return
 
@@ -1353,14 +1362,13 @@ def main(page: ft.Page):
         expand=True,
         height=38,
         content_padding=ft.Padding(12, 0, 8, 0),
-        suffix=ft.IconButton(icon=ft.Icons.SEARCH, icon_color="#64748b", icon_size=18, tooltip="Buscar", on_click=disparar_busca_manual),
+        suffix=ft.IconButton(icon=ft.Icons.SEARCH, icon_color="#64748b", icon_size=18, tooltip="Buscar primeira sugestão", on_click=disparar_busca_manual),
         on_change=ao_digitar_busca,
         on_submit=disparar_busca_manual
     )
 
     def clicar_no_logo(e):
         campo_busca.value = ""
-        campo_busca.update()
         paginacao["modo_busca_ativo"] = False
         contexto_busca["tipo"] = None
         contexto_busca["id"] = None
@@ -1571,7 +1579,7 @@ def main(page: ft.Page):
         page.update()
         carregar_populares()
 
-    # Modal de Novo Perfil unificado e persistente
+    # Modal de Novo Perfil
     txt_novo_perfil_nome = ft.TextField(
         label="Nome do Perfil",
         label_style=ft.TextStyle(color="#94a3b8"),
@@ -1901,6 +1909,7 @@ def main(page: ft.Page):
         tmdb_key = c.get("tmdb_key", "").strip()
         termo_limpo = termo.strip()
         if not tmdb_key or len(termo_limpo) < 2:
+            primeira_acao_sugestao["callback"] = None
             ocultar_sugestoes()
             return
 
@@ -1915,21 +1924,7 @@ def main(page: ft.Page):
             itens_multi = resp_multi.json().get("results", []) if resp_multi.status_code == 200 else []
 
             coluna_sugestoes.controls.clear()
-
-            linha_tema_universal = ft.Container(
-                padding=8,
-                border_radius=6,
-                bgcolor="#164e63",
-                on_click=lambda e, t=termo_limpo: executar_pesquisa_tema_ou_termo(t),
-                content=ft.Row([
-                    ft.Icon(ft.Icons.SEARCH, size=18, color="#38bdf8"),
-                    ft.Column([
-                        ft.Text(f'Ver catálogo sobre "{termo_limpo}"', size=12, weight="bold", color="white", max_lines=1, overflow="ellipsis"),
-                        ft.Text("🏷️ Assunto, contexto ou tema", size=10, color="#7dd3fc")
-                    ], spacing=2, expand=True)
-                ], spacing=8)
-            )
-            coluna_sugestoes.controls.append(linha_tema_universal)
+            primeira_acao_sugestao["callback"] = None
 
             pessoas = [i for i in itens_multi if i.get("media_type") == "person"][:2]
             for p in pessoas:
@@ -1939,6 +1934,9 @@ def main(page: ft.Page):
                 dept_traduzido = "Direção" if dept == "Directing" else "Ator/Atriz"
                 pic = p.get("profile_path")
                 pic_url = f"https://image.tmdb.org/t/p/w185{pic}" if pic else None
+
+                if primeira_acao_sugestao["callback"] is None:
+                    primeira_acao_sugestao["callback"] = lambda id_p=pid, nome_p=pnome: exibir_filmografia_pessoa(id_p, nome_p)
 
                 linha_p = ft.Container(
                     padding=6,
@@ -1964,6 +1962,9 @@ def main(page: ft.Page):
                 p_path = item.get("poster_path")
                 p_url = f"https://image.tmdb.org/t/p/w185{p_path}" if p_path else None
 
+                if primeira_acao_sugestao["callback"] is None:
+                    primeira_acao_sugestao["callback"] = lambda m=mid, mt=mtype, t=tit, a=ano, p=p_url: selecionar_sugestao_filme(m, mt, t, a, p)
+
                 linha_item = ft.Container(
                     padding=6,
                     border_radius=6,
@@ -1978,6 +1979,24 @@ def main(page: ft.Page):
                     ], spacing=8)
                 )
                 coluna_sugestoes.controls.append(linha_item)
+
+            linha_tema_universal = ft.Container(
+                padding=8,
+                border_radius=6,
+                bgcolor="#164e63",
+                on_click=lambda e, t=termo_limpo: executar_pesquisa_tema_ou_termo(t),
+                content=ft.Row([
+                    ft.Icon(ft.Icons.SEARCH, size=18, color="#38bdf8"),
+                    ft.Column([
+                        ft.Text(f'Ver catálogo sobre "{termo_limpo}"', size=12, weight="bold", color="white", max_lines=1, overflow="ellipsis"),
+                        ft.Text("🏷️ Assunto, contexto ou tema", size=10, color="#7dd3fc")
+                    ], spacing=2, expand=True)
+                ], spacing=8)
+            )
+            coluna_sugestoes.controls.append(linha_tema_universal)
+
+            if primeira_acao_sugestao["callback"] is None:
+                primeira_acao_sugestao["callback"] = lambda t=termo_limpo: executar_pesquisa_tema_ou_termo(t)
 
             if len(coluna_sugestoes.controls) > 0 and epoch_disparo == versao_busca_atual["epoch"]:
                 largura_atual = page.width if page.width else 1000
