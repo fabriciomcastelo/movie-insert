@@ -190,15 +190,13 @@ def main(page: ft.Page):
         return largura < 720
 
     def abrir_dialogo(modal):
-        page.dialog = modal
+        if modal not in page.overlay:
+            page.overlay.append(modal)
         modal.open = True
         page.update()
 
-    def fechar_dialogo(modal=None):
-        if page.dialog:
-            page.dialog.open = False
-        if modal:
-            modal.open = False
+    def fechar_dialogo(modal):
+        modal.open = False
         page.update()
 
     def recarregar_ids_salvos():
@@ -615,9 +613,8 @@ def main(page: ft.Page):
                 finally:
                     if conn:
                         conn.close()
-
-            fechar_dialogo(modal)
-            carregar_biblioteca()
+                fechar_dialogo(modal)
+                carregar_biblioteca()
 
         modal = ft.AlertDialog(
             modal=False,
@@ -652,10 +649,9 @@ def main(page: ft.Page):
                     if conn:
                         conn.close()
                 recarregar_ids_salvos()
+                fechar_dialogo(modal_exclusao)
                 atualizar_contador_biblioteca()
-
-            fechar_dialogo(modal_exclusao)
-            carregar_biblioteca()
+                carregar_biblioteca()
 
         modal_exclusao = ft.AlertDialog(
             modal=False,
@@ -783,7 +779,7 @@ def main(page: ft.Page):
         progresso.visible = False
 
         dt_img = ft.Image(src=poster_url, width=135, height=200, border_radius=8, fit="cover")
-        tag_tipo = "Série" if mtype_seguro == "tv" else "Filme"[cite: 1]
+        tag_tipo = "Série" if mtype_seguro == "tv" else "Filme"
         
         info_col = [
             ft.Text(f"{titulo} ({ano}) • {tag_tipo}", size=17, weight="bold", color="white"),
@@ -854,7 +850,7 @@ def main(page: ft.Page):
             border_radius=12,
             border=criar_borda(1.5, COR_PETROLEO),
             content=ft.Column([
-                ft.Row([ft.Button(content=ft.Text("✕ Fechar", color="white", weight="bold", size=12), bgcolor=COR_PETROLEO, on_click=lambda e: fechar_dialogo(modal_det))], alignment=ft.MainAxisAlignment.END),[cite: 1]
+                ft.Row([ft.Button(content=ft.Text("✕ Fechar", color="white", weight="bold", size=12), bgcolor=COR_PETROLEO, on_click=lambda e: fechar_dialogo(modal_det))], alignment=ft.MainAxisAlignment.END),
                 ft.Row([dt_img, ft.Column(info_col, spacing=3, width=310)], alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.START, wrap=True, spacing=10),
                 ft.Row([btn_tr, btn_slv], spacing=8, wrap=True) if tela_atual != "biblioteca" else ft.Row([btn_tr]),
                 btn_ir,
@@ -1364,6 +1360,7 @@ def main(page: ft.Page):
 
     def clicar_no_logo(e):
         campo_busca.value = ""
+        campo_busca.update()
         paginacao["modo_busca_ativo"] = False
         contexto_busca["tipo"] = None
         contexto_busca["id"] = None
@@ -1634,7 +1631,7 @@ def main(page: ft.Page):
         ], tight=True, spacing=10),
         actions=[
             ft.Button(content=ft.Text("Cancelar", color="#94a3b8"), on_click=lambda e: fechar_dialogo(modal_novo_perfil)),
-            ft.Button(content=ft.Text("Salvar Perfil", color="white"), bgcolor=COR_PETROLEO, on_click=acao_salvar_novo_perfil)[cite: 4, 5]
+            ft.Button(content=ft.Text("Salvar Perfil", color="white"), bgcolor=COR_PETROLEO, on_click=acao_salvar_novo_perfil)
         ],
         actions_alignment=ft.MainAxisAlignment.END
     )
@@ -1646,37 +1643,34 @@ def main(page: ft.Page):
 
     def criar_card_avatar(uid, nome, cor):
         iniciais = (nome[:2] if len(nome) >= 2 else nome).upper()
-        btn_box = ft.ElevatedButton(
+        avatar_box = ft.Container(
             content=ft.Text(iniciais, size=28, weight="bold", color="white"),
+            alignment=ft.Alignment(0, 0),
             width=110,
             height=110,
+            border_radius=12,
             bgcolor=cor,
-            style=ft.ButtonStyle(
-                shape=ft.RoundedRectangleBorder(radius=12),
-                padding=0
-            ),
+            border=criar_borda(2, "transparent"),
             on_click=lambda e, u=uid, n=nome, c=cor: entrar_com_perfil(u, n, c)
         )
         return ft.Column([
-            btn_box,
+            avatar_box,
             ft.Text(nome, size=14, weight="bold", color="#94a3b8", text_align=ft.TextAlign.CENTER, width=110)
         ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=8)
 
     def criar_card_adicionar():
-        btn_add = ft.ElevatedButton(
+        box_add = ft.Container(
             content=ft.Icon(ft.Icons.ADD_ROUNDED, size=46, color="#64748b"),
+            alignment=ft.Alignment(0, 0),
             width=110,
             height=110,
+            border_radius=12,
             bgcolor="#0d1419",
-            style=ft.ButtonStyle(
-                shape=ft.RoundedRectangleBorder(radius=12),
-                side=ft.BorderSide(1.5, "#334155"),
-                padding=0
-            ),
+            border=criar_borda(1.5, "#334155"),
             on_click=lambda e: abrir_modal_novo_perfil(e)
         )
         return ft.Column([
-            btn_add,
+            box_add,
             ft.Text("Adicionar Perfil", size=13, color="#64748b", text_align=ft.TextAlign.CENTER, width=110)
         ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=8)
 
@@ -1991,10 +1985,11 @@ def main(page: ft.Page):
                 if largura_atual < 720:
                     container_sugestoes.width = min(int(largura_atual * 0.90), 380)
                     container_sugestoes.left = max(10, int((largura_atual - container_sugestoes.width) / 2))
+                    container_sugestoes.top = 165
                 else:
                     container_sugestoes.width = 320
                     container_sugestoes.left = max(0, int((largura_atual / 2) - 160))
-                container_sugestoes.top = 165
+                    container_sugestoes.top = 165
             else:
                 ocultar_sugestoes()
 
@@ -2016,6 +2011,7 @@ def main(page: ft.Page):
         visible=True
     )
 
+    page.overlay.append(modal_novo_perfil)
     page.add(tela_perfis, layout_mestre)
     carregar_perfis_tela()
     ajustar_layout_responsivo()
