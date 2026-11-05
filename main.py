@@ -189,6 +189,12 @@ def main(page: ft.Page):
         largura = page.width if page.width else 1000
         return largura < 720
 
+    def fechar_dialogo_generico(modal):
+        modal.open = False
+        if modal in page.overlay:
+            page.overlay.remove(modal)
+        page.update()
+
     def recarregar_ids_salvos():
         ids_salvos_usuario.clear()
         titulos_salvos_usuario.clear()
@@ -259,10 +265,6 @@ def main(page: ft.Page):
                     conn.close()
         txt_contador_bib.value = f"BIBLIOTECA ({total})"
         txt_contador_bib.update()
-
-    def fechar_dialogo_generico(modal):
-        modal.open = False
-        page.update()
 
     # -------------------------------------------------------------
     # BIBLIOTECA
@@ -1053,8 +1055,7 @@ def main(page: ft.Page):
             btn_carregar_mais.visible = False
             paginacao["carregando"] = False
             spinner_carregamento.visible = False
-            btn_carregar_mais.update()
-            spinner_carregamento.update()
+            page.update()
             return
 
         novos_cards = [
@@ -1071,17 +1072,11 @@ def main(page: ft.Page):
         contexto_busca["offset"] = offset + len(proxima_fatia)
         grade_populares.controls.extend(novos_cards)
 
-        if contexto_busca["offset"] >= len(filtrados):
-            paginacao["fim"] = True
-            btn_carregar_mais.visible = False
-        else:
-            btn_carregar_mais.visible = True
-
+        paginacao["fim"] = (contexto_busca["offset"] >= len(filtrados))
+        btn_carregar_mais.visible = not paginacao["fim"]
         paginacao["carregando"] = False
         spinner_carregamento.visible = False
-        grade_populares.update()
-        btn_carregar_mais.update()
-        spinner_carregamento.update()
+        page.update()
 
     def acao_carregar_mais(e):
         if paginacao["modo_busca_ativo"]:
@@ -1122,8 +1117,7 @@ def main(page: ft.Page):
                 )
             )
             btn_carregar_mais.visible = False
-            grade_populares.update()
-            btn_carregar_mais.update()
+            page.update()
             return
 
         primeira_fatia = filtrados[:16]
@@ -1141,16 +1135,9 @@ def main(page: ft.Page):
         ]
 
         grade_populares.controls.extend(cards)
-
-        if len(filtrados) > 16:
-            paginacao["fim"] = False
-            btn_carregar_mais.visible = True
-        else:
-            paginacao["fim"] = True
-            btn_carregar_mais.visible = False
-
-        grade_populares.update()
-        btn_carregar_mais.update()
+        paginacao["fim"] = (len(filtrados) <= 16)
+        btn_carregar_mais.visible = not paginacao["fim"]
+        page.update()
 
     def carregar_populares(incrementar=False):
         c = carregar_config()
@@ -1159,7 +1146,7 @@ def main(page: ft.Page):
         if not tmdb_key:
             grade_populares.controls.clear()
             grade_populares.controls.append(
-                ft.Container(content=ft.Text("⚠️ Chave do TMDb ausente. Adicione TMDB_KEY no Render.", color="#f87171", size=13, text_align=ft.TextAlign.CENTER), padding=20)
+                ft.Container(content=ft.Text("⚠️ Chave do TMDb ausente. Adicione TMDB_KEY no Render ou config.json.", color="#f87171", size=13, text_align=ft.TextAlign.CENTER), padding=20)
             )
             grade_populares.update()
             return
@@ -1229,9 +1216,7 @@ def main(page: ft.Page):
                 paginacao["carregando"] = False
                 spinner_carregamento.visible = False
                 btn_carregar_mais.visible = not paginacao["fim"]
-                grade_populares.update()
-                spinner_carregamento.update()
-                btn_carregar_mais.update()
+                page.update()
 
         threading.Thread(target=_fetch, daemon=True).start()
 
@@ -1250,7 +1235,7 @@ def main(page: ft.Page):
         botoes_add_home.clear()
         grade_populares.controls.clear()
         txt_titulo_home.value = "Em Alta (TMDb Trends)"
-        txt_titulo_home.update()
+        page.update()
         carregar_populares()
 
     def atualizar_botoes_filtro_home():
@@ -1377,7 +1362,6 @@ def main(page: ft.Page):
 
     def clicar_no_logo(e):
         campo_busca.value = ""
-        campo_busca.update()
         paginacao["modo_busca_ativo"] = False
         contexto_busca["tipo"] = None
         contexto_busca["id"] = None
@@ -1417,7 +1401,6 @@ def main(page: ft.Page):
         contexto_busca["offset"] = 0
         
         grade_populares.controls.clear()
-        
         layout_mestre.visible = False
         carregar_perfis_tela()
         tela_perfis.visible = True
@@ -1570,7 +1553,6 @@ def main(page: ft.Page):
         layout_mestre.visible = True
         ajustar_layout_responsivo()
         atualizar_contador_biblioteca()
-        page.update()
 
         paginacao["pagina_atual"] = 1
         paginacao["carregando"] = False
@@ -1587,6 +1569,7 @@ def main(page: ft.Page):
         contexto_busca["offset"] = 0
         
         grade_populares.controls.clear()
+        page.update()
         carregar_populares()
 
     def abrir_modal_novo_perfil(e=None):
@@ -1724,7 +1707,6 @@ def main(page: ft.Page):
     def exibir_filmografia_pessoa(person_id, nome_pessoa):
         ocultar_sugestoes()
         campo_busca.value = nome_pessoa
-        campo_busca.update()
         paginacao["modo_busca_ativo"] = True
         paginacao["fim"] = False
         btn_carregar_mais.visible = False
@@ -1738,10 +1720,9 @@ def main(page: ft.Page):
         contexto_busca["offset"] = 0
         
         txt_titulo_home.value = nome_pessoa
-        txt_titulo_home.update()
         alternar_tela(0)
         progresso.visible = True
-        progresso.update()
+        page.update()
 
         c = carregar_config()
         tmdb_key = c.get("tmdb_key", "").strip()
@@ -1768,10 +1749,7 @@ def main(page: ft.Page):
                     if 99 in generos or "self" in personagem or "himself" in personagem or "herself" in personagem:
                         continue
                         
-                    if item.get("media_type") == "tv" or "name" in item or "first_air_date" in item:
-                        mtype = "tv"
-                    else:
-                        mtype = "movie"
+                    mtype = "tv" if (item.get("media_type") == "tv" or "name" in item or "first_air_date" in item) else "movie"
                     item["media_type"] = mtype
                     
                     chave = f"{mtype}_{mid}"
@@ -1791,10 +1769,7 @@ def main(page: ft.Page):
                         if 99 in generos:
                             continue
                             
-                        if item.get("media_type") == "tv" or "name" in item or "first_air_date" in item:
-                            mtype = "tv"
-                        else:
-                            mtype = "movie"
+                        mtype = "tv" if (item.get("media_type") == "tv" or "name" in item or "first_air_date" in item) else "movie"
                         item["media_type"] = mtype
                         
                         chave = f"{mtype}_{mid}"
@@ -1815,6 +1790,23 @@ def main(page: ft.Page):
 
         threading.Thread(target=_fetch, daemon=True).start()
 
+    def processar_itens_busca(lista_bruta, vistos, itens_saida, mtype_padrao=None, min_votos=0):
+        for item in lista_bruta:
+            if not item.get("poster_path"):
+                continue
+            if min_votos and item.get("vote_count", 0) < min_votos:
+                continue
+
+            mtype = mtype_padrao or item.get("media_type")
+            if mtype not in ["movie", "tv"]:
+                mtype = "tv" if ("name" in item or "first_air_date" in item) else "movie"
+            item["media_type"] = mtype
+
+            chave = f"{mtype}_{item.get('id')}"
+            if chave not in vistos:
+                vistos.add(chave)
+                itens_saida.append(item)
+
     def executar_pesquisa_tema_ou_termo(termo_busca):
         ocultar_sugestoes()
         termo_limpo = termo_busca.strip()
@@ -1822,7 +1814,6 @@ def main(page: ft.Page):
             return
 
         campo_busca.value = termo_limpo
-        campo_busca.update()
         paginacao["modo_busca_ativo"] = True
         paginacao["fim"] = False
         btn_carregar_mais.visible = False
@@ -1836,10 +1827,9 @@ def main(page: ft.Page):
         contexto_busca["offset"] = 0
         
         txt_titulo_home.value = termo_limpo.title()
-        txt_titulo_home.update()
         alternar_tela(0)
         progresso.visible = True
-        progresso.update()
+        page.update()
 
         c = carregar_config()
         tmdb_key = c.get("tmdb_key", "").strip()
@@ -1877,14 +1867,7 @@ def main(page: ft.Page):
                         try:
                             url_m = f"https://api.themoviedb.org/3/discover/movie?api_key={tmdb_key}&language=pt-BR&sort_by=vote_count.desc&with_keywords={kw_ids_str}&vote_count.gte=30&page={pg}"
                             res_m = requests.get(url_m, timeout=3.5).json().get("results", [])
-                            for item in res_m:
-                                if not item.get("poster_path"):
-                                    continue
-                                item["media_type"] = "movie"
-                                chave = f"movie_{item.get('id')}"
-                                if chave not in vistos:
-                                    vistos.add(chave)
-                                    itens_totais.append(item)
+                            processar_itens_busca(res_m, vistos, itens_totais, mtype_padrao="movie")
                         except Exception:
                             pass
 
@@ -1892,14 +1875,7 @@ def main(page: ft.Page):
                         try:
                             url_t = f"https://api.themoviedb.org/3/discover/tv?api_key={tmdb_key}&language=pt-BR&sort_by=vote_count.desc&with_keywords={kw_ids_str}&vote_count.gte=10&page={pg}"
                             res_t = requests.get(url_t, timeout=3.5).json().get("results", [])
-                            for item in res_t:
-                                if not item.get("poster_path"):
-                                    continue
-                                item["media_type"] = "tv"
-                                chave = f"tv_{item.get('id')}"
-                                if chave not in vistos:
-                                    vistos.add(chave)
-                                    itens_totais.append(item)
+                            processar_itens_busca(res_t, vistos, itens_totais, mtype_padrao="tv")
                         except Exception:
                             pass
 
@@ -1907,19 +1883,9 @@ def main(page: ft.Page):
                     try:
                         url_multi = f"https://api.themoviedb.org/3/search/multi?api_key={tmdb_key}&query={quote_plus(termo_limpo)}&language=pt-BR&include_adult=false&page={pg}"
                         res_multi = requests.get(url_multi, timeout=3.0).json().get("results", [])
-                        for item in res_multi:
-                            mtype = item.get("media_type")
-                            if mtype not in ["movie", "tv"]:
-                                mtype = "tv" if "name" in item else "movie"
-                            item["media_type"] = mtype
-
-                            if item.get("poster_path") and item.get("vote_count", 0) >= 20:
-                                chave = f"{mtype}_{item.get('id')}"
-                                if chave not in vistos:
-                                    vistos.add(chave)
-                                    itens_totais.append(item)
-                        except Exception:
-                            pass
+                        processar_itens_busca(res_multi, vistos, itens_totais, min_votos=20)
+                    except Exception:
+                        pass
 
                 contexto_busca["itens_cache"] = sorted(itens_totais, key=lambda x: x.get("vote_count", 0), reverse=True)
             except Exception as ex:
@@ -2028,11 +1994,10 @@ def main(page: ft.Page):
                 if largura_atual < 720:
                     container_sugestoes.width = min(int(largura_atual * 0.90), 380)
                     container_sugestoes.left = max(10, int((largura_atual - container_sugestoes.width) / 2))
-                    container_sugestoes.top = 165
                 else:
                     container_sugestoes.width = 320
                     container_sugestoes.left = max(0, int((largura_atual / 2) - 160))
-                    container_sugestoes.top = 165
+                container_sugestoes.top = 165
             else:
                 ocultar_sugestoes()
 
