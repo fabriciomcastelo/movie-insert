@@ -341,7 +341,6 @@ def main(page: ft.Page):
 
         is_para_assistir_ativo = (aba_atual == "Para Assistir")
         
-        # Botões Para Assistir / Assistidos ampliados conforme layout de referência
         btn_aba_para_assistir = ft.Button(
             content=ft.Text(f"⏳ Para Assistir ({total_para_assistir})", color="white" if is_para_assistir_ativo else "#94a3b8", weight="bold", size=14),
             bgcolor=COR_PETROLEO if is_para_assistir_ativo else "#141d24",
@@ -745,6 +744,7 @@ def main(page: ft.Page):
         trailer_url = None
         tem_digital = (mtype_seguro == "tv")
         titulo_orig = ""
+        temporadas_detalhes = []
 
         if tmdb_key:
             try:
@@ -759,8 +759,18 @@ def main(page: ft.Page):
                     info_criacao = f"Direção: {diretor}"
                 else:
                     criadores = [cr.get("name") for cr in res.get("created_by", [])]
-                    temporadas = res.get("number_of_seasons", 1)
-                    info_criacao = f"Criador(es): {', '.join(criadores) if criadores else 'Não informado'} • {temporadas} Temporada(s)"
+                    temporadas_raw = res.get("seasons", [])
+                    # Captura notas por temporada para séries
+                    for temp in temporadas_raw:
+                        t_nome = temp.get("name")
+                        t_nota = temp.get("vote_average", 0)
+                        t_num = temp.get("season_number")
+                        if t_num > 0 and t_nome:
+                            nota_str = f"⭐ {t_nota:.1f}" if t_nota and t_nota > 0 else "⭐ Sem nota"
+                            temporadas_detalhes.append(f"{t_nome}: {nota_str}")
+
+                    temporadas_qtd = res.get("number_of_seasons", 1)
+                    info_criacao = f"Criador(es): {', '.join(criadores) if criadores else 'Não informado'} • {temporadas_qtd} Temporada(s)"
                     diretor = info_criacao
 
                 credits_data = res.get("credits", {})
@@ -786,11 +796,24 @@ def main(page: ft.Page):
                     poster_url = f"https://image.tmdb.org/t/p/w300{p_path}"
 
                 imdb_id = res.get("imdb_id") or res.get("external_ids", {}).get("imdb_id")
-                if omdb_key and imdb_id:
+                
+                # Fallback nota TMDb para séries
+                tmdb_vote = res.get("vote_average")
+                if tmdb_vote and tmdb_vote > 0:
+                    imdb_nota = f"{tmdb_vote:.1f}"
+
+                if omdb_key:
                     try:
-                        res_omdb = requests.get(f"https://www.omdbapi.com/?i={imdb_id}&apikey={omdb_key}", timeout=2.0).json()
-                        if res_omdb.get("Response") == "True":
-                            imdb_nota = res_omdb.get("imdbRating", "N/A")
+                        res_omdb = None
+                        if imdb_id:
+                            res_omdb = requests.get(f"https://www.omdbapi.com/?i={imdb_id}&apikey={omdb_key}", timeout=2.0).json()
+                        elif titulo:
+                            tipo_omdb = "series" if mtype_seguro == "tv" else "movie"
+                            res_omdb = requests.get(f"https://www.omdbapi.com/?t={quote_plus(titulo)}&type={tipo_omdb}&apikey={omdb_key}", timeout=2.0).json()
+
+                        if res_omdb and res_omdb.get("Response") == "True":
+                            if res_omdb.get("imdbRating") and res_omdb.get("imdbRating") != "N/A":
+                                imdb_nota = res_omdb.get("imdbRating")
                             m_raw = res_omdb.get("Metascore", "N/A")
                             if m_raw and m_raw != "N/A":
                                 meta_nota = m_raw
@@ -896,20 +919,36 @@ def main(page: ft.Page):
         btn_slv.on_click = acao_salvar_modal
         btn_ir.on_click = lambda e: (fechar_dialogo(modal_det), alternar_tela(1))
 
+        # Monta os elementos do modal (incluindo as temporadas se for série)
+        elementos_modal = [
+            ft.Row([ft.Button(content=ft.Text("✕ Fechar", color="white", weight="bold", size=12), bgcolor=COR_PETROLEO, on_click=lambda e: fechar_dialogo(modal_det))], alignment=ft.MainAxisAlignment.END),
+            ft.Row([dt_img, ft.Column(info_col, spacing=3, width=310)], alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.START, wrap=True, spacing=10),
+            ft.Row([btn_tr, btn_slv], spacing=8, wrap=True) if tela_atual != "biblioteca" else ft.Row([btn_tr]),
+            btn_ir,
+        ]
+
+        if temporadas_detalhes:
+            elementos_modal.append(ft.Text("Temporadas & Notas", size=13, weight="bold", color="#94a3b8"))
+            lista_t_view = ft.Row(
+                controls=[ft.Container(content=ft.Text(t_txt, size=11, color="#cbd5e1", weight="bold"), bgcolor="#1e293b", padding=ft.Padding(8, 4, 8, 4), border_radius=6) for t_txt in temporadas_detalhes],
+                wrap=True,
+                spacing=6,
+                run_spacing=6
+            )
+            elementos_modal.append(lista_t_view)
+
+        elementos_modal.extend([
+            ft.Text("Sinopse", size=13, weight="bold", color="#94a3b8"),
+            ft.Text(sinopse, size=12, color="#cbd5e1"),
+        ])
+
         conteudo = ft.Container(
             width=480,
             bgcolor=COR_CARD,
             padding=14,
             border_radius=12,
             border=criar_borda(1.5, COR_PETROLEO),
-            content=ft.Column([
-                ft.Row([ft.Button(content=ft.Text("✕ Fechar", color="white", weight="bold", size=12), bgcolor=COR_PETROLEO, on_click=lambda e: fechar_dialogo(modal_det))], alignment=ft.MainAxisAlignment.END),
-                ft.Row([dt_img, ft.Column(info_col, spacing=3, width=310)], alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.START, wrap=True, spacing=10),
-                ft.Row([btn_tr, btn_slv], spacing=8, wrap=True) if tela_atual != "biblioteca" else ft.Row([btn_tr]),
-                btn_ir,
-                ft.Text("Sinopse", size=13, weight="bold", color="#94a3b8"),
-                ft.Text(sinopse, size=12, color="#cbd5e1"),
-            ], spacing=8, scroll=ft.ScrollMode.AUTO, tight=True)
+            content=ft.Column(elementos_modal, spacing=8, scroll=ft.ScrollMode.AUTO, tight=True)
         )
 
         modal_det = ft.AlertDialog(content=conteudo, modal=False, bgcolor="transparent", content_padding=0)
