@@ -173,8 +173,6 @@ def main(page: ft.Page):
     ids_salvos_usuario = set()
     titulos_salvos_usuario = set()
 
-    roteador_acoes = {"carregar_biblioteca": lambda: None}
-
     contexto_busca = {
         "tipo": None,
         "id": None,
@@ -252,6 +250,7 @@ def main(page: ft.Page):
         modal.open = False
         page.update()
 
+    # 1. FUNÇÃO DA BIBLIOTECA
     def carregar_biblioteca():
         coluna_biblioteca_itens.controls.clear()
         todos_itens = []
@@ -479,8 +478,6 @@ def main(page: ft.Page):
 
         coluna_biblioteca_itens.update()
 
-    roteador_acoes["carregar_biblioteca"] = carregar_biblioteca
-
     def mudar_aba_biblioteca(nova_aba):
         estado_biblioteca["aba"] = nova_aba
         if nova_aba == "Para Assistir" and estado_biblioteca["modo"] == "nota_pessoal":
@@ -543,6 +540,7 @@ def main(page: ft.Page):
             atualizar_contador_biblioteca()
             carregar_biblioteca()
 
+    # 2. DIÁLOGOS DINÂMICOS
     def abrir_modal_avaliacao(fid, nota_atual=None):
         nota_selecionada = {"valor": str(int(float(nota_atual))) if (nota_atual and nota_atual != "N/A") else "10"}
 
@@ -647,6 +645,7 @@ def main(page: ft.Page):
         modal_exclusao.open = True
         page.update()
 
+    # 3. MODAL DE DETALHES COMPLETO
     def abrir_detalhes(mid, mtype, titulo_prev, ano_prev, poster_prev, tela_atual="home"):
         ocultar_sugestoes()
         progresso.visible = True
@@ -841,6 +840,7 @@ def main(page: ft.Page):
         modal_det.open = True
         page.update()
 
+    # 4. ADICIONAR RÁPIDO NO CARTAZ
     def adicionar_rapido_poster(e, mid, mtype, titulo, ano, poster_url, chave_id, btn_adicionar):
         uid = sessao_usuario["id"]
         if not uid or chave_id in ids_salvos_usuario:
@@ -890,6 +890,7 @@ def main(page: ft.Page):
         btn_adicionar.tooltip = "Já está na sua biblioteca"
         btn_adicionar.update()
 
+    # 5. CARTÕES DOS FILMES
     def criar_card_filme(mid, mtype, titulo, ano, poster_url, categoria=None, nota=None):
         mtype_seguro = "tv" if mtype in ["tv", "series"] else "movie"
         chave_id = mid if isinstance(mid, str) and ("_" in mid or mid.startswith("tt")) else f"{mtype_seguro}_{mid}"
@@ -1005,6 +1006,7 @@ def main(page: ft.Page):
         )
         return card_corpo
 
+    # 6. PAGINAÇÃO DA BUSCA
     def carregar_mais_busca():
         if paginacao["carregando"] or paginacao["fim"]:
             return
@@ -1890,8 +1892,8 @@ def main(page: ft.Page):
                                 if chave not in vistos:
                                     vistos.add(chave)
                                     itens_totais.append(item)
-                        except Exception:
-                            pass
+                    except Exception:
+                        pass
 
                 contexto_busca["itens_cache"] = sorted(itens_totais, key=lambda x: x.get("vote_count", 0), reverse=True)
             except Exception as ex:
@@ -2040,4 +2042,3 @@ if __name__ == "__main__":
         port=porta,
         assets_dir=DIR_ASSETS
     )
-
