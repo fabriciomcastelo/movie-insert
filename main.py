@@ -167,7 +167,7 @@ def main(page: ft.Page):
     page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
     page.scroll = None
 
-    # Ecrã de carregamento personalizado com o logótipo da aplicação
+    # Ecrã de carregamento com logo
     page.splash = ft.Container(
         content=ft.Column(
             controls=[
@@ -194,6 +194,7 @@ def main(page: ft.Page):
     timer_busca = {"timer": None}
     versao_busca_atual = {"epoch": 0}
     primeira_acao_sugestao = {"callback": None}
+    tela_ativa_atual = {"indice": 0}
 
     contexto_busca = {
         "tipo": None,
@@ -330,24 +331,46 @@ def main(page: ft.Page):
         else:
             itens_filtrados = itens_aba
 
-        btn_print = ft.Button(content=ft.Text("🖨️ Imprimir", color="white", size=11, weight="bold"), bgcolor=COR_CHUMBO, on_click=lambda e: imprimir_lista())
+        btn_print = ft.Button(
+            content=ft.Row([ft.Icon(ft.Icons.PRINT, size=15, color="white"), ft.Text("Imprimir", color="white", size=12, weight="bold")], spacing=4),
+            bgcolor=COR_CHUMBO,
+            height=34,
+            style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=18), padding=ft.Padding(14, 0, 14, 0)),
+            on_click=lambda e: imprimir_lista()
+        )
 
         is_para_assistir_ativo = (aba_atual == "Para Assistir")
+        
+        # Botões Para Assistir / Assistidos ampliados conforme layout de referência
         btn_aba_para_assistir = ft.Button(
-            content=ft.Text(f"⏳ Para Assistir ({total_para_assistir})", color="white" if is_para_assistir_ativo else "#94a3b8", weight="bold"),
+            content=ft.Text(f"⏳ Para Assistir ({total_para_assistir})", color="white" if is_para_assistir_ativo else "#94a3b8", weight="bold", size=14),
             bgcolor=COR_PETROLEO if is_para_assistir_ativo else "#141d24",
-            style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10), side=ft.BorderSide(2, COR_ATIVO_BORDA) if is_para_assistir_ativo else ft.BorderSide(1, COR_BORDA)),
+            height=46,
+            style=ft.ButtonStyle(
+                shape=ft.RoundedRectangleBorder(radius=14),
+                side=ft.BorderSide(2.2, COR_ATIVO_BORDA) if is_para_assistir_ativo else ft.BorderSide(1.2, COR_BORDA),
+                padding=ft.Padding(20, 0, 20, 0)
+            ),
             on_click=lambda e: mudar_aba_biblioteca("Para Assistir")
         )
 
         btn_aba_assistidos = ft.Button(
-            content=ft.Text(f"✓ Assistidos ({total_assistidos})", color="white" if not is_para_assistir_ativo else "#94a3b8", weight="bold"),
+            content=ft.Text(f"✓ Assistidos ({total_assistidos})", color="white" if not is_para_assistir_ativo else "#94a3b8", weight="bold", size=14),
             bgcolor=COR_PETROLEO if not is_para_assistir_ativo else "#141d24",
-            style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10), side=ft.BorderSide(2, COR_ATIVO_BORDA) if not is_para_assistir_ativo else ft.BorderSide(1, COR_BORDA)),
+            height=46,
+            style=ft.ButtonStyle(
+                shape=ft.RoundedRectangleBorder(radius=14),
+                side=ft.BorderSide(2.2, COR_ATIVO_BORDA) if not is_para_assistir_ativo else ft.BorderSide(1.2, COR_BORDA),
+                padding=ft.Padding(20, 0, 20, 0)
+            ),
             on_click=lambda e: mudar_aba_biblioteca("Assistidos")
         )
 
-        linha_abas_biblioteca = ft.Row(spacing=10, alignment=ft.MainAxisAlignment.CENTER, controls=[btn_aba_para_assistir, btn_aba_assistidos])
+        linha_abas_biblioteca = ft.Row(
+            spacing=16, 
+            alignment=ft.MainAxisAlignment.CENTER, 
+            controls=[btn_aba_para_assistir, btn_aba_assistidos]
+        )
 
         def criar_botao_tipo(rotulo, valor_tipo):
             ativo = (tipo_atual == valor_tipo)
@@ -355,13 +378,14 @@ def main(page: ft.Page):
                 content=ft.Text(rotulo, color="white" if ativo else "#94a3b8", size=11, weight="bold"),
                 bgcolor=COR_PETROLEO if ativo else COR_CARD,
                 height=32,
-                style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=20), side=ft.BorderSide(1.8, COR_ATIVO_BORDA) if ativo else ft.BorderSide(1, COR_BORDA)),
+                style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=16), side=ft.BorderSide(1.8, COR_ATIVO_BORDA) if ativo else ft.BorderSide(1, COR_BORDA), padding=ft.Padding(12, 0, 12, 0)),
                 on_click=lambda e, t=valor_tipo: mudar_filtro_tipo_bib(t)
             )
 
         barra_tipo = ft.Row(
             spacing=6,
             alignment=ft.MainAxisAlignment.CENTER,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
             controls=[
                 ft.Text("Tipo:", size=11, color="#cbd5e1", weight="bold"),
                 criar_botao_tipo("Todos", "todos"),
@@ -374,9 +398,9 @@ def main(page: ft.Page):
             ativo = (modo_atual == modo_alvo)
             return ft.Button(
                 content=ft.Text(rotulo, color="white" if ativo else "#94a3b8", size=11, weight="bold"),
-                bgcolor="#055663" if ativo else COR_CARD,
+                bgcolor=COR_PETROLEO if ativo else COR_CARD,
                 height=32,
-                style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8), side=ft.BorderSide(2, "#38bdf8") if ativo else ft.BorderSide(1, COR_BORDA)),
+                style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10), side=ft.BorderSide(2, COR_ATIVO_BORDA) if ativo else ft.BorderSide(1, COR_BORDA), padding=ft.Padding(14, 0, 14, 0)),
                 on_click=lambda e, m=modo_alvo: mudar_modo_filtro(m)
             )
 
@@ -392,12 +416,22 @@ def main(page: ft.Page):
         else:
             controles_filtros.append(criar_botao_filtro("Nota Pessoal", "nota_pessoal"))
 
-        barra_filtros = ft.Row(spacing=8, wrap=True, alignment=ft.MainAxisAlignment.CENTER, controls=controles_filtros)
+        barra_filtros = ft.Row(
+            spacing=6, 
+            alignment=ft.MainAxisAlignment.CENTER, 
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            controls=controles_filtros
+        )
 
         topo_biblioteca = ft.Container(
             content=ft.Column([
-                ft.Row([ft.Text(f"Biblioteca ({len(todos_itens)})", size=20, weight="bold", color=COR_TEXTO_CLARO), btn_print], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                ft.Row([
+                    ft.Text(f"Biblioteca ({len(todos_itens)})", size=22, weight="bold", color=COR_TEXTO_CLARO), 
+                    btn_print
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                ft.Container(height=4),
                 linha_abas_biblioteca,
+                ft.Container(height=4),
                 barra_tipo,
                 barra_filtros
             ], spacing=10, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
@@ -667,9 +701,10 @@ def main(page: ft.Page):
                     if conn:
                         conn.close()
                 recarregar_ids_salvos()
-                fechar_dialogo(modal_exclusao)
                 atualizar_contador_biblioteca()
-                carregar_biblioteca()
+
+            fechar_dialogo(modal_exclusao)
+            carregar_biblioteca()
 
         modal_exclusao = ft.AlertDialog(
             modal=False,
@@ -1470,14 +1505,16 @@ def main(page: ft.Page):
     def ajustar_layout_responsivo(e=None):
         mobile = eh_mobile()
         largura_janela = page.width if page.width else 1000
+        na_biblioteca = (tela_ativa_atual["indice"] == 1)
+
         if mobile:
-            img_logo.height = 60
+            img_logo.height = 80 if na_biblioteca else 60
             container_input_busca.width = min(int(largura_janela * 0.92), 380)
             titulo_trends.width = None
             grade_populares.spacing = 8
             grade_populares.run_spacing = 10
         else:
-            img_logo.height = 68
+            img_logo.height = 92 if na_biblioteca else 68
             container_input_busca.width = 340
             titulo_trends.width = 1100
             grade_populares.spacing = 12
@@ -1529,19 +1566,23 @@ def main(page: ft.Page):
 
     def alternar_tela(indice):
         ocultar_sugestoes()
+        tela_ativa_atual["indice"] = indice
 
         if indice == 0:
             view_inicio.visible = True
             view_biblioteca.visible = False
             linha_controles_unificados.visible = True
+            container_input_busca.visible = True
             btn_tab_bib.border = criar_borda(1.2, COR_BORDA)
         elif indice == 1:
             carregar_biblioteca()
             view_inicio.visible = False
             view_biblioteca.visible = True
             linha_controles_unificados.visible = False
+            container_input_busca.visible = False
             btn_tab_bib.border = criar_borda(2, COR_ATIVO_BORDA)
 
+        ajustar_layout_responsivo()
         page.update()
 
     layout_mestre = ft.Column(
@@ -1594,7 +1635,6 @@ def main(page: ft.Page):
         page.update()
         carregar_populares()
 
-    # Modal de Novo Perfil
     txt_novo_perfil_nome = ft.TextField(
         label="Nome do Perfil",
         label_style=ft.TextStyle(color="#94a3b8"),
@@ -2050,7 +2090,6 @@ def main(page: ft.Page):
     carregar_perfis_tela()
     ajustar_layout_responsivo()
 
-    # Desativa o ecrã de carregamento assim que a interface estiver montada
     page.splash = None
     page.update()
 
