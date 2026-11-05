@@ -3,7 +3,9 @@ import sqlite3
 import json
 import os
 import requests
+import threading
 import unicodedata
+import time
 from urllib.parse import quote_plus
 from datetime import datetime
 
@@ -220,9 +222,6 @@ def main(page: ft.Page):
 
     progresso = ft.ProgressBar(color=COR_PETROLEO, bgcolor="transparent", visible=False)
 
-    # -------------------------------------------------------------
-    # DIÁLOGOS GERADOS DINAMICAMENTE (SEM CONFLITO DE SESSÃO)
-    # -------------------------------------------------------------
     def fechar_dialogo_generico(modal):
         modal.open = False
         page.update()
@@ -331,9 +330,6 @@ def main(page: ft.Page):
         modal_exclusao.open = True
         page.update()
 
-    # -------------------------------------------------------------
-    # DETALHES DO FILME (CARREGAMENTO SÍNCRONO DIRETO)
-    # -------------------------------------------------------------
     def abrir_detalhes(mid, mtype, titulo_prev, ano_prev, poster_prev, tela_atual="home"):
         ocultar_sugestoes()
         progresso.visible = True
@@ -372,12 +368,10 @@ def main(page: ft.Page):
                         if cr.get("job") == "Director":
                             diretor = cr.get("name")
                             break
-                    info_criacao = f"Direção: {diretor}"
                 else:
                     criadores = [cr.get("name") for cr in res.get("created_by", [])]
                     temporadas = res.get("number_of_seasons", 1)
-                    info_criacao = f"Criador(es): {', '.join(criadores) if criadores else 'Não informado'} • {temporadas} Temporada(s)"
-                    diretor = info_criacao
+                    diretor = f"Criador(es): {', '.join(criadores) if criadores else 'Não informado'} • {temporadas} Temporada(s)"
 
                 credits_data = res.get("credits", {})
                 elenco_list = [a.get("name") for a in credits_data.get("cast", [])[:4]]
@@ -447,7 +441,6 @@ def main(page: ft.Page):
 
         progresso.visible = False
 
-        # Montagem dos controles prontos
         dt_img = ft.Image(src=poster_url, width=135, height=200, border_radius=8, fit="cover")
         tag_tipo = "Série" if mtype_seguro == "tv" else "Filme"
         
@@ -531,7 +524,6 @@ def main(page: ft.Page):
         modal_det.open = True
         page.update()
 
-    # Adicionar rápido direto no cartaz
     def adicionar_rapido_poster(e, mid, mtype, titulo, ano, poster_url, chave_id, btn_adicionar):
         uid = sessao_usuario["id"]
         if not uid or chave_id in ids_salvos_usuario:
@@ -960,14 +952,14 @@ def main(page: ft.Page):
         content=ft.Text("🎬 Filmes", size=11, weight="bold", color="#94a3b8"),
         bgcolor=COR_CARD,
         height=32,
-        style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=20), side=ft.BorderSide(1, COR_BORDA)),
+        style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=20), side=ft.BorderSide(1.8, COR_ATIVO_BORDA) if paginacao["filtro_home"] == "movie" else ft.BorderSide(1, COR_BORDA)),
         on_click=lambda e: alternar_filtro_home("movie")
     )
     btn_home_series = ft.Button(
         content=ft.Text("📺 Séries", size=11, weight="bold", color="#94a3b8"),
         bgcolor=COR_CARD,
         height=32,
-        style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=20), side=ft.BorderSide(1, COR_BORDA)),
+        style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=20), side=ft.BorderSide(1.8, COR_ATIVO_BORDA) if paginacao["filtro_home"] == "tv" else ft.BorderSide(1, COR_BORDA)),
         on_click=lambda e: alternar_filtro_home("tv")
     )
 
@@ -1009,297 +1001,7 @@ def main(page: ft.Page):
         wrap=True
     )
 
-    def remover_filme_direto(fid):
-        uid = sessao_usuario["id"]
-        if uid:
-            conn = None
-            try:
-                conn = sqlite3.connect(DB_FILE, timeout=5)
-                c = conn.cursor()
-                c.execute("DELETE FROM filmes WHERE id = ? AND usuario_id = ?", (fid, uid))
-                conn.commit()
-            except Exception:
-                pass
-            finally:
-                if conn:
-                    conn.close()
-            recarregar_ids_salvos()
-            atualizar_contador_biblioteca()
-            carregar_biblioteca()
-
-    def imprimir_lista():
-        uid = sessao_usuario["id"]
-        filmes = []
-        if uid:
-            conn = None
-            try:
-                conn = sqlite3.connect(DB_FILE, timeout=5)
-                c = conn.cursor()
-                c.execute("SELECT titulo, ano, imdb, rotten, streaming, diretor, tipo FROM filmes WHERE categoria = 'Para Assistir' AND usuario_id = ? ORDER BY titulo ASC", (uid,))
-                filmes = c.fetchall()
-            except Exception:
-                pass
-            finally:
-                if conn:
-                    conn.close()
-
-        if not filmes:
-            return
-
-        linhas = "".join([f"<tr><td>{i}</td><td><b>{t}</b> ({a})</td><td>{'Série' if tp == 'tv' else 'Filme'}</td><td>⭐ {im}</td><td>🍅 {rt}</td><td>{st}</td><td>{dr}</td></tr>" for i, (t, a, im, rt, st, dr, tp) in enumerate(filmes, 1)])
-        html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><title>Para Assistir</title>
-        <style>body{{font-family:sans-serif;margin:20px;}}table{{width:100%;border-collapse:collapse;}}th,td{{border:1px solid #ccc;padding:8px;text-align:left;}}th{{background:#f1f5f9;}}</style>
-        </head><body><h2>🎬 Lista Para Assistir ({len(filmes)})</h2><table><thead><tr><th>#</th><th>Título</th><th>Tipo</th><th>IMDb</th><th>RT</th><th>Streaming</th><th>Direção/Criação</th></tr></thead><tbody>{linhas}</tbody></table><script>window.onload=function(){{window.print();}}</script></body></html>"""
-        arq = os.path.abspath("lista_para_assistir.html")
-        with open(arq, "w", encoding="utf-8") as f:
-            f.write(html)
-        page.launch_url(f"file://{arq}")
-
-    def mudar_aba_biblioteca(nova_aba):
-        estado_biblioteca["aba"] = nova_aba
-        if nova_aba == "Para Assistir" and estado_biblioteca["modo"] == "nota_pessoal":
-            estado_biblioteca["modo"] = "nota"
-        elif nova_aba == "Assistidos" and estado_biblioteca["modo"] == "nota":
-            estado_biblioteca["modo"] = "nota_pessoal"
-        carregar_biblioteca()
-
-    def mudar_modo_filtro(novo_modo):
-        estado_biblioteca["modo"] = novo_modo
-        carregar_biblioteca()
-
-    def mudar_filtro_tipo_bib(novo_tipo):
-        estado_biblioteca["filtro_tipo"] = novo_tipo
-        carregar_biblioteca()
-
-    def carregar_biblioteca():
-        coluna_biblioteca_itens.controls.clear()
-        todos_itens = []
-        uid = sessao_usuario["id"]
-
-        if uid:
-            conn = None
-            try:
-                conn = sqlite3.connect(DB_FILE, timeout=5)
-                c = conn.cursor()
-                c.execute("""
-                    SELECT id, titulo, ano, poster_url, nota_usuario, categoria, streaming, generos, imdb, tipo 
-                    FROM filmes 
-                    WHERE usuario_id = ? 
-                    ORDER BY rowid DESC
-                """, (uid,))
-                todos_itens = c.fetchall()
-            except Exception:
-                pass
-            finally:
-                if conn:
-                    conn.close()
-
-        total_para_assistir = sum(1 for it in todos_itens if it[5] == "Para Assistir")
-        total_assistidos = sum(1 for it in todos_itens if it[5] == "Assistidos")
-
-        aba_atual = estado_biblioteca["aba"]
-        modo_atual = estado_biblioteca["modo"]
-        tipo_atual = estado_biblioteca["filtro_tipo"]
-
-        itens_aba = [it for it in todos_itens if it[5] == aba_atual]
-
-        if tipo_atual == "movie":
-            itens_filtrados = [it for it in itens_aba if (it[9] or "movie") == "movie"]
-        elif tipo_atual == "tv":
-            itens_filtrados = [it for it in itens_aba if it[9] == "tv"]
-        else:
-            itens_filtrados = itens_aba
-
-        btn_print = ft.Button(content=ft.Text("🖨️ Imprimir", color="white", size=11, weight="bold"), bgcolor=COR_CHUMBO, on_click=lambda e: imprimir_lista())
-
-        is_para_assistir_ativo = (aba_atual == "Para Assistir")
-        btn_aba_para_assistir = ft.Button(
-            content=ft.Text(f"⏳ Para Assistir ({total_para_assistir})", color="white" if is_para_assistir_ativo else "#94a3b8", weight="bold"),
-            bgcolor=COR_PETROLEO if is_para_assistir_ativo else "#141d24",
-            style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10), side=ft.BorderSide(2, COR_ATIVO_BORDA) if is_para_assistir_ativo else ft.BorderSide(1, COR_BORDA)),
-            on_click=lambda e: mudar_aba_biblioteca("Para Assistir")
-        )
-
-        btn_aba_assistidos = ft.Button(
-            content=ft.Text(f"✓ Assistidos ({total_assistidos})", color="white" if not is_para_assistir_ativo else "#94a3b8", weight="bold"),
-            bgcolor=COR_PETROLEO if not is_para_assistir_ativo else "#141d24",
-            style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10), side=ft.BorderSide(2, COR_ATIVO_BORDA) if not is_para_assistir_ativo else ft.BorderSide(1, COR_BORDA)),
-            on_click=lambda e: mudar_aba_biblioteca("Assistidos")
-        )
-
-        linha_abas_biblioteca = ft.Row(spacing=10, alignment=ft.MainAxisAlignment.CENTER, controls=[btn_aba_para_assistir, btn_aba_assistidos])
-
-        def criar_botao_tipo(rotulo, valor_tipo):
-            ativo = (tipo_atual == valor_tipo)
-            return ft.Button(
-                content=ft.Text(rotulo, color="white" if ativo else "#94a3b8", size=11, weight="bold"),
-                bgcolor=COR_PETROLEO if ativo else COR_CARD,
-                height=32,
-                style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=20), side=ft.BorderSide(1.8, COR_ATIVO_BORDA) if ativo else ft.BorderSide(1, COR_BORDA)),
-                on_click=lambda e, t=valor_tipo: mudar_filtro_tipo_bib(t)
-            )
-
-        barra_tipo = ft.Row(
-            spacing=6,
-            alignment=ft.MainAxisAlignment.CENTER,
-            controls=[
-                ft.Text("Tipo:", size=11, color="#cbd5e1", weight="bold"),
-                criar_botao_tipo("Todos", "todos"),
-                criar_botao_tipo("🎬 Filmes", "movie"),
-                criar_botao_tipo("📺 Séries", "tv"),
-            ]
-        )
-
-        def criar_botao_filtro(rotulo, modo_alvo):
-            ativo = (modo_atual == modo_alvo)
-            return ft.Button(
-                content=ft.Text(rotulo, color="white" if ativo else "#94a3b8", size=11, weight="bold"),
-                bgcolor="#055663" if ativo else COR_CARD,
-                height=32,
-                style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8), side=ft.BorderSide(2, "#38bdf8") if ativo else ft.BorderSide(1, COR_BORDA)),
-                on_click=lambda e, m=modo_alvo: mudar_modo_filtro(m)
-            )
-
-        controles_filtros = [
-            ft.Text("Organizar:", size=11, color="#cbd5e1", weight="bold"),
-            criar_botao_filtro("Streaming", "streaming"),
-            criar_botao_filtro("A-Z", "alfabetico"),
-            criar_botao_filtro("Gênero", "genero"),
-        ]
-
-        if aba_atual == "Para Assistir":
-            controles_filtros.append(criar_botao_filtro("Nota IMDb", "nota"))
-        else:
-            controles_filtros.append(criar_botao_filtro("Nota Pessoal", "nota_pessoal"))
-
-        barra_filtros = ft.Row(spacing=8, wrap=True, alignment=ft.MainAxisAlignment.CENTER, controls=controles_filtros)
-
-        topo_biblioteca = ft.Container(
-            content=ft.Column([
-                ft.Row([ft.Text(f"Biblioteca ({len(todos_itens)})", size=20, weight="bold", color=COR_TEXTO_CLARO), btn_print], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                linha_abas_biblioteca,
-                barra_tipo,
-                barra_filtros
-            ], spacing=10, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-            width=1000
-        )
-
-        coluna_biblioteca_itens.controls.append(topo_biblioteca)
-
-        if not itens_filtrados:
-            coluna_biblioteca_itens.controls.append(
-                ft.Container(content=ft.Text("Nenhum título encontrado com os filtros selecionados.", color="#94a3b8", size=14), padding=ft.Padding(10, 30, 10, 20))
-            )
-            coluna_biblioteca_itens.update()
-            return
-
-        def renderizar_secao(titulo_secao, icone, cor, lista):
-            if not lista:
-                return
-            grade_cards = ft.Row(
-                wrap=True,
-                spacing=10,
-                run_spacing=12,
-                alignment=ft.MainAxisAlignment.CENTER,
-                controls=[
-                    criar_card_filme(mid, tp, tit, ano, p_url, categoria=cat, nota=nota)
-                    for mid, tit, ano, p_url, nota, cat, tp in lista
-                ]
-            )
-            bloco = ft.Container(
-                content=ft.Column([
-                    ft.Row([
-                        ft.Text(f"{icone} {titulo_secao}", size=15, weight="bold", color=cor),
-                        ft.Container(content=ft.Text(f"{len(lista)}", size=11, color="white", weight="bold"), bgcolor=COR_CARD, border=criar_borda(1, COR_BORDA), padding=ft.Padding(5, 2, 5, 2), border_radius=8)
-                    ], spacing=6, alignment=ft.MainAxisAlignment.CENTER),
-                    grade_cards
-                ], spacing=10, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-                width=1000
-            )
-            coluna_biblioteca_itens.controls.append(bloco)
-
-        if modo_atual == "streaming":
-            ordem_secoes = list(STREAMINGS_PADRAO) + ["Stremio", "Sem streaming no BR"]
-            mapa = {s: [] for s in ordem_secoes}
-
-            for row in itens_filtrados:
-                mid, tit, ano, p_url, nota, cat, streaming_txt, tp = row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[9]
-                st_str = (streaming_txt or "").lower()
-                alocado_oficial = False
-
-                for st_nome in STREAMINGS_PADRAO:
-                    termo = st_nome.lower().replace(" plus", "").replace("+", "")
-                    if termo in st_str:
-                        mapa[st_nome].append((mid, tit, ano, p_url, nota, cat, tp or "movie"))
-                        alocado_oficial = True
-
-                if not alocado_oficial:
-                    if "stremio" in st_str:
-                        mapa["Stremio"].append((mid, tit, ano, p_url, nota, cat, tp or "movie"))
-                    else:
-                        mapa["Sem streaming no BR"].append((mid, tit, ano, p_url, nota, cat, tp or "movie"))
-
-            for servico in ordem_secoes:
-                cor = "#a78bfa" if servico == "Stremio" else ("#94a3b8" if servico == "Sem streaming no BR" else COR_TEXTO_CLARO)
-                ico = "🎬" if servico == "Stremio" else ("❌" if servico == "Sem streaming no BR" else "📺")
-                renderizar_secao(servico, ico, cor, mapa[servico])
-
-        elif modo_atual == "alfabetico":
-            mapa_alfabetico = {}
-            itens_ordenados = sorted(itens_filtrados, key=lambda x: normalizar_texto(x[1]))
-            for row in itens_ordenados:
-                mid, tit, ano, p_url, nota, cat, tp = row[0], row[1], row[2], row[3], row[4], row[5], row[9]
-                letra = normalizar_texto(tit)[:1].upper() if tit else "#"
-                if not letra.isalpha():
-                    letra = "#"
-                mapa_alfabetico.setdefault(letra, []).append((mid, tit, ano, p_url, nota, cat, tp or "movie"))
-
-            letras_ordenadas = sorted([k for k in mapa_alfabetico.keys() if k != "#"])
-            if "#" in mapa_alfabetico:
-                letras_ordenadas.append("#")
-
-            for letra in letras_ordenadas:
-                renderizar_secao(f"Letra {letra}", "🔤", COR_TEXTO_CLARO, mapa_alfabetico[letra])
-
-        elif modo_atual == "genero":
-            mapa_generos = {}
-            for row in itens_filtrados:
-                mid, tit, ano, p_url, nota, cat, gens, tp = row[0], row[1], row[2], row[3], row[4], row[5], row[7], row[9]
-                lista_g = [g.strip() for g in gens.split(",")] if gens else ["Outros"]
-                for g in lista_g:
-                    mapa_generos.setdefault(g, []).append((mid, tit, ano, p_url, nota, cat, tp or "movie"))
-
-            for g_nome in sorted(mapa_generos.keys()):
-                renderizar_secao(g_nome, "🏷️", "#fbbf24", mapa_generos[g_nome])
-
-        elif modo_atual == "nota":
-            def pegar_imdb_float(it):
-                val = it[8]
-                try:
-                    return float(str(val).replace(",", ".")) if (val and val != "N/A") else 0.0
-                except Exception:
-                    return 0.0
-
-            itens_ordenados_imdb = sorted(itens_filtrados, key=pegar_imdb_float, reverse=True)
-            lista_cards = [(row[0], row[1], row[2], row[3], row[4], row[5], row[9] or "movie") for row in itens_ordenados_imdb]
-            renderizar_secao("Ordenado por IMDb", "⭐", COR_TEXTO_CLARO, lista_cards)
-
-        elif modo_atual == "nota_pessoal":
-            def pegar_nota_pessoal_float(it):
-                val = it[4]
-                try:
-                    return float(str(val).replace(",", ".")) if (val and val != "N/A") else 0.0
-                except Exception:
-                    return 0.0
-
-            itens_ordenados_pessoal = sorted(itens_filtrados, key=pegar_nota_pessoal_float, reverse=True)
-            lista_cards = [(row[0], row[1], row[2], row[3], row[4], row[5], row[9] or "movie") for row in itens_ordenados_pessoal]
-            renderizar_secao("Sua Nota Pessoal", "★", COR_TEXTO_CLARO, lista_cards)
-
-        coluna_biblioteca_itens.update()
-
     coluna_sugestoes = ft.Column(spacing=4, scroll=ft.ScrollMode.AUTO)
-
     container_sugestoes = ft.Container(
         content=coluna_sugestoes,
         bgcolor="#111827",
@@ -1319,324 +1021,6 @@ def main(page: ft.Page):
         if container_sugestoes.visible:
             container_sugestoes.visible = False
             container_sugestoes.update()
-
-    def exibir_filmografia_pessoa(person_id, nome_pessoa):
-        ocultar_sugestoes()
-        campo_busca.value = nome_pessoa
-        campo_busca.update()
-        paginacao["modo_busca_ativo"] = True
-        paginacao["fim"] = False
-        btn_carregar_mais.visible = False
-        grade_populares.controls.clear()
-        
-        contexto_busca["tipo"] = "person"
-        contexto_busca["id"] = person_id
-        contexto_busca["nome"] = nome_pessoa
-        contexto_busca["itens_cache"] = []
-        contexto_busca["offset"] = 0
-        
-        txt_titulo_home.value = nome_pessoa
-        txt_titulo_home.update()
-        alternar_tela(0)
-        progresso.visible = True
-        progresso.update()
-
-        c = carregar_config()
-        tmdb_key = c.get("tmdb_key", "").strip()
-
-        def _fetch():
-            try:
-                url = f"https://api.themoviedb.org/3/person/{person_id}/combined_credits?api_key={tmdb_key}&language=pt-BR"
-                res = requests.get(url, timeout=4.5).json()
-                
-                cast_puro = res.get("cast", [])
-                crew_puro = res.get("crew", [])
-                
-                itens_filtrados = []
-                vistos = set()
-
-                for item in cast_puro:
-                    mid = item.get("id")
-                    if not mid or not item.get("poster_path"):
-                        continue
-                    
-                    personagem = (item.get("character") or "").lower().strip()
-                    generos = item.get("genre_ids", [])
-                    
-                    if 99 in generos or "self" in personagem or "himself" in personagem or "herself" in personagem:
-                        continue
-                        
-                    if item.get("media_type") == "tv" or "name" in item or "first_air_date" in item:
-                        mtype = "tv"
-                    else:
-                        mtype = "movie"
-                    item["media_type"] = mtype
-                    
-                    chave = f"{mtype}_{mid}"
-                    if chave not in vistos:
-                        vistos.add(chave)
-                        itens_filtrados.append(item)
-
-                for item in crew_puro:
-                    mid = item.get("id")
-                    if not mid or not item.get("poster_path"):
-                        continue
-                        
-                    job = (item.get("job") or "").lower().strip()
-                    generos = item.get("genre_ids", [])
-                    
-                    if job in ["director", "creator", "writer"]:
-                        if 99 in generos:
-                            continue
-                            
-                        if item.get("media_type") == "tv" or "name" in item or "first_air_date" in item:
-                            mtype = "tv"
-                        else:
-                            mtype = "movie"
-                        item["media_type"] = mtype
-                        
-                        chave = f"{mtype}_{mid}"
-                        if chave not in vistos:
-                            vistos.add(chave)
-                            itens_filtrados.append(item)
-
-                contexto_busca["itens_cache"] = sorted(
-                    itens_filtrados,
-                    key=lambda x: (x.get("vote_count", 0), x.get("popularity", 0)),
-                    reverse=True
-                )
-            except Exception as ex:
-                print(f"Erro filmografia filtrada: {ex}")
-            finally:
-                progresso.visible = False
-                progresso.update()
-                renderizar_itens_busca_contexto()
-
-        threading.Thread(target=_fetch, daemon=True).start()
-
-    def executar_pesquisa_tema_ou_termo(termo_busca):
-        ocultar_sugestoes()
-        termo_limpo = termo_busca.strip()
-        if not termo_limpo:
-            return
-
-        campo_busca.value = termo_limpo
-        campo_busca.update()
-        paginacao["modo_busca_ativo"] = True
-        paginacao["fim"] = False
-        btn_carregar_mais.visible = False
-        grade_populares.controls.clear()
-        
-        contexto_busca["tipo"] = "tema"
-        contexto_busca["id"] = termo_limpo
-        contexto_busca["nome"] = termo_limpo
-        contexto_busca["itens_cache"] = []
-        contexto_busca["offset"] = 0
-        
-        txt_titulo_home.value = termo_limpo.title()
-        txt_titulo_home.update()
-        alternar_tela(0)
-        progresso.visible = True
-        progresso.update()
-
-        c = carregar_config()
-        tmdb_key = c.get("tmdb_key", "").strip()
-
-        def _fetch():
-            try:
-                norm = normalizar_texto(termo_limpo)
-                kw_ids_str = ""
-
-                for termo_k, ids_v in MAPA_KEYWORDS_CONHECIDAS.items():
-                    if termo_k in norm:
-                        kw_ids_str = ids_v
-                        break
-
-                if not kw_ids_str:
-                    tr = traduzir_para_ingles(termo_limpo)
-                    kw_encontrados = set()
-                    for q in [tr, norm]:
-                        try:
-                            kw_url = f"https://api.themoviedb.org/3/search/keyword?api_key={tmdb_key}&query={quote_plus(q)}&page=1"
-                            r = requests.get(kw_url, timeout=2.0)
-                            if r.status_code == 200:
-                                for k in r.json().get("results", [])[:3]:
-                                    kw_encontrados.add(str(k.get("id")))
-                        except Exception:
-                            pass
-                    if kw_encontrados:
-                        kw_ids_str = "|".join(list(kw_encontrados)[:5])
-
-                itens_totais = []
-                vistos = set()
-
-                if kw_ids_str:
-                    for pg in [1, 2, 3]:
-                        try:
-                            url_m = f"https://api.themoviedb.org/3/discover/movie?api_key={tmdb_key}&language=pt-BR&sort_by=vote_count.desc&with_keywords={kw_ids_str}&vote_count.gte=30&page={pg}"
-                            res_m = requests.get(url_m, timeout=3.5).json().get("results", [])
-                            for item in res_m:
-                                if not item.get("poster_path"):
-                                    continue
-                                item["media_type"] = "movie"
-                                chave = f"movie_{item.get('id')}"
-                                if chave not in vistos:
-                                    vistos.add(chave)
-                                    itens_totais.append(item)
-                        except Exception:
-                            pass
-
-                    for pg in [1, 2]:
-                        try:
-                            url_t = f"https://api.themoviedb.org/3/discover/tv?api_key={tmdb_key}&language=pt-BR&sort_by=vote_count.desc&with_keywords={kw_ids_str}&vote_count.gte=10&page={pg}"
-                            res_t = requests.get(url_t, timeout=3.5).json().get("results", [])
-                            for item in res_t:
-                                if not item.get("poster_path"):
-                                    continue
-                                item["media_type"] = "tv"
-                                chave = f"tv_{item.get('id')}"
-                                if chave not in vistos:
-                                    vistos.add(chave)
-                                    itens_totais.append(item)
-                        except Exception:
-                            pass
-
-                for pg in [1, 2]:
-                    try:
-                        url_multi = f"https://api.themoviedb.org/3/search/multi?api_key={tmdb_key}&query={quote_plus(termo_limpo)}&language=pt-BR&include_adult=false&page={pg}"
-                        res_multi = requests.get(url_multi, timeout=3.0).json().get("results", [])
-                        for item in res_multi:
-                            mtype = item.get("media_type")
-                            if mtype not in ["movie", "tv"]:
-                                mtype = "tv" if "name" in item else "movie"
-                            item["media_type"] = mtype
-
-                            if item.get("poster_path") and item.get("vote_count", 0) >= 20:
-                                chave = f"{mtype}_{item.get('id')}"
-                                if chave not in vistos:
-                                    vistos.add(chave)
-                                    itens_totais.append(item)
-                        except Exception:
-                            pass
-
-                contexto_busca["itens_cache"] = sorted(itens_totais, key=lambda x: x.get("vote_count", 0), reverse=True)
-            except Exception as ex:
-                print(f"Erro pesquisa tema: {ex}")
-            finally:
-                progresso.visible = False
-                renderizar_itens_busca_contexto()
-
-        threading.Thread(target=_fetch, daemon=True).start()
-
-    def selecionar_sugestao_filme(mid, mtype, tit, ano, p_url):
-        ocultar_sugestoes()
-        campo_busca.value = tit
-        campo_busca.update()
-        abrir_detalhes(mid, mtype, tit, ano, p_url, tela_atual="home")
-
-    def buscar_sugestoes_api(termo, epoch_disparo):
-        if epoch_disparo != versao_busca_atual["epoch"]:
-            return
-
-        c = carregar_config()
-        tmdb_key = c.get("tmdb_key", "").strip()
-        termo_limpo = termo.strip()
-        if not tmdb_key or len(termo_limpo) < 2:
-            ocultar_sugestoes()
-            return
-
-        try:
-            url_multi = "https://api.themoviedb.org/3/search/multi"
-            params_multi = {"api_key": tmdb_key, "query": termo_limpo, "language": "pt-BR", "include_adult": "false"}
-            resp_multi = requests.get(url_multi, params=params_multi, timeout=3.0)
-            
-            if epoch_disparo != versao_busca_atual["epoch"]:
-                return
-
-            itens_multi = resp_multi.json().get("results", []) if resp_multi.status_code == 200 else []
-
-            coluna_sugestoes.controls.clear()
-
-            linha_tema_universal = ft.Container(
-                padding=8,
-                border_radius=6,
-                bgcolor="#164e63",
-                on_click=lambda e, t=termo_limpo: executar_pesquisa_tema_ou_termo(t),
-                content=ft.Row([
-                    ft.Icon(ft.Icons.SEARCH, size=18, color="#38bdf8"),
-                    ft.Column([
-                        ft.Text(f'Ver catálogo sobre "{termo_limpo}"', size=12, weight="bold", color="white", max_lines=1, overflow="ellipsis"),
-                        ft.Text("🏷️ Assunto, contexto ou tema", size=10, color="#7dd3fc")
-                    ], spacing=2, expand=True)
-                ], spacing=8)
-            )
-            coluna_sugestoes.controls.append(linha_tema_universal)
-
-            pessoas = [i for i in itens_multi if i.get("media_type") == "person"][:2]
-            for p in pessoas:
-                pid = p.get("id")
-                pnome = p.get("name") or "Artista"
-                dept = p.get("known_for_department") or "Atuação"
-                dept_traduzido = "Direção" if dept == "Directing" else "Ator/Atriz"
-                pic = p.get("profile_path")
-                pic_url = f"https://image.tmdb.org/t/p/w185{pic}" if pic else None
-
-                linha_p = ft.Container(
-                    padding=6,
-                    border_radius=6,
-                    bgcolor="#1e293b",
-                    on_click=lambda e, person_id=pid, name=pnome: exibir_filmografia_pessoa(person_id, name),
-                    content=ft.Row([
-                        ft.Image(src=pic_url if pic_url else "https://via.placeholder.com/32x46?text=👤", width=32, height=46, border_radius=4, fit="cover"),
-                        ft.Column([
-                            ft.Text(pnome, size=12, weight="bold", color="white", max_lines=1, overflow="ellipsis"),
-                            ft.Text(f"👤 {dept_traduzido} • Filmografia", size=10, color="#38bdf8")
-                        ], spacing=2, expand=True)
-                    ], spacing=8)
-                )
-                coluna_sugestoes.controls.append(linha_p)
-
-            obras = [i for i in itens_multi if i.get("media_type") in ["movie", "tv"] and i.get("poster_path")][:4]
-            for item in obras:
-                mtype = item.get("media_type", "movie")
-                mid = item.get("id")
-                tit = item.get("title") or item.get("name") or "Sem título"
-                ano = str((item.get("release_date") or item.get("first_air_date")) or "")[:4]
-                p_path = item.get("poster_path")
-                p_url = f"https://image.tmdb.org/t/p/w185{p_path}" if p_path else None
-
-                linha_item = ft.Container(
-                    padding=6,
-                    border_radius=6,
-                    bgcolor=COR_CARD,
-                    on_click=lambda e, m=mid, mt=mtype, t=tit, a=ano, p=p_url: selecionar_sugestao_filme(m, mt, t, a, p),
-                    content=ft.Row([
-                        ft.Image(src=p_url if p_url else "https://via.placeholder.com/40x60?text=-", width=32, height=46, border_radius=4, fit="cover"),
-                        ft.Column([
-                            ft.Text(tit, size=12, weight="bold", color="white", max_lines=1, overflow="ellipsis"),
-                            ft.Text(f"{ano} • {'Série' if mtype == 'tv' else 'Filme'}", size=10, color="#94a3b8")
-                        ], spacing=2, expand=True)
-                    ], spacing=8)
-                )
-                coluna_sugestoes.controls.append(linha_item)
-
-            if len(coluna_sugestoes.controls) > 0 and epoch_disparo == versao_busca_atual["epoch"]:
-                largura_atual = page.width if page.width else 1000
-                container_sugestoes.visible = True
-                if largura_atual < 720:
-                    container_sugestoes.width = min(int(largura_atual * 0.90), 380)
-                    container_sugestoes.left = max(10, int((largura_atual - container_sugestoes.width) / 2))
-                    container_sugestoes.top = 165
-                else:
-                    container_sugestoes.width = 320
-                    container_sugestoes.left = max(0, int((largura_atual / 2) - 160))
-                    container_sugestoes.top = 165
-            else:
-                ocultar_sugestoes()
-
-            container_sugestoes.update()
-        except Exception as ex:
-            print(f"Erro busca expandida: {ex}")
 
     def disparar_busca_manual(e=None):
         termo = campo_busca.value
@@ -1675,7 +1059,6 @@ def main(page: ft.Page):
         on_submit=disparar_busca_manual
     )
 
-    # Clique do logo 100% nativo sem dependências temporais
     def clicar_no_logo(e):
         campo_busca.value = ""
         campo_busca.update()
