@@ -7,6 +7,7 @@ import threading
 import unicodedata
 import time
 from urllib.parse import quote_plus
+from datetime import datetime
 
 CONFIG_FILE = "config.json"
 DB_FILE = "filmes.db"
@@ -97,6 +98,7 @@ def init_db():
         conn = sqlite3.connect(DB_FILE, timeout=15)
         c = conn.cursor()
         c.execute("PRAGMA journal_mode=WAL;")
+        
         c.execute("""
             CREATE TABLE IF NOT EXISTS usuarios (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -104,6 +106,7 @@ def init_db():
                 cor_avatar TEXT DEFAULT '#03434d'
             )
         """)
+        
         c.execute("""
             CREATE TABLE IF NOT EXISTS filmes (
                 id TEXT,
@@ -247,6 +250,9 @@ def main(page: ft.Page):
 
     progresso = ft.ProgressBar(color=COR_PETROLEO, bgcolor="transparent", visible=False)
 
+    # -------------------------------------------------------------
+    # GESTÃO SEGURA DE DIÁLOGOS (PREVINE CRASH "MUST BE ADDED FIRST")
+    # -------------------------------------------------------------
     def abrir_dialogo(modal):
         if modal not in page.overlay:
             page.overlay.append(modal)
@@ -290,12 +296,6 @@ def main(page: ft.Page):
         ],
         actions_alignment=ft.MainAxisAlignment.END
     )
-
-    def pedir_confirmacao_remocao(fid, titulo):
-        filme_para_remover["id"] = fid
-        filme_para_remover["titulo"] = titulo
-        txt_confirmacao_msg.value = f"Deseja remover '{titulo}' da lista de Assistidos?"
-        abrir_dialogo(modal_confirmacao)
 
     botoes_notas = []
     linha_notas_1_5 = ft.Row(spacing=6, alignment=ft.MainAxisAlignment.CENTER)
@@ -371,6 +371,9 @@ def main(page: ft.Page):
         selecionar_nota_valor(nota_inicial)
         abrir_dialogo(modal_avaliacao)
 
+    # -------------------------------------------------------------
+    # MODAL DE DETALHES COM ATUALIZAÇÃO SEGURA
+    # -------------------------------------------------------------
     dt_img = ft.Image(
         src="https://via.placeholder.com/130x195?text=Sem+Poster",
         width=135,
@@ -541,7 +544,7 @@ def main(page: ft.Page):
 
         abrir_dialogo(modal_detalhes)
         progresso.visible = True
-        progresso.update()
+        page.update()
 
         c = carregar_config()
         tmdb_key = c.get("tmdb_key", "").strip()
@@ -730,11 +733,13 @@ def main(page: ft.Page):
                 print(f"Erro ao obter detalhes: {ex}")
             finally:
                 progresso.visible = False
-                progresso.update()
                 page.update()
 
         threading.Thread(target=_fetch, daemon=True).start()
 
+    # -------------------------------------------------------------
+    # ADICIONAR RÁPIDO COM CONSULTA REAL DE STREAMINGS
+    # -------------------------------------------------------------
     def adicionar_rapido_poster(e, mid, mtype, titulo, ano, poster_url, chave_id, btn_adicionar):
         uid = sessao_usuario["id"]
         if not uid or chave_id in ids_salvos_usuario:
@@ -800,7 +805,7 @@ def main(page: ft.Page):
                     content=ft.Text("✓ Visto", color="white", size=10),
                     bgcolor="#10b981",
                     height=28,
-                    on_click=lambda e: abrir_modal_avaliacao(chave_id)
+                    on_click=lambda e, cid=chave_id: abrir_modal_avaliacao(cid)
                 )
             )
             acoes.append(
@@ -809,7 +814,7 @@ def main(page: ft.Page):
                     icon_color="red400",
                     icon_size=16,
                     tooltip="Remover",
-                    on_click=lambda e: remover_filme_direto(chave_id)
+                    on_click=lambda e, cid=chave_id: remover_filme_direto(cid)
                 )
             )
         elif categoria == "Assistidos":
@@ -821,7 +826,7 @@ def main(page: ft.Page):
                     border=borda_nota,
                     padding=ft.Padding(6, 3, 6, 3),
                     border_radius=5,
-                    on_click=lambda e: abrir_modal_avaliacao(chave_id, nota)
+                    on_click=lambda e, cid=chave_id, n=nota: abrir_modal_avaliacao(cid, n)
                 )
             )
             acoes.append(
@@ -830,7 +835,7 @@ def main(page: ft.Page):
                     icon_color="red400",
                     icon_size=16,
                     tooltip="Excluir",
-                    on_click=lambda e: pedir_confirmacao_remocao(chave_id, titulo)
+                    on_click=lambda e, cid=chave_id, t=titulo: pedir_confirmacao_remocao(cid, t)
                 )
             )
 
@@ -898,7 +903,7 @@ def main(page: ft.Page):
                 ),
                 ft.Row(acoes, spacing=3, alignment=ft.MainAxisAlignment.SPACE_BETWEEN, width=largura_card - 10) if acoes else ft.Container()
             ], spacing=3, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-            on_click=lambda e: abrir_detalhes(mid, mtype_seguro, titulo, ano, poster_url, tela_atual="home" if categoria is None else "biblioteca")
+            on_click=lambda e, m=mid, mt=mtype_seguro, t=titulo, a=ano, p=poster_url: abrir_detalhes(m, mt, t, a, p, tela_atual="home" if categoria is None else "biblioteca")
         )
         return card_corpo
 
@@ -1490,23 +1495,24 @@ def main(page: ft.Page):
             )
             coluna_biblioteca_itens.controls.append(bloco)
 
+        # ---------------- MODO 1: STREAMING (COM PARSING TOLERANTE) ----------------
         if modo_atual == "streaming":
             ordem_secoes = list(STREAMINGS_PADRAO) + ["Stremio", "Sem streaming no BR"]
             mapa = {s: [] for s in ordem_secoes}
 
             for row in itens_filtrados:
                 mid, tit, ano, p_url, nota, cat, streaming_txt, tp = row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[9]
-                st_str = streaming_txt or ""
+                st_str = (streaming_txt or "").lower()
                 alocado_oficial = False
 
                 for st_nome in STREAMINGS_PADRAO:
                     termo = st_nome.lower().replace(" plus", "").replace("+", "")
-                    if termo in st_str.lower():
+                    if termo in st_str:
                         mapa[st_nome].append((mid, tit, ano, p_url, nota, cat, tp or "movie"))
                         alocado_oficial = True
 
                 if not alocado_oficial:
-                    if "stremio" in st_str.lower():
+                    if "stremio" in st_str:
                         mapa["Stremio"].append((mid, tit, ano, p_url, nota, cat, tp or "movie"))
                     else:
                         mapa["Sem streaming no BR"].append((mid, tit, ano, p_url, nota, cat, tp or "movie"))
@@ -1687,7 +1693,6 @@ def main(page: ft.Page):
                 print(f"Erro filmografia filtrada: {ex}")
             finally:
                 progresso.visible = False
-                progresso.update()
                 renderizar_itens_busca_contexto()
 
         threading.Thread(target=_fetch, daemon=True).start()
@@ -1802,7 +1807,6 @@ def main(page: ft.Page):
                 print(f"Erro pesquisa tema: {ex}")
             finally:
                 progresso.visible = False
-                progresso.update()
                 renderizar_itens_busca_contexto()
 
         threading.Thread(target=_fetch, daemon=True).start()
@@ -1977,15 +1981,11 @@ def main(page: ft.Page):
         on_submit=disparar_busca_manual
     )
 
+    # -------------------------------------------------------------
+    # LOGÓTIPO INTERATIVO (CORRIGIDO: SEM CRASH DE TIME)
+    # -------------------------------------------------------------
     def clicar_no_logo(e):
-        btn_logo_interativo.scale = 0.94
-        btn_logo_interativo.update()
-        time.sleep(0.06)
-        btn_logo_interativo.scale = 1.0
-        btn_logo_interativo.update()
-        
         campo_busca.value = ""
-        campo_busca.update()
         paginacao["modo_busca_ativo"] = False
         contexto_busca["tipo"] = None
         contexto_busca["id"] = None
@@ -1994,7 +1994,6 @@ def main(page: ft.Page):
         contexto_busca["offset"] = 0
         
         txt_titulo_home.value = "Em Alta (TMDb Trends)"
-        txt_titulo_home.update()
         btn_carregar_mais.visible = True
         alternar_tela(0)
         alternar_filtro_home("todos")
@@ -2004,8 +2003,6 @@ def main(page: ft.Page):
     btn_logo_interativo = ft.Container(
         content=img_logo,
         padding=2,
-        scale=1.0,
-        animate_scale=ft.Animation(100, ft.AnimationCurve.EASE_OUT),
         tooltip="Voltar ao Início (Todos)",
         on_click=clicar_no_logo
     )
@@ -2369,8 +2366,10 @@ def main(page: ft.Page):
         visible=True
     )
 
+    page.overlay.extend([modal_detalhes, modal_avaliacao, modal_confirmacao, modal_novo_perfil])
     page.add(tela_perfis, layout_mestre)
     carregar_perfis_tela()
+    ajustar_layout_responsivo()
     page.update()
 
 if __name__ == "__main__":
