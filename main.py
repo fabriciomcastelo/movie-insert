@@ -9,7 +9,6 @@ import time
 from urllib.parse import quote_plus, urlparse
 from datetime import datetime
 
-# Tenta importar psycopg2 para o PostgreSQL
 try:
     import psycopg2
     HAS_POSTGRES = True
@@ -78,7 +77,6 @@ STREAMINGS_PADRAO = [
 def obter_conexao():
     database_url = os.environ.get("DATABASE_URL")
     if database_url and HAS_POSTGRES:
-        # Se estiver no Render com PostgreSQL configurado
         url = urlparse(database_url)
         conn = psycopg2.connect(
             database=url.path[1:],
@@ -89,7 +87,6 @@ def obter_conexao():
         )
         return conn
     else:
-        # Fallback para SQLite local
         return sqlite3.connect(DB_FILE, timeout=15)
 
 def carregar_config():
@@ -121,7 +118,6 @@ def init_db():
     try:
         conn = obter_conexao()
         c = conn.cursor()
-        
         is_pg = bool(os.environ.get("DATABASE_URL") and HAS_POSTGRES)
         
         if not is_pg:
@@ -286,7 +282,8 @@ def main(page: ft.Page):
             try:
                 conn = obter_conexao()
                 c = conn.cursor()
-                c.execute("SELECT id, titulo FROM filmes WHERE usuario_id = %s" if bool(os.environ.get("DATABASE_URL") and HAS_POSTGRES) else "SELECT id, titulo FROM filmes WHERE usuario_id = ?", (uid,))
+                query = "SELECT id, titulo FROM filmes WHERE usuario_id = %s" if bool(os.environ.get("DATABASE_URL") and HAS_POSTGRES) else "SELECT id, titulo FROM filmes WHERE usuario_id = ?"
+                c.execute(query, (uid,))
                 for row in c.fetchall():
                     ids_salvos_usuario.add(str(row[0]))
                     if row[1]:
@@ -349,6 +346,9 @@ def main(page: ft.Page):
         txt_contador_bib.value = f"BIBLIOTECA ({total})"
         txt_contador_bib.update()
 
+    # -------------------------------------------------------------
+    # BIBLIOTECA
+    # -------------------------------------------------------------
     def carregar_biblioteca():
         coluna_biblioteca_itens.controls.clear()
         todos_itens = []
@@ -799,7 +799,7 @@ def main(page: ft.Page):
 
         titulo = titulo_prev
         ano = str(ano_prev)
-        poster_url = poster_prev if poster_prev else "https://via.placeholder.com/130x195?text=Sem+Poster"
+        poster_url = poster_prev if poster_prev else "https://via.placeholder.com/180x260?text=Sem+Poster"
         sinopse = "Sinopse não disponível em português."
         diretor = "N/A"
         elenco = "Não informado"
@@ -859,7 +859,7 @@ def main(page: ft.Page):
 
                 p_path = res.get("poster_path")
                 if p_path:
-                    poster_url = f"https://image.tmdb.org/t/p/w300{p_path}"
+                    poster_url = f"https://image.tmdb.org/t/p/w400{p_path}"
 
                 imdb_id = res.get("imdb_id") or res.get("external_ids", {}).get("imdb_id")
                 
@@ -919,25 +919,44 @@ def main(page: ft.Page):
 
         progresso.visible = False
 
-        dt_img = ft.Image(src=poster_url, width=135, height=200, border_radius=8, fit="cover")
+        # Pôster Ampliado e Centralizado
+        dt_img = ft.Image(src=poster_url, width=180, height=260, border_radius=10, fit="cover")
         tag_tipo = "Série" if mtype_seguro == "tv" else "Filme"
         
+        # Botão de Fechar Minimalista (Círculo Vermelho com X)
+        btn_fechar_estilizado = ft.Container(
+            content=ft.Text("X", color="white", size=14, weight="bold"),
+            alignment=ft.Alignment(0, 0),
+            width=32,
+            height=32,
+            shape=ft.BoxShape.CIRCLE,
+            bgcolor=COR_VERMELHO_PLAY,
+            on_click=lambda e: fechar_dialogo(modal_det),
+            tooltip="Fechar"
+        )
+
         info_col = [
-            ft.Text(f"{titulo} ({ano}) • {tag_tipo}", size=17, weight="bold", color="white"),
-            ft.Text(f"Original: {titulo_orig}", size=12, italic=True, color="#94a3b8", visible=bool(titulo_orig and normalizar_texto(titulo_orig) != normalizar_texto(titulo))),
-            ft.Text(f"Direção: {diretor}\nElenco: {elenco}\nGêneros: {generos_txt}", size=11, color="#94a3b8"),
+            ft.Row([btn_fechar_estilizado], alignment=ft.MainAxisAlignment.END),
+            ft.Container(content=dt_img, alignment=ft.Alignment(0, 0)),
+            ft.Container(height=4),
+            # Notas e streamings reposicionados logo abaixo do pôster
             ft.Row([
                 ft.Container(content=ft.Text(f"⭐ {imdb_nota}", color="black", size=11, weight="bold"), bgcolor="#f59e0b", padding=ft.Padding(5, 2, 5, 2), border_radius=5),
                 ft.Container(content=ft.Text(f"🍅 {rt_nota}", color="white", size=11, weight="bold"), bgcolor=COR_VERMELHO_PLAY, padding=ft.Padding(5, 2, 5, 2), border_radius=5),
                 ft.Container(content=ft.Text(f"Ⓜ {meta_nota}", color="white", size=11, weight="bold"), bgcolor="#54a72a" if meta_nota != "N/A" and int(meta_nota) >= 61 else "#334155", padding=ft.Padding(5, 2, 5, 2), border_radius=5),
-            ], spacing=6, wrap=True),
+            ], spacing=6, wrap=True, alignment=ft.MainAxisAlignment.CENTER),
             ft.Container(
                 content=ft.Text("🎬 Stremio: HD/4K Disponível" if tem_digital else "⏳ Stremio: Apenas Cinema / CAM", size=11, weight="bold", color="#a7f3d0" if tem_digital else "#fde68a"),
                 bgcolor="#065f46" if tem_digital else "#78350f",
                 padding=ft.Padding(6, 4, 6, 4),
-                border_radius=6
+                border_radius=6,
+                alignment=ft.Alignment(0, 0)
             ),
-            ft.Text(f"📺 {streamings}", size=12, color="#10b981", weight="bold"),
+            ft.Text(f"📺 {streamings}", size=12, color="#10b981", weight="bold", text_align=ft.TextAlign.CENTER),
+            ft.Container(height=6),
+            ft.Text(f"{titulo} ({ano}) • {tag_tipo}", size=18, weight="bold", color="white", text_align=ft.TextAlign.CENTER),
+            ft.Text(f"Original: {titulo_orig}", size=12, italic=True, color="#94a3b8", text_align=ft.TextAlign.CENTER, visible=bool(titulo_orig and normalizar_texto(titulo_orig) != normalizar_texto(titulo))),
+            ft.Text(f"Direção: {diretor}\nElenco: {elenco}\nGêneros: {generos_txt}", size=11, color="#94a3b8", text_align=ft.TextAlign.CENTER),
         ]
 
         fallback_trailer = f"https://www.youtube.com/results?search_query={quote_plus('trailer oficial ' + titulo + ' ' + str(ano))}"
@@ -990,10 +1009,9 @@ def main(page: ft.Page):
         btn_ir.on_click = lambda e: (fechar_dialogo(modal_det), alternar_tela(1))
 
         elementos_modal = [
-            ft.Row([ft.Button(content=ft.Text("✕ Fechar", color="white", weight="bold", size=12), bgcolor=COR_PETROLEO, on_click=lambda e: fechar_dialogo(modal_det))], alignment=ft.MainAxisAlignment.END),
-            ft.Row([dt_img, ft.Column(info_col, spacing=3, width=310)], alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.START, wrap=True, spacing=10),
-            ft.Row([btn_tr, btn_slv], spacing=8, wrap=True) if tela_atual != "biblioteca" else ft.Row([btn_tr]),
-            btn_ir,
+            ft.Column(info_col, spacing=4, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+            ft.Row([btn_tr, btn_slv], spacing=8, alignment=ft.MainAxisAlignment.CENTER, wrap=True) if tela_atual != "biblioteca" else ft.Row([btn_tr], alignment=ft.MainAxisAlignment.CENTER),
+            ft.Container(content=btn_ir, alignment=ft.Alignment(0, 0)),
         ]
 
         if temporadas_detalhes:
@@ -1002,22 +1020,23 @@ def main(page: ft.Page):
                 controls=[ft.Container(content=ft.Text(t_txt, size=11, color="#cbd5e1", weight="bold"), bgcolor="#1e293b", padding=ft.Padding(8, 4, 8, 4), border_radius=6) for t_txt in temporadas_detalhes],
                 wrap=True,
                 spacing=6,
-                run_spacing=6
+                run_spacing=6,
+                alignment=ft.MainAxisAlignment.CENTER
             )
             elementos_modal.append(lista_t_view)
 
         elementos_modal.extend([
             ft.Text("Sinopse", size=13, weight="bold", color="#94a3b8"),
-            ft.Text(sinopse, size=12, color="#cbd5e1"),
+            ft.Text(sinopse, size=12, color="#cbd5e1", text_align=ft.TextAlign.JUSTIFY),
         ])
 
         conteudo = ft.Container(
             width=480,
             bgcolor=COR_CARD,
-            padding=14,
-            border_radius=12,
+            padding=18,
+            border_radius=14,
             border=criar_borda(1.5, COR_PETROLEO),
-            content=ft.Column(elementos_modal, spacing=8, scroll=ft.ScrollMode.AUTO, tight=True)
+            content=ft.Column(elementos_modal, spacing=10, scroll=ft.ScrollMode.AUTO, tight=True, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
         )
 
         modal_det = ft.AlertDialog(content=conteudo, modal=False, bgcolor="transparent", content_padding=0)
@@ -1676,6 +1695,27 @@ def main(page: ft.Page):
             controls=[coluna_biblioteca_itens]
         )
     )
+
+    def alternar_tela(indice):
+        ocultar_sugestoes()
+        tela_ativa_atual["indice"] = indice
+
+        if indice == 0:
+            view_inicio.visible = True
+            view_biblioteca.visible = False
+            linha_controles_unificados.visible = True
+            container_input_busca.visible = True
+            btn_tab_bib.border = criar_borda(1.2, COR_BORDA)
+        elif indice == 1:
+            carregar_biblioteca()
+            view_inicio.visible = False
+            view_biblioteca.visible = True
+            linha_controles_unificados.visible = False
+            container_input_busca.visible = False
+            btn_tab_bib.border = criar_borda(2, COR_ATIVO_BORDA)
+
+        ajustar_layout_responsivo()
+        page.update()
 
     layout_mestre = ft.Column(
         expand=True,
