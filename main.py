@@ -346,7 +346,6 @@ def main(page: ft.Page):
         txt_contador_bib.value = f"BIBLIOTECA ({total})"
         txt_contador_bib.update()
 
-    # Declarações anteriores necessárias para alternar_tela e busca
     coluna_sugestoes = ft.Column(spacing=4, scroll=ft.ScrollMode.AUTO)
     container_sugestoes = ft.Container(
         content=coluna_sugestoes,
@@ -369,7 +368,7 @@ def main(page: ft.Page):
             container_sugestoes.update()
 
     # -------------------------------------------------------------
-    # BIBLIOTECA
+    # BIBLIOTECA (Ordenação corrigida para PostgreSQL sem rowid)
     # -------------------------------------------------------------
     def carregar_biblioteca():
         coluna_biblioteca_itens.controls.clear()
@@ -381,21 +380,27 @@ def main(page: ft.Page):
             try:
                 conn = obter_conexao()
                 c = conn.cursor()
-                query = """
-                    SELECT id, titulo, ano, poster_url, nota_usuario, categoria, streaming, generos, imdb, tipo 
-                    FROM filmes 
-                    WHERE usuario_id = %s 
-                    ORDER BY rowid DESC
-                """ if bool(os.environ.get("DATABASE_URL") and HAS_POSTGRES) else """
-                    SELECT id, titulo, ano, poster_url, nota_usuario, categoria, streaming, generos, imdb, tipo 
-                    FROM filmes 
-                    WHERE usuario_id = ? 
-                    ORDER BY rowid DESC
-                """
-                c.execute(query, (uid,))
+                is_pg = bool(os.environ.get("DATABASE_URL") and HAS_POSTGRES)
+                
+                if is_pg:
+                    query = """
+                        SELECT id, titulo, ano, poster_url, nota_usuario, categoria, streaming, generos, imdb, tipo 
+                        FROM filmes 
+                        WHERE usuario_id = %s 
+                        ORDER BY ctid DESC
+                    """
+                    c.execute(query, (uid,))
+                else:
+                    query = """
+                        SELECT id, titulo, ano, poster_url, nota_usuario, categoria, streaming, generos, imdb, tipo 
+                        FROM filmes 
+                        WHERE usuario_id = ? 
+                        ORDER BY rowid DESC
+                    """
+                    c.execute(query, (uid,))
                 todos_itens = c.fetchall()
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"Erro ao carregar biblioteca: {e}")
             finally:
                 if conn:
                     conn.close()
@@ -941,11 +946,9 @@ def main(page: ft.Page):
 
         progresso.visible = False
 
-        # Poster Ampliado e Centralizado
         dt_img = ft.Image(src=poster_url, width=180, height=260, border_radius=10, fit="cover")
         tag_tipo = "Série" if mtype_seguro == "tv" else "Filme"
         
-        # Botão Fechar em Círculo Vermelho com X
         btn_fechar_estilizado = ft.Container(
             content=ft.Text("X", color="white", size=14, weight="bold"),
             alignment=ft.Alignment(0, 0),
@@ -1507,7 +1510,7 @@ def main(page: ft.Page):
     )
 
     # -------------------------------------------------------------
-    # FUNÇÕES DE BUSCA E AUTOCOMPLETE (Declaradas antes do uso)
+    # FUNÇÕES DE BUSCA E AUTOCOMPLETE
     # -------------------------------------------------------------
     def exibir_filmografia_pessoa(person_id, nome_pessoa):
         ocultar_sugestoes()
