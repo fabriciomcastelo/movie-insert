@@ -83,11 +83,12 @@ def obter_conexao():
             user=url.username,
             password=url.password,
             host=url.hostname,
-            port=url.port
+            port=url.port,
+            connect_timeout=5
         )
         return conn
     else:
-        return sqlite3.connect(DB_FILE, timeout=15)
+        return sqlite3.connect(DB_FILE, timeout=10)
 
 def carregar_config():
     cfg = {"omdb_key": "", "tmdb_key": ""}
@@ -263,6 +264,7 @@ def main(page: ft.Page):
         largura = page.width if page.width else 1000
         return largura < 720
 
+    # Gerenciamento de diálogo com descarte da árvore de controles
     def abrir_dialogo(modal):
         if modal not in page.overlay:
             page.overlay.append(modal)
@@ -271,6 +273,8 @@ def main(page: ft.Page):
 
     def fechar_dialogo(modal):
         modal.open = False
+        if modal in page.overlay:
+            page.overlay.remove(modal)
         page.update()
 
     def recarregar_ids_salvos():
@@ -368,7 +372,7 @@ def main(page: ft.Page):
             container_sugestoes.update()
 
     # -------------------------------------------------------------
-    # BIBLIOTECA (Ordenação corrigida para PostgreSQL sem rowid)
+    # BIBLIOTECA
     # -------------------------------------------------------------
     def carregar_biblioteca():
         coluna_biblioteca_itens.controls.clear()
