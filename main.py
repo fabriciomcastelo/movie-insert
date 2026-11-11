@@ -129,9 +129,14 @@ def init_db():
                 CREATE TABLE IF NOT EXISTS usuarios (
                     id SERIAL PRIMARY KEY,
                     username TEXT UNIQUE,
-                    cor_avatar TEXT DEFAULT '#03434d'
+                    cor_avatar TEXT DEFAULT '#03434d',
+                    pin TEXT DEFAULT ''
                 )
             """)
+            try:
+                c.execute("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS pin TEXT DEFAULT ''")
+            except Exception:
+                pass
             c.execute("""
                 CREATE TABLE IF NOT EXISTS filmes (
                     id TEXT,
@@ -159,9 +164,14 @@ def init_db():
                 CREATE TABLE IF NOT EXISTS usuarios (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     username TEXT UNIQUE COLLATE NOCASE,
-                    cor_avatar TEXT DEFAULT '#03434d'
+                    cor_avatar TEXT DEFAULT '#03434d',
+                    pin TEXT DEFAULT ''
                 )
             """)
+            try:
+                c.execute("ALTER TABLE usuarios ADD COLUMN pin TEXT DEFAULT ''")
+            except Exception:
+                pass
             c.execute("""
                 CREATE TABLE IF NOT EXISTS filmes (
                     id TEXT,
@@ -368,7 +378,6 @@ def main(page: ft.Page):
             container_sugestoes.visible = False
             container_sugestoes.update()
 
-    # Campo de busca criado previamente
     campo_busca = ft.TextField(
         hint_text="Buscar filmes, atores, temas...",
         hint_style=ft.TextStyle(size=12, color="#64748b"),
@@ -382,9 +391,6 @@ def main(page: ft.Page):
         content_padding=ft.Padding(12, 0, 8, 0)
     )
 
-    # -------------------------------------------------------------
-    # BIBLIOTECA
-    # -------------------------------------------------------------
     def carregar_biblioteca():
         coluna_biblioteca_itens.controls.clear()
         todos_itens = []
@@ -1572,322 +1578,6 @@ def main(page: ft.Page):
         wrap=True
     )
 
-    # -------------------------------------------------------------
-    # FUNÇÕES DE BUSCA E AUTOCOMPLETE
-    # -------------------------------------------------------------
-    def exibir_filmografia_pessoa(person_id, nome_pessoa):
-        ocultar_sugestoes()
-        campo_busca.value = nome_pessoa
-        paginacao["modo_busca_ativo"] = True
-        paginacao["fim"] = False
-        btn_carregar_mais.visible = False
-        grade_populares.controls.clear()
-        botoes_add_home.clear()
-        
-        contexto_busca["tipo"] = "person"
-        contexto_busca["id"] = person_id
-        contexto_busca["nome"] = nome_pessoa
-        contexto_busca["itens_cache"] = []
-        contexto_busca["offset"] = 0
-        
-        txt_titulo_home.value = nome_pessoa
-        alternar_tela(0)
-        progresso.visible = True
-        page.update()
-
-        c = carregar_config()
-        tmdb_key = c.get("tmdb_key", "").strip()
-
-        def _fetch():
-            try:
-                url = f"https://api.themoviedb.org/3/person/{person_id}/combined_credits?api_key={tmdb_key}&language=pt-BR"
-                res = requests.get(url, timeout=4.5).json()
-                
-                cast_puro = res.get("cast", [])
-                crew_puro = res.get("crew", [])
-                
-                itens_filtrados = []
-                vistos = set()
-
-                for item in cast_puro:
-                    mid = item.get("id")
-                    if not mid or not item.get("poster_path"):
-                        continue
-                    
-                    personagem = (item.get("character") or "").lower().strip()
-                    generos = item.get("genre_ids", [])
-                    
-                    if 99 in generos or "self" in personagem or "himself" in personagem or "herself" in personagem:
-                        continue
-                        
-                    mtype = "tv" if (item.get("media_type") == "tv" or "name" in item or "first_air_date" in item) else "movie"
-                    item["media_type"] = mtype
-                    
-                    chave = f"{mtype}_{mid}"
-                    if chave not in vistos:
-                        vistos.add(chave)
-                        itens_filtrados.append(item)
-
-                for item in crew_puro:
-                    mid = item.get("id")
-                    if not mid or not item.get("poster_path"):
-                        continue
-                        
-                    job = (item.get("job") or "").lower().strip()
-                    generos = item.get("genre_ids", [])
-                    
-                    if job in ["director", "creator", "writer"]:
-                        if 99 in generos:
-                            continue
-                            
-                        mtype = "tv" if (item.get("media_type") == "tv" or "name" in item or "first_air_date" in item) else "movie"
-                        item["media_type"] = mtype
-                        
-                        chave = f"{mtype}_{mid}"
-                        if chave not in vistos:
-                            vistos.add(chave)
-                            itens_filtrados.append(item)
-
-                contexto_busca["itens_cache"] = sorted(
-                    itens_filtrados,
-                    key=lambda x: (x.get("vote_count", 0), x.get("popularity", 0)),
-                    reverse=True
-                )
-            except Exception as ex:
-                print(f"Erro filmografia filtrada: {ex}")
-            finally:
-                progresso.visible = False
-                renderizar_itens_busca_contexto()
-
-        threading.Thread(target=_fetch, daemon=True).start()
-
-    def processar_itens_busca(lista_bruta, vistos, itens_saida, mtype_padrao=None, min_votos=0):
-        for item in lista_bruta:
-            if not item.get("poster_path"):
-                continue
-            if min_votos and item.get("vote_count", 0) < min_votos:
-                continue
-
-            mtype = mtype_padrao or item.get("media_type")
-            if mtype not in ["movie", "tv"]:
-                mtype = "tv" if ("name" in item or "first_air_date" in item) else "movie"
-            item["media_type"] = mtype
-
-            chave = f"{mtype}_{item.get('id')}"
-            if chave not in vistos:
-                vistos.add(chave)
-                itens_saida.append(item)
-
-    def executar_pesquisa_tema_ou_termo(termo_busca):
-        ocultar_sugestoes()
-        termo_limpo = termo_busca.strip()
-        if not termo_limpo:
-            return
-
-        campo_busca.value = termo_limpo
-        paginacao["modo_busca_ativo"] = True
-        paginacao["fim"] = False
-        btn_carregar_mais.visible = False
-        grade_populares.controls.clear()
-        botoes_add_home.clear()
-        
-        contexto_busca["tipo"] = "tema"
-        contexto_busca["id"] = termo_limpo
-        contexto_busca["nome"] = termo_limpo
-        contexto_busca["itens_cache"] = []
-        contexto_busca["offset"] = 0
-        
-        txt_titulo_home.value = termo_limpo.title()
-        alternar_tela(0)
-        progresso.visible = True
-        page.update()
-
-        c = carregar_config()
-        tmdb_key = c.get("tmdb_key", "").strip()
-
-        def _fetch():
-            try:
-                norm = normalizar_texto(termo_limpo)
-                kw_ids_str = ""
-
-                for termo_k, ids_v in MAPA_KEYWORDS_CONHECIDAS.items():
-                    if termo_k in norm:
-                        kw_ids_str = ids_v
-                        break
-
-                if not kw_ids_str:
-                    tr = traduzir_para_ingles(termo_limpo)
-                    kw_encontrados = set()
-                    for q in [tr, norm]:
-                        try:
-                            kw_url = f"https://api.themoviedb.org/3/search/keyword?api_key={tmdb_key}&query={quote_plus(q)}&page=1"
-                            r = requests.get(kw_url, timeout=2.0)
-                            if r.status_code == 200:
-                                for k in r.json().get("results", [])[:3]:
-                                    kw_encontrados.add(str(k.get("id")))
-                        except Exception:
-                            pass
-                    if kw_encontrados:
-                        kw_ids_str = "|".join(list(kw_encontrados)[:5])
-
-                itens_totais = []
-                vistos = set()
-
-                if kw_ids_str:
-                    for pg in [1, 2, 3]:
-                        try:
-                            url_m = f"https://api.themoviedb.org/3/discover/movie?api_key={tmdb_key}&language=pt-BR&sort_by=vote_count.desc&with_keywords={kw_ids_str}&vote_count.gte=30&page={pg}"
-                            res_m = requests.get(url_m, timeout=3.5).json().get("results", [])
-                            processar_itens_busca(res_m, vistos, itens_totais, mtype_padrao="movie")
-                        except Exception:
-                            pass
-
-                    for pg in [1, 2]:
-                        try:
-                            url_t = f"https://api.themoviedb.org/3/discover/tv?api_key={tmdb_key}&language=pt-BR&sort_by=vote_count.desc&with_keywords={kw_ids_str}&vote_count.gte=10&page={pg}"
-                            res_t = requests.get(url_t, timeout=3.5).json().get("results", [])
-                            processar_itens_busca(res_t, vistos, itens_totais, mtype_padrao="tv")
-                        except Exception:
-                            pass
-
-                for pg in [1, 2]:
-                    try:
-                        url_multi = f"https://api.themoviedb.org/3/search/multi?api_key={tmdb_key}&query={quote_plus(termo_limpo)}&language=pt-BR&include_adult=false&page={pg}"
-                        res_multi = requests.get(url_multi, timeout=3.0).json().get("results", [])
-                        processar_itens_busca(res_multi, vistos, itens_totais, min_votos=20)
-                    except Exception:
-                        pass
-
-                contexto_busca["itens_cache"] = sorted(itens_totais, key=lambda x: x.get("vote_count", 0), reverse=True)
-            except Exception as ex:
-                print(f"Erro pesquisa tema: {ex}")
-            finally:
-                progresso.visible = False
-                renderizar_itens_busca_contexto()
-
-        threading.Thread(target=_fetch, daemon=True).start()
-
-    def selecionar_sugestao_filme(mid, mtype, tit, ano, p_url):
-        ocultar_sugestoes()
-        campo_busca.value = tit
-        campo_busca.update()
-        abrir_detalhes(mid, mtype, tit, ano, p_url, tela_atual="home")
-
-    def buscar_sugestoes_api(termo, epoch_disparo):
-        if epoch_disparo != versao_busca_atual["epoch"]:
-            return
-
-        c = carregar_config()
-        tmdb_key = c.get("tmdb_key", "").strip()
-        termo_limpo = termo.strip()
-        if not tmdb_key or len(termo_limpo) < 2:
-            primeira_acao_sugestao["callback"] = None
-            ocultar_sugestoes()
-            return
-
-        try:
-            url_multi = "https://api.themoviedb.org/3/search/multi"
-            params_multi = {"api_key": tmdb_key, "query": termo_limpo, "language": "pt-BR", "include_adult": "false"}
-            resp_multi = requests.get(url_multi, params=params_multi, timeout=3.0)
-            
-            if epoch_disparo != versao_busca_atual["epoch"]:
-                return
-
-            itens_multi = resp_multi.json().get("results", []) if resp_multi.status_code == 200 else []
-
-            coluna_sugestoes.controls.clear()
-            primeira_acao_sugestao["callback"] = None
-
-            pessoas = [i for i in itens_multi if i.get("media_type") == "person"][:2]
-            for p in pessoas:
-                pid = p.get("id")
-                pnome = p.get("name") or "Artista"
-                dept = p.get("known_for_department") or "Atuação"
-                dept_traduzido = "Direção" if dept == "Directing" else "Ator/Atriz"
-                pic = p.get("profile_path")
-                pic_url = f"https://image.tmdb.org/t/p/w185{pic}" if pic else None
-
-                if primeira_acao_sugestao["callback"] is None:
-                    primeira_acao_sugestao["callback"] = lambda id_p=pid, nome_p=pnome: exibir_filmografia_pessoa(id_p, nome_p)
-
-                linha_p = ft.Container(
-                    padding=6,
-                    border_radius=6,
-                    bgcolor="#1e293b",
-                    on_click=lambda e, person_id=pid, name=pnome: exibir_filmografia_pessoa(person_id, name),
-                    content=ft.Row([
-                        ft.Image(src=pic_url if pic_url else "https://via.placeholder.com/32x46?text=👤", width=32, height=46, border_radius=4, fit="cover"),
-                        ft.Column([
-                            ft.Text(pnome, size=12, weight="bold", color="white", max_lines=1, overflow="ellipsis"),
-                            ft.Text(f"👤 {dept_traduzido} • Filmografia", size=10, color="#38bdf8")
-                        ], spacing=2, expand=True)
-                    ], spacing=8)
-                )
-                coluna_sugestoes.controls.append(linha_p)
-
-            obras = [i for i in itens_multi if i.get("media_type") in ["movie", "tv"] and i.get("poster_path")][:4]
-            for item in obras:
-                mtype = item.get("media_type", "movie")
-                mid = item.get("id")
-                tit = item.get("title") or item.get("name") or "Sem título"
-                ano = str((item.get("release_date") or item.get("first_air_date")) or "")[:4]
-                p_path = item.get("poster_path")
-                p_url = f"https://image.tmdb.org/t/p/w185{p_path}" if p_path else None
-
-                if primeira_acao_sugestao["callback"] is None:
-                    primeira_acao_sugestao["callback"] = lambda m=mid, mt=mtype, t=tit, a=ano, p=p_url: selecionar_sugestao_filme(m, mt, t, a, p)
-
-                linha_item = ft.Container(
-                    padding=6,
-                    border_radius=6,
-                    bgcolor=COR_CARD,
-                    on_click=lambda e, m=mid, mt=mtype, t=tit, a=ano, p=p_url: selecionar_sugestao_filme(m, mt, t, a, p),
-                    content=ft.Row([
-                        ft.Image(src=p_url if p_url else "https://via.placeholder.com/40x60?text=-", width=32, height=46, border_radius=4, fit="cover"),
-                        ft.Column([
-                            ft.Text(tit, size=12, weight="bold", color="white", max_lines=1, overflow="ellipsis"),
-                            ft.Text(f"{ano} • {'Série' if mtype == 'tv' else 'Filme'}", size=10, color="#94a3b8")
-                        ], spacing=2, expand=True)
-                    ], spacing=8)
-                )
-                coluna_sugestoes.controls.append(linha_item)
-
-            linha_tema_universal = ft.Container(
-                padding=8,
-                border_radius=6,
-                bgcolor="#164e63",
-                on_click=lambda e, t=termo_limpo: executar_pesquisa_tema_ou_termo(t),
-                content=ft.Row([
-                    ft.Icon(ft.Icons.SEARCH, size=18, color="#38bdf8"),
-                    ft.Column([
-                        ft.Text(f'Ver catálogo sobre "{termo_limpo}"', size=12, weight="bold", color="white", max_lines=1, overflow="ellipsis"),
-                        ft.Text("🏷️ Assunto, contexto ou tema", size=10, color="#7dd3fc")
-                    ], spacing=2, expand=True)
-                ], spacing=8)
-            )
-            coluna_sugestoes.controls.append(linha_tema_universal)
-
-            if primeira_acao_sugestao["callback"] is None:
-                primeira_acao_sugestao["callback"] = lambda t=termo_limpo: executar_pesquisa_tema_ou_termo(t)
-
-            if len(coluna_sugestoes.controls) > 0 and epoch_disparo == versao_busca_atual["epoch"]:
-                largura_atual = page.width if page.width else 1000
-                container_sugestoes.visible = True
-                if largura_atual < 720:
-                    container_sugestoes.width = min(int(largura_atual * 0.90), 380)
-                    container_sugestoes.left = max(10, int((largura_atual - container_sugestoes.width) / 2))
-                    container_sugestoes.top = 165
-                else:
-                    container_sugestoes.width = 320
-                    container_sugestoes.left = max(0, int((largura_atual / 2) - 160))
-                    container_sugestoes.top = 165
-            else:
-                ocultar_sugestoes()
-
-            container_sugestoes.update()
-        except Exception as ex:
-            print(f"Erro busca expandida: {ex}")
-
     def disparar_busca_manual(e=None):
         if primeira_acao_sugestao["callback"]:
             cb = primeira_acao_sugestao["callback"]
@@ -1915,7 +1605,6 @@ def main(page: ft.Page):
         timer_busca["timer"] = t
         t.start()
 
-    # Associação final e segura dos eventos do campo de busca
     campo_busca.suffix = ft.IconButton(
         icon=ft.Icons.SEARCH,
         icon_color="#64748b",
@@ -2144,6 +1833,9 @@ def main(page: ft.Page):
         page.update()
         carregar_populares()
 
+    # -------------------------------------------------------------
+    # GESTÃO DE PERFIS (Criação, Senha Simples e Exclusão)
+    # -------------------------------------------------------------
     txt_novo_perfil_nome = ft.TextField(
         label="Nome do Perfil",
         label_style=ft.TextStyle(color="#94a3b8"),
@@ -2155,10 +1847,31 @@ def main(page: ft.Page):
         width=280,
         autofocus=True
     )
+    txt_novo_perfil_pin = ft.TextField(
+        label="Senha/PIN (Opcional)",
+        label_style=ft.TextStyle(color="#94a3b8"),
+        hint_text="Ex: 1234 (Deixe vazio para sem senha)",
+        hint_style=ft.TextStyle(size=11, color="#64748b"),
+        password=True,
+        can_reveal_password=True,
+        bgcolor=COR_FUNDO,
+        dense=True,
+        border_radius=8,
+        border_color=COR_BORDA,
+        focused_border_color=COR_PETROLEO,
+        width=280
+    )
     txt_novo_perfil_erro = ft.Text("", size=12, color="#ef4444")
+
+    modal_novo_perfil = ft.AlertDialog(modal=False, actions_alignment=ft.MainAxisAlignment.END)
+
+    def fechar_modal_novo_perfil(e=None):
+        modal_novo_perfil.open = False
+        page.update()
 
     def acao_salvar_novo_perfil(e):
         nome = txt_novo_perfil_nome.value.strip() if txt_novo_perfil_nome.value else ""
+        pin = txt_novo_perfil_pin.value.strip() if txt_novo_perfil_pin.value else ""
         if len(nome) < 2:
             txt_novo_perfil_erro.value = "Digite pelo menos 2 caracteres."
             modal_novo_perfil.update()
@@ -2179,8 +1892,8 @@ def main(page: ft.Page):
             qtd = c.fetchone()[0]
             cor_escolhida = CORES_AVATAR[qtd % len(CORES_AVATAR)]
 
-            query_ins = "INSERT INTO usuarios (username, cor_avatar) VALUES (%s, %s)" if bool(os.environ.get("DATABASE_URL") and HAS_POSTGRES) else "INSERT INTO usuarios (username, cor_avatar) VALUES (?, ?)"
-            c.execute(query_ins, (nome, cor_escolhida))
+            query_ins = "INSERT INTO usuarios (username, cor_avatar, pin) VALUES (%s, %s, %s)" if bool(os.environ.get("DATABASE_URL") and HAS_POSTGRES) else "INSERT INTO usuarios (username, cor_avatar, pin) VALUES (?, ?, ?)"
+            c.execute(query_ins, (nome, cor_escolhida, pin))
             
             if bool(os.environ.get("DATABASE_URL") and HAS_POSTGRES):
                 c.execute("SELECT id FROM usuarios WHERE username = %s", (nome,))
@@ -2190,7 +1903,7 @@ def main(page: ft.Page):
                 
             conn.commit()
 
-            fechar_dialogo(modal_novo_perfil)
+            fechar_modal_novo_perfil()
             entrar_com_perfil(novo_id, nome, cor_escolhida)
         except Exception as err:
             txt_novo_perfil_erro.value = f"Erro: {err}"
@@ -2200,30 +1913,144 @@ def main(page: ft.Page):
                 conn.close()
 
     txt_novo_perfil_nome.on_submit = acao_salvar_novo_perfil
+    txt_novo_perfil_pin.on_submit = acao_salvar_novo_perfil
 
-    modal_novo_perfil = ft.AlertDialog(
-        modal=False,
-        title=ft.Text("Adicionar Novo Perfil", size=16, weight="bold", color="white"),
-        content=ft.Column([
-            ft.Text("Como deseja chamar este perfil?", size=13, color="#94a3b8"),
-            txt_novo_perfil_erro,
-            txt_novo_perfil_nome
-        ], tight=True, spacing=10),
-        actions=[
-            ft.Button(content=ft.Text("Cancelar", color="#94a3b8"), on_click=lambda e: fechar_dialogo(modal_novo_perfil)),
-            ft.Button(content=ft.Text("Salvar Perfil", color="white"), bgcolor=COR_PETROLEO, on_click=acao_salvar_novo_perfil)
-        ],
-        actions_alignment=ft.MainAxisAlignment.END
-    )
+    modal_novo_perfil.title = ft.Text("Adicionar Novo Perfil", size=16, weight="bold", color="white")
+    modal_novo_perfil.content = ft.Column([
+        ft.Text("Defina o nome e a senha do perfil:", size=13, color="#94a3b8"),
+        txt_novo_perfil_erro,
+        txt_novo_perfil_nome,
+        txt_novo_perfil_pin
+    ], tight=True, spacing=10)
+    modal_novo_perfil.actions = [
+        ft.Button(content=ft.Text("Cancelar", color="#94a3b8"), on_click=fechar_modal_novo_perfil),
+        ft.Button(content=ft.Text("Salvar Perfil", color="white"), bgcolor=COR_PETROLEO, on_click=acao_salvar_novo_perfil)
+    ]
 
     def abrir_modal_novo_perfil(e=None):
         txt_novo_perfil_nome.value = ""
+        txt_novo_perfil_pin.value = ""
         txt_novo_perfil_erro.value = ""
         abrir_dialogo(modal_novo_perfil)
 
-    def criar_card_avatar(uid, nome, cor):
+    # Modal para Confirmação de Senha ao Entrar no Perfil
+    txt_acesso_pin = ft.TextField(
+        label="Digite a Senha/PIN",
+        password=True,
+        can_reveal_password=True,
+        bgcolor=COR_FUNDO,
+        dense=True,
+        border_radius=8,
+        border_color=COR_BORDA,
+        focused_border_color=COR_PETROLEO,
+        width=260,
+        autofocus=True
+    )
+    txt_acesso_erro = ft.Text("", size=12, color="#ef4444")
+    dados_perfil_pendente = {"id": None, "nome": "", "cor": "", "pin_correto": ""}
+
+    modal_solicitar_pin = ft.AlertDialog(modal=False, actions_alignment=ft.MainAxisAlignment.END)
+
+    def fechar_modal_pin(e=None):
+        modal_solicitar_pin.open = False
+        page.update()
+
+    def verificar_pin_e_entrar(e=None):
+        if txt_acesso_pin.value.strip() == dados_perfil_pendente["pin_correto"]:
+            fechar_modal_pin()
+            entrar_com_perfil(dados_perfil_pendente["id"], dados_perfil_pendente["nome"], dados_perfil_pendente["cor"])
+        else:
+            txt_acesso_erro.value = "Senha incorreta. Tente novamente."
+            modal_solicitar_pin.update()
+
+    txt_acesso_pin.on_submit = verificar_pin_e_entrar
+    modal_solicitar_pin.title = ft.Text("Perfil Protegido", size=16, weight="bold", color="white")
+    modal_solicitar_pin.content = ft.Column([
+        txt_acesso_erro,
+        txt_acesso_pin
+    ], tight=True, spacing=10)
+    modal_solicitar_pin.actions = [
+        ft.Button(content=ft.Text("Cancelar", color="#94a3b8"), on_click=fechar_modal_pin),
+        ft.Button(content=ft.Text("Entrar", color="white"), bgcolor=COR_PETROLEO, on_click=verificar_pin_e_entrar)
+    ]
+
+    def tentar_entrar_perfil(uid, nome, cor, pin):
+        if pin and pin.strip():
+            dados_perfil_pendente["id"] = uid
+            dados_perfil_pendente["nome"] = nome
+            dados_perfil_pendente["cor"] = cor
+            dados_perfil_pendente["pin_correto"] = pin.strip()
+            txt_acesso_pin.value = ""
+            txt_acesso_erro.value = ""
+            abrir_dialogo(modal_solicitar_pin)
+        else:
+            entrar_com_perfil(uid, nome, cor)
+
+    # Modal para Confirmação de Exclusão de Perfil
+    perfil_a_excluir = {"id": None, "nome": ""}
+    modal_confirmar_exclusao_perfil = ft.AlertDialog(modal=False, actions_alignment=ft.MainAxisAlignment.END)
+
+    def fechar_modal_exclusao_perfil(e=None):
+        modal_confirmar_exclusao_perfil.open = False
+        page.update()
+
+    def confirmar_exclusao_perfil_banco(e=None):
+        pid = perfil_a_excluir["id"]
+        if pid:
+            conn = None
+            try:
+                conn = obter_conexao()
+                c = conn.cursor()
+                is_pg = bool(os.environ.get("DATABASE_URL") and HAS_POSTGRES)
+                q_del_filmes = "DELETE FROM filmes WHERE usuario_id = %s" if is_pg else "DELETE FROM filmes WHERE usuario_id = ?"
+                q_del_user = "DELETE FROM usuarios WHERE id = %s" if is_pg else "DELETE FROM usuarios WHERE id = ?"
+                c.execute(q_del_filmes, (pid,))
+                c.execute(q_del_user, (pid,))
+                conn.commit()
+            except Exception as ex:
+                print(f"Erro ao excluir perfil: {ex}")
+            finally:
+                if conn:
+                    conn.close()
+            fechar_modal_exclusao_perfil()
+            carregar_perfis_tela()
+            page.update()
+
+    modal_confirmar_exclusao_perfil.title = ft.Text("Excluir Perfil", size=16, weight="bold", color="#ef4444")
+    txt_aviso_exclusao = ft.Text("", size=13, color="#cbd5e1")
+    modal_confirmar_exclusao_perfil.content = txt_aviso_exclusao
+    modal_confirmar_exclusao_perfil.actions = [
+        ft.Button(content=ft.Text("Cancelar", color="#94a3b8"), on_click=fechar_modal_exclusao_perfil),
+        ft.Button(content=ft.Text("Sim, Excluir", color="white"), bgcolor=COR_VERMELHO_PLAY, on_click=confirmar_exclusao_perfil_banco)
+    ]
+
+    def pedir_exclusao_perfil(e, uid, nome):
+        e.control.page.update()
+        perfil_a_excluir["id"] = uid
+        perfil_a_excluir["nome"] = nome
+        txt_aviso_exclusao.value = f"Tem certeza de que deseja excluir o perfil '{nome}' e toda a sua biblioteca de filmes?"
+        abrir_dialogo(modal_confirmar_exclusao_perfil)
+
+    def criar_card_avatar(uid, nome, cor, pin):
         iniciais = (nome[:2] if len(nome) >= 2 else nome).upper()
-        avatar_box = ft.Container(
+        
+        btn_del_perfil = ft.IconButton(
+            icon=ft.Icons.DELETE_OUTLINE,
+            icon_color="#ef4444",
+            icon_size=16,
+            width=26,
+            height=26,
+            top=4,
+            right=4,
+            tooltip=f"Excluir perfil {nome}",
+            on_click=lambda e, u=uid, n=nome: pedir_exclusao_perfil(e, u, n)
+        )
+
+        badge_lock = None
+        if pin and pin.strip():
+            badge_lock = ft.Icon(ft.Icons.LOCK, size=14, color="#cbd5e1")
+
+        box_avatar_clicavel = ft.Container(
             content=ft.Text(iniciais, size=28, weight="bold", color="white"),
             alignment=ft.Alignment(0, 0),
             width=110,
@@ -2231,11 +2058,21 @@ def main(page: ft.Page):
             border_radius=12,
             bgcolor=cor,
             border=criar_borda(2, "transparent"),
-            on_click=lambda e, u=uid, n=nome, c=cor: entrar_com_perfil(u, n, c)
+            on_click=lambda e, u=uid, n=nome, c=cor, p=pin: tentar_entrar_perfil(u, n, c, p)
         )
+
+        stack_avatar = ft.Stack([
+            box_avatar_clicavel,
+            btn_del_perfil
+        ])
+
+        linha_nome = [ft.Text(nome, size=14, weight="bold", color="#94a3b8", text_align=ft.TextAlign.CENTER)]
+        if badge_lock:
+            linha_nome.append(badge_lock)
+
         return ft.Column([
-            avatar_box,
-            ft.Text(nome, size=14, weight="bold", color="#94a3b8", text_align=ft.TextAlign.CENTER, width=110)
+            stack_avatar,
+            ft.Row(linha_nome, spacing=4, alignment=ft.MainAxisAlignment.CENTER, width=110)
         ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=8)
 
     def criar_card_adicionar():
@@ -2247,7 +2084,7 @@ def main(page: ft.Page):
             border_radius=12,
             bgcolor="#0d1419",
             border=criar_borda(1.5, "#334155"),
-            on_click=lambda e: abrir_modal_novo_perfil(e)
+            on_click=abrir_modal_novo_perfil
         )
         return ft.Column([
             box_add,
@@ -2261,7 +2098,7 @@ def main(page: ft.Page):
         try:
             conn = obter_conexao()
             c = conn.cursor()
-            c.execute("SELECT id, username, cor_avatar FROM usuarios ORDER BY id ASC")
+            c.execute("SELECT id, username, cor_avatar, pin FROM usuarios ORDER BY id ASC")
             perfis = c.fetchall()
         except Exception as e:
             print(f"Erro ao buscar perfis: {e}")
@@ -2269,9 +2106,12 @@ def main(page: ft.Page):
             if conn:
                 conn.close()
 
-        for pid, pnome, pcor in perfis:
-            cor_final = pcor if pcor else COR_PETROLEO
-            linha_cards_perfis.controls.append(criar_card_avatar(pid, pnome, cor_final))
+        for row in perfis:
+            pid = row[0]
+            pnome = row[1]
+            pcor = row[2] if row[2] else COR_PETROLEO
+            ppin = row[3] if len(row) > 3 and row[3] else ""
+            linha_cards_perfis.controls.append(criar_card_avatar(pid, pnome, pcor, ppin))
 
         linha_cards_perfis.controls.append(criar_card_adicionar())
 
@@ -2290,6 +2130,8 @@ def main(page: ft.Page):
     )
 
     page.overlay.append(modal_novo_perfil)
+    page.overlay.append(modal_solicitar_pin)
+    page.overlay.append(modal_confirmar_exclusao_perfil)
     page.add(tela_perfis, layout_mestre)
     carregar_perfis_tela()
     ajustar_layout_responsivo()
