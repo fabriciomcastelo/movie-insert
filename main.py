@@ -36,6 +36,50 @@ CORES_AVATAR = [
     "#dc2626", "#9333ea", "#c026d3", "#4f46e5"
 ]
 
+# -------------------------------------------------------------
+# MAPEAMENTO DE GÊNEROS OFICIAIS TMDB
+# -------------------------------------------------------------
+MAPA_GENEROS_TMDB = {
+    "acao": 28, "ação": 28, "action": 28,
+    "aventura": 12, "adventure": 12,
+    "animacao": 16, "animação": 16, "animation": 16,
+    "comedia": 35, "comédia": 35, "comedy": 35,
+    "crime": 80,
+    "documentario": 99, "documentário": 99, "documentary": 99,
+    "drama": 18,
+    "familia": 10751, "família": 10751, "family": 10751,
+    "fantasia": 14, "fantasy": 14,
+    "historia": 36, "história": 36, "history": 36,
+    "terror": 27, "horror": 27,
+    "musica": 10402, "música": 10402, "musical": 10402,
+    "misterio": 9648, "mistério": 9648, "mystery": 9648,
+    "romance": 10749,
+    "ficcao cientifica": 878, "ficção científica": 878, "sci-fi": 878, "scifi": 878,
+    "suspense": 53, "thriller": 53,
+    "guerra": 10752, "war": 10752,
+    "faroeste": 37, "western": 37
+}
+
+# -------------------------------------------------------------
+# MAPEAMENTO DE NACIONALIDADES / PAÍSES (ISO 3166-1)
+# -------------------------------------------------------------
+MAPA_PAISES_TMDB = {
+    "brasil": "BR", "brasileiro": "BR", "brasileiros": "BR", "nacional": "BR", "brasileira": "BR",
+    "coreia": "KR", "coreano": "KR", "coreanos": "KR", "coreana": "KR", "k-drama": "KR", "kdrama": "KR",
+    "japao": "JP", "japão": "JP", "japones": "JP", "japonês": "JP", "japoneses": "JP", "anime": "JP",
+    "franca": "FR", "frança": "FR", "frances": "FR", "francês": "FR", "franceses": "FR",
+    "italia": "IT", "itália": "IT", "italiano": "IT", "italianos": "IT",
+    "espanha": "ES", "espanhol": "ES", "espanhois": "ES", "espanhóis": "ES",
+    "alemanha": "DE", "alemao": "DE", "alemão": "DE", "alemaes": "DE", "alemães": "DE",
+    "inglaterra": "GB", "britanico": "GB", "britânico": "GB", "britanicos": "GB", "reino unido": "GB",
+    "argentina": "AR", "argentino": "AR", "argentinos": "AR",
+    "mexico": "MX", "méxico": "MX", "mexicano": "MX", "mexicanos": "MX",
+    "estados unidos": "US", "americano": "US", "eua": "US", "hollywood": "US"
+}
+
+# -------------------------------------------------------------
+# MAPEAMENTO DE TEMAS / KEYWORDS
+# -------------------------------------------------------------
 MAPA_KEYWORDS_CONHECIDAS = {
     "segunda guerra": "1956|849|428|1957|1958",
     "segunda guerra mundial": "1956|849|428|1957|1958",
@@ -47,22 +91,31 @@ MAPA_KEYWORDS_CONHECIDAS = {
     "nazismo": "238|1956|3618",
     "guerra fria": "1954|2143",
     "vietna": "1955|1959",
+    "vietnã": "1955|1959",
     "guerra do vietna": "1955|1959",
     "zumbi": "12377|186565",
     "zumbis": "12377|186565",
     "viagem no tempo": "4379",
     "espaco": "9882|3801",
+    "espaço": "9882|3801",
     "extraterrestre": "9951|14909",
     "alien": "9951",
     "mafia": "10051|10391",
+    "máfia": "10051|10391",
     "inteligencia artificial": "310",
+    "inteligência artificial": "310",
     "ia": "310",
     "cyberpunk": "12190",
     "apocalipse": "4458",
     "pos-apocaliptico": "4458|2853",
+    "pós-apocalíptico": "4458|2853",
     "serial killer": "10714",
     "vampiro": "3133",
-    "vampiros": "3133"
+    "vampiros": "3133",
+    "espionagem": "470|10085",
+    "super heroi": "9715",
+    "super herói": "9715",
+    "super-heroi": "9715"
 }
 
 def criar_borda(espessura, cor):
@@ -379,7 +432,7 @@ def main(page: ft.Page):
             container_sugestoes.update()
 
     campo_busca = ft.TextField(
-        hint_text="Buscar filmes, atores, temas...",
+        hint_text="Buscar filmes, atores, temas, gêneros, países...",
         hint_style=ft.TextStyle(size=12, color="#64748b"),
         text_size=12,
         bgcolor="#0d1419",
@@ -1582,7 +1635,7 @@ def main(page: ft.Page):
     )
 
     # -------------------------------------------------------------
-    # FUNÇÕES DE BUSCA E AUTOCOMPLETE (Declaradas antes do uso)
+    # FUNÇÕES DE BUSCA E AUTOCOMPLETE
     # -------------------------------------------------------------
     def exibir_filmografia_pessoa(person_id, nome_pessoa):
         ocultar_sugestoes()
@@ -1687,6 +1740,9 @@ def main(page: ft.Page):
                 vistos.add(chave)
                 itens_saida.append(item)
 
+    # -------------------------------------------------------------
+    # BUSCA EXPANDIDA: GÊNEROS, PAÍSES/NACIONALIDADES E TEMAS
+    # -------------------------------------------------------------
     def executar_pesquisa_tema_ou_termo(termo_busca):
         ocultar_sugestoes()
         termo_limpo = termo_busca.strip()
@@ -1717,14 +1773,58 @@ def main(page: ft.Page):
         def _fetch():
             try:
                 norm = normalizar_texto(termo_limpo)
-                kw_ids_str = ""
+                itens_totais = []
+                vistos = set()
 
+                # 1. Checa se o termo corresponde a um Gênero Oficial TMDb (ex: Faroeste, Terror, Comédia)
+                genero_id = MAPA_GENEROS_TMDB.get(norm)
+                if genero_id:
+                    for pg in [1, 2, 3]:
+                        try:
+                            url_m = f"https://api.themoviedb.org/3/discover/movie?api_key={tmdb_key}&language=pt-BR&sort_by=vote_count.desc&with_genres={genero_id}&vote_count.gte=30&page={pg}"
+                            res_m = requests.get(url_m, timeout=3.5).json().get("results", [])
+                            processar_itens_busca(res_m, vistos, itens_totais, mtype_padrao="movie")
+                        except Exception:
+                            pass
+                    for pg in [1, 2]:
+                        try:
+                            url_t = f"https://api.themoviedb.org/3/discover/tv?api_key={tmdb_key}&language=pt-BR&sort_by=vote_count.desc&with_genres={genero_id}&vote_count.gte=10&page={pg}"
+                            res_t = requests.get(url_t, timeout=3.5).json().get("results", [])
+                            processar_itens_busca(res_t, vistos, itens_totais, mtype_padrao="tv")
+                        except Exception:
+                            pass
+
+                # 2. Checa se o termo corresponde a uma Nacionalidade/País (ex: Brasil, Coreano, Francês, Japonês)
+                pais_codigo = None
+                for nome_p, cod_p in MAPA_PAISES_TMDB.items():
+                    if nome_p in norm:
+                        pais_codigo = cod_p
+                        break
+
+                if pais_codigo:
+                    for pg in [1, 2, 3]:
+                        try:
+                            url_m = f"https://api.themoviedb.org/3/discover/movie?api_key={tmdb_key}&language=pt-BR&sort_by=vote_count.desc&with_origin_country={pais_codigo}&vote_count.gte=20&page={pg}"
+                            res_m = requests.get(url_m, timeout=3.5).json().get("results", [])
+                            processar_itens_busca(res_m, vistos, itens_totais, mtype_padrao="movie")
+                        except Exception:
+                            pass
+                    for pg in [1, 2]:
+                        try:
+                            url_t = f"https://api.themoviedb.org/3/discover/tv?api_key={tmdb_key}&language=pt-BR&sort_by=vote_count.desc&with_origin_country={pais_codigo}&vote_count.gte=10&page={pg}"
+                            res_t = requests.get(url_t, timeout=3.5).json().get("results", [])
+                            processar_itens_busca(res_t, vistos, itens_totais, mtype_padrao="tv")
+                        except Exception:
+                            pass
+
+                # 3. Checa palavras-chave conhecidas ou tradução automática
+                kw_ids_str = ""
                 for termo_k, ids_v in MAPA_KEYWORDS_CONHECIDAS.items():
                     if termo_k in norm:
                         kw_ids_str = ids_v
                         break
 
-                if not kw_ids_str:
+                if not kw_ids_str and not genero_id and not pais_codigo:
                     tr = traduzir_para_ingles(termo_limpo)
                     kw_encontrados = set()
                     for q in [tr, norm]:
@@ -1738,9 +1838,6 @@ def main(page: ft.Page):
                             pass
                     if kw_encontrados:
                         kw_ids_str = "|".join(list(kw_encontrados)[:5])
-
-                itens_totais = []
-                vistos = set()
 
                 if kw_ids_str:
                     for pg in [1, 2, 3]:
@@ -1759,6 +1856,7 @@ def main(page: ft.Page):
                         except Exception:
                             pass
 
+                # 4. Complemento com pesquisa de texto livre (multi)
                 for pg in [1, 2]:
                     try:
                         url_multi = f"https://api.themoviedb.org/3/search/multi?api_key={tmdb_key}&query={quote_plus(termo_limpo)}&language=pt-BR&include_adult=false&page={pg}"
@@ -1769,7 +1867,7 @@ def main(page: ft.Page):
 
                 contexto_busca["itens_cache"] = sorted(itens_totais, key=lambda x: x.get("vote_count", 0), reverse=True)
             except Exception as ex:
-                print(f"Erro pesquisa tema: {ex}")
+                print(f"Erro pesquisa tema/nacionalidade: {ex}")
             finally:
                 progresso.visible = False
                 renderizar_itens_busca_contexto()
@@ -1870,7 +1968,7 @@ def main(page: ft.Page):
                     ft.Icon(ft.Icons.SEARCH, size=18, color="#38bdf8"),
                     ft.Column([
                         ft.Text(f'Ver catálogo sobre "{termo_limpo}"', size=12, weight="bold", color="white", max_lines=1, overflow="ellipsis"),
-                        ft.Text("🏷️ Assunto, contexto ou tema", size=10, color="#7dd3fc")
+                        ft.Text("🏷️ Gênero, nacionalidade ou tema", size=10, color="#7dd3fc")
                     ], spacing=2, expand=True)
                 ], spacing=8)
             )
@@ -2153,7 +2251,7 @@ def main(page: ft.Page):
         carregar_populares()
 
     # -------------------------------------------------------------
-    # GESTÃO DE PERFIS (Criação, Senha Simples e Exclusão Segura)
+    # GESTÃO DE PERFIS (Criação, Senha e Exclusão com Confirmação)
     # -------------------------------------------------------------
     txt_novo_perfil_nome = ft.TextField(
         label="Nome do Perfil",
