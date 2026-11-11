@@ -61,20 +61,66 @@ MAPA_GENEROS_TMDB = {
 }
 
 # -------------------------------------------------------------
-# MAPEAMENTO DE NACIONALIDADES / PAÍSES (ISO 3166-1)
+# MAPEAMENTO DE NACIONALIDADES / IDIOMA ORIGINAL (ISO 639-1 / 3166-1)
 # -------------------------------------------------------------
 MAPA_PAISES_TMDB = {
-    "brasil": "BR", "brasileiro": "BR", "brasileiros": "BR", "nacional": "BR", "brasileira": "BR",
-    "coreia": "KR", "coreano": "KR", "coreanos": "KR", "coreana": "KR", "k-drama": "KR", "kdrama": "KR",
-    "japao": "JP", "japão": "JP", "japones": "JP", "japonês": "JP", "japoneses": "JP", "anime": "JP",
-    "franca": "FR", "frança": "FR", "frances": "FR", "francês": "FR", "franceses": "FR",
-    "italia": "IT", "itália": "IT", "italiano": "IT", "italianos": "IT",
-    "espanha": "ES", "espanhol": "ES", "espanhois": "ES", "espanhóis": "ES",
-    "alemanha": "DE", "alemao": "DE", "alemão": "DE", "alemaes": "DE", "alemães": "DE",
-    "inglaterra": "GB", "britanico": "GB", "britânico": "GB", "britanicos": "GB", "reino unido": "GB",
-    "argentina": "AR", "argentino": "AR", "argentinos": "AR",
-    "mexico": "MX", "méxico": "MX", "mexicano": "MX", "mexicanos": "MX",
-    "estados unidos": "US", "americano": "US", "eua": "US", "hollywood": "US"
+    "brasil": {"lang": "pt", "country": "BR"},
+    "brasileiro": {"lang": "pt", "country": "BR"},
+    "brasileiros": {"lang": "pt", "country": "BR"},
+    "brasileira": {"lang": "pt", "country": "BR"},
+    "nacional": {"lang": "pt", "country": "BR"},
+    
+    "italia": {"lang": "it", "country": "IT"},
+    "itália": {"lang": "it", "country": "IT"},
+    "italiano": {"lang": "it", "country": "IT"},
+    "italianos": {"lang": "it", "country": "IT"},
+    "italiana": {"lang": "it", "country": "IT"},
+    
+    "coreia": {"lang": "ko", "country": "KR"},
+    "coreano": {"lang": "ko", "country": "KR"},
+    "coreanos": {"lang": "ko", "country": "KR"},
+    "coreana": {"lang": "ko", "country": "KR"},
+    "kdrama": {"lang": "ko", "country": "KR"},
+    "k-drama": {"lang": "ko", "country": "KR"},
+    
+    "japao": {"lang": "ja", "country": "JP"},
+    "japão": {"lang": "ja", "country": "JP"},
+    "japones": {"lang": "ja", "country": "JP"},
+    "japonês": {"lang": "ja", "country": "JP"},
+    "japoneses": {"lang": "ja", "country": "JP"},
+    "anime": {"lang": "ja", "country": "JP"},
+    
+    "franca": {"lang": "fr", "country": "FR"},
+    "frança": {"lang": "fr", "country": "FR"},
+    "frances": {"lang": "fr", "country": "FR"},
+    "francês": {"lang": "fr", "country": "FR"},
+    "franceses": {"lang": "fr", "country": "FR"},
+    
+    "espanha": {"lang": "es", "country": "ES"},
+    "espanhol": {"lang": "es", "country": "ES"},
+    "espanhola": {"lang": "es", "country": "ES"},
+    "espanhois": {"lang": "es", "country": "ES"},
+    "espanhóis": {"lang": "es", "country": "ES"},
+    
+    "alemanha": {"lang": "de", "country": "DE"},
+    "alemao": {"lang": "de", "country": "DE"},
+    "alemão": {"lang": "de", "country": "DE"},
+    "alemaes": {"lang": "de", "country": "DE"},
+    "alemães": {"lang": "de", "country": "DE"},
+    
+    "argentina": {"lang": "es", "country": "AR"},
+    "argentino": {"lang": "es", "country": "AR"},
+    "argentinos": {"lang": "es", "country": "AR"},
+    
+    "mexico": {"lang": "es", "country": "MX"},
+    "méxico": {"lang": "es", "country": "MX"},
+    "mexicano": {"lang": "es", "country": "MX"},
+    "mexicanos": {"lang": "es", "country": "MX"},
+    
+    "inglaterra": {"lang": "en", "country": "GB"},
+    "britanico": {"lang": "en", "country": "GB"},
+    "britânico": {"lang": "en", "country": "GB"},
+    "reino unido": {"lang": "en", "country": "GB"}
 }
 
 # -------------------------------------------------------------
@@ -1635,7 +1681,7 @@ def main(page: ft.Page):
     )
 
     # -------------------------------------------------------------
-    # FUNÇÕES DE BUSCA E AUTOCOMPLETE
+    # FUNÇÕES DE BUSCA E AUTOCOMPLETE (Declaradas antes do uso)
     # -------------------------------------------------------------
     def exibir_filmografia_pessoa(person_id, nome_pessoa):
         ocultar_sugestoes()
@@ -1741,7 +1787,7 @@ def main(page: ft.Page):
                 itens_saida.append(item)
 
     # -------------------------------------------------------------
-    # BUSCA EXPANDIDA: GÊNEROS, PAÍSES/NACIONALIDADES E TEMAS
+    # BUSCA POR IDIOMA / NACIONALIDADE / GÊNERO / TEMA (DISCOVER PURO)
     # -------------------------------------------------------------
     def executar_pesquisa_tema_ou_termo(termo_busca):
         ocultar_sugestoes()
@@ -1776,7 +1822,7 @@ def main(page: ft.Page):
                 itens_totais = []
                 vistos = set()
 
-                # 1. Checa se o termo corresponde a um Gênero Oficial TMDb (ex: Faroeste, Terror, Comédia)
+                # 1. Gênero oficial TMDb (ex: Faroeste, Terror, Comédia)
                 genero_id = MAPA_GENEROS_TMDB.get(norm)
                 if genero_id:
                     for pg in [1, 2, 3]:
@@ -1794,37 +1840,40 @@ def main(page: ft.Page):
                         except Exception:
                             pass
 
-                # 2. Checa se o termo corresponde a uma Nacionalidade/País (ex: Brasil, Coreano, Francês, Japonês)
-                pais_codigo = None
-                for nome_p, cod_p in MAPA_PAISES_TMDB.items():
+                # 2. Nacionalidade: filtra pelo idioma original e país de origem (eliminando blockbusters de fora)
+                pais_info = None
+                for nome_p, info_p in MAPA_PAISES_TMDB.items():
                     if nome_p in norm:
-                        pais_codigo = cod_p
+                        pais_info = info_p
                         break
 
-                if pais_codigo:
+                if pais_info:
+                    lang = pais_info["lang"]
+                    country = pais_info["country"]
                     for pg in [1, 2, 3]:
                         try:
-                            url_m = f"https://api.themoviedb.org/3/discover/movie?api_key={tmdb_key}&language=pt-BR&sort_by=vote_count.desc&with_origin_country={pais_codigo}&vote_count.gte=20&page={pg}"
+                            # Filtro rigoroso: com o idioma original do país e país de origem
+                            url_m = f"https://api.themoviedb.org/3/discover/movie?api_key={tmdb_key}&language=pt-BR&sort_by=vote_count.desc&with_original_language={lang}&with_origin_country={country}&vote_count.gte=15&page={pg}"
                             res_m = requests.get(url_m, timeout=3.5).json().get("results", [])
                             processar_itens_busca(res_m, vistos, itens_totais, mtype_padrao="movie")
                         except Exception:
                             pass
                     for pg in [1, 2]:
                         try:
-                            url_t = f"https://api.themoviedb.org/3/discover/tv?api_key={tmdb_key}&language=pt-BR&sort_by=vote_count.desc&with_origin_country={pais_codigo}&vote_count.gte=10&page={pg}"
+                            url_t = f"https://api.themoviedb.org/3/discover/tv?api_key={tmdb_key}&language=pt-BR&sort_by=vote_count.desc&with_original_language={lang}&with_origin_country={country}&vote_count.gte=10&page={pg}"
                             res_t = requests.get(url_t, timeout=3.5).json().get("results", [])
                             processar_itens_busca(res_t, vistos, itens_totais, mtype_padrao="tv")
                         except Exception:
                             pass
 
-                # 3. Checa palavras-chave conhecidas ou tradução automática
+                # 3. Palavras-chave conhecidas (ex: segunda guerra, zumbis, máfia)
                 kw_ids_str = ""
                 for termo_k, ids_v in MAPA_KEYWORDS_CONHECIDAS.items():
                     if termo_k in norm:
                         kw_ids_str = ids_v
                         break
 
-                if not kw_ids_str and not genero_id and not pais_codigo:
+                if not kw_ids_str and not genero_id and not pais_info:
                     tr = traduzir_para_ingles(termo_limpo)
                     kw_encontrados = set()
                     for q in [tr, norm]:
@@ -1856,14 +1905,15 @@ def main(page: ft.Page):
                         except Exception:
                             pass
 
-                # 4. Complemento com pesquisa de texto livre (multi)
-                for pg in [1, 2]:
-                    try:
-                        url_multi = f"https://api.themoviedb.org/3/search/multi?api_key={tmdb_key}&query={quote_plus(termo_limpo)}&language=pt-BR&include_adult=false&page={pg}"
-                        res_multi = requests.get(url_multi, timeout=3.0).json().get("results", [])
-                        processar_itens_busca(res_multi, vistos, itens_totais, min_votos=20)
-                    except Exception:
-                        pass
+                # 4. Se não for país nem gênero, realiza busca livre por título
+                if not genero_id and not pais_info:
+                    for pg in [1, 2]:
+                        try:
+                            url_multi = f"https://api.themoviedb.org/3/search/multi?api_key={tmdb_key}&query={quote_plus(termo_limpo)}&language=pt-BR&include_adult=false&page={pg}"
+                            res_multi = requests.get(url_multi, timeout=3.0).json().get("results", [])
+                            processar_itens_busca(res_multi, vistos, itens_totais, min_votos=20)
+                        except Exception:
+                            pass
 
                 contexto_busca["itens_cache"] = sorted(itens_totais, key=lambda x: x.get("vote_count", 0), reverse=True)
             except Exception as ex:
