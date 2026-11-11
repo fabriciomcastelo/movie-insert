@@ -36,6 +36,9 @@ CORES_AVATAR = [
     "#dc2626", "#9333ea", "#c026d3", "#4f46e5"
 ]
 
+# -------------------------------------------------------------
+# MAPEAMENTO DE GÊNEROS OFICIAIS TMDB
+# -------------------------------------------------------------
 MAPA_GENEROS_TMDB = {
     "acao": 28, "ação": 28, "action": 28,
     "aventura": 12, "adventure": 12,
@@ -57,6 +60,9 @@ MAPA_GENEROS_TMDB = {
     "faroeste": 37, "western": 37
 }
 
+# -------------------------------------------------------------
+# MAPEAMENTO DE NACIONALIDADES (Filtragem Estrita por Idioma e País)
+# -------------------------------------------------------------
 MAPA_PAISES_TMDB = {
     "brasil": {"iso": "BR", "lang": "pt"},
     "brasileiro": {"iso": "BR", "lang": "pt"},
@@ -1672,111 +1678,8 @@ def main(page: ft.Page):
     )
 
     # -------------------------------------------------------------
-    # FUNÇÕES DE BUSCA E AUTOCOMPLETE (Declaradas antes de serem usadas)
+    # BUSCA POR IDIOMA / NACIONALIDADE / GÊNERO / TEMA / TÍTULO ORIGINAL
     # -------------------------------------------------------------
-    def exibir_filmografia_pessoa(person_id, nome_pessoa):
-        ocultar_sugestoes()
-        campo_busca.value = nome_pessoa
-        paginacao["modo_busca_ativo"] = True
-        paginacao["fim"] = False
-        btn_carregar_mais.visible = False
-        grade_populares.controls.clear()
-        botoes_add_home.clear()
-        
-        contexto_busca["tipo"] = "person"
-        contexto_busca["id"] = person_id
-        contexto_busca["nome"] = nome_pessoa
-        contexto_busca["itens_cache"] = []
-        contexto_busca["offset"] = 0
-        
-        txt_titulo_home.value = nome_pessoa
-        alternar_tela(0)
-        progresso.visible = True
-        page.update()
-
-        c = carregar_config()
-        tmdb_key = c.get("tmdb_key", "").strip()
-
-        def _fetch():
-            try:
-                url = f"https://api.themoviedb.org/3/person/{person_id}/combined_credits?api_key={tmdb_key}&language=pt-BR"
-                res = requests.get(url, timeout=4.5).json()
-                
-                cast_puro = res.get("cast", [])
-                crew_puro = res.get("crew", [])
-                
-                itens_filtrados = []
-                vistos = set()
-
-                for item in cast_puro:
-                    mid = item.get("id")
-                    if not mid or not item.get("poster_path"):
-                        continue
-                    
-                    personagem = (item.get("character") or "").lower().strip()
-                    generos = item.get("genre_ids", [])
-                    
-                    if 99 in generos or "self" in personagem or "himself" in personagem or "herself" in personagem:
-                        continue
-                        
-                    mtype = "tv" if (item.get("media_type") == "tv" or "name" in item or "first_air_date" in item) else "movie"
-                    item["media_type"] = mtype
-                    
-                    chave = f"{mtype}_{mid}"
-                    if chave not in vistos:
-                        vistos.add(chave)
-                        itens_filtrados.append(item)
-
-                for item in crew_puro:
-                    mid = item.get("id")
-                    if not mid or not item.get("poster_path"):
-                        continue
-                        
-                    job = (item.get("job") or "").lower().strip()
-                    generos = item.get("genre_ids", [])
-                    
-                    if job in ["director", "creator", "writer"]:
-                        if 99 in generos:
-                            continue
-                            
-                        mtype = "tv" if (item.get("media_type") == "tv" or "name" in item or "first_air_date" in item) else "movie"
-                        item["media_type"] = mtype
-                        
-                        chave = f"{mtype}_{mid}"
-                        if chave not in vistos:
-                            vistos.add(chave)
-                            itens_filtrados.append(item)
-
-                contexto_busca["itens_cache"] = sorted(
-                    itens_filtrados,
-                    key=lambda x: (x.get("vote_count", 0), x.get("popularity", 0)),
-                    reverse=True
-                )
-            except Exception as ex:
-                print(f"Erro filmografia filtrada: {ex}")
-            finally:
-                progresso.visible = False
-                renderizar_itens_busca_contexto()
-
-        threading.Thread(target=_fetch, daemon=True).start()
-
-    def processar_itens_busca(lista_bruta, vistos, itens_saida, mtype_padrao=None, min_votos=0):
-        for item in lista_bruta:
-            if not item.get("poster_path"):
-                continue
-            if min_votos and item.get("vote_count", 0) < min_votos:
-                continue
-
-            mtype = mtype_padrao or item.get("media_type")
-            if mtype not in ["movie", "tv"]:
-                mtype = "tv" if ("name" in item or "first_air_date" in item) else "movie"
-            item["media_type"] = mtype
-
-            chave = f"{mtype}_{item.get('id')}"
-            if chave not in vistos:
-                vistos.add(chave)
-                itens_saida.append(item)
-
     def executar_pesquisa_tema_ou_termo(termo_busca):
         ocultar_sugestoes()
         termo_limpo = termo_busca.strip()
@@ -1810,6 +1713,7 @@ def main(page: ft.Page):
                 itens_totais = []
                 vistos = set()
 
+                # 1. Gênero oficial TMDb (ex: Faroeste, Western, Terror, Comédia)
                 genero_id = MAPA_GENEROS_TMDB.get(norm)
                 if genero_id:
                     for pg in [1, 2, 3]:
@@ -1827,6 +1731,7 @@ def main(page: ft.Page):
                         except Exception:
                             pass
 
+                # 2. Nacionalidade: Busca estrita por país de origem e idioma nativo
                 pais_info = None
                 for nome_p, info_p in MAPA_PAISES_TMDB.items():
                     if nome_p in norm:
@@ -1838,6 +1743,7 @@ def main(page: ft.Page):
                     country = pais_info["iso"]
                     for pg in [1, 2, 3]:
                         try:
+                            # Filtro estrito: país de origem e idioma original do país
                             url_m = f"https://api.themoviedb.org/3/discover/movie?api_key={tmdb_key}&language=pt-BR&sort_by=vote_count.desc&with_original_language={lang}&with_origin_country={country}&vote_count.gte=15&page={pg}"
                             res_m = requests.get(url_m, timeout=3.5).json().get("results", [])
                             processar_itens_busca(res_m, vistos, itens_totais, mtype_padrao="movie")
@@ -1851,26 +1757,13 @@ def main(page: ft.Page):
                         except Exception:
                             pass
 
+                # 3. Temas conhecidos (ex: segunda guerra, apocalipse, zumbi)
                 kw_ids_str = ""
-                for termo_k, ids_v in MAPA_KEYWORDS_CONHECIDAS.items():
-                    if termo_k in norm:
-                        kw_ids_str = ids_v
-                        break
-
-                if not kw_ids_str and not genero_id and not pais_info:
-                    tr = traduzir_para_ingles(termo_limpo)
-                    kw_encontrados = set()
-                    for q in [tr, norm]:
-                        try:
-                            kw_url = f"https://api.themoviedb.org/3/search/keyword?api_key={tmdb_key}&query={quote_plus(q)}&page=1"
-                            r = requests.get(kw_url, timeout=2.0)
-                            if r.status_code == 200:
-                                for k in r.json().get("results", [])[:3]:
-                                    kw_encontrados.add(str(k.get("id")))
-                        except Exception:
-                            pass
-                    if kw_encontrados:
-                        kw_ids_str = "|".join(list(kw_encontrados)[:5])
+                if not genero_id and not pais_info:
+                    for termo_k, ids_v in MAPA_KEYWORDS_CONHECIDAS.items():
+                        if termo_k in norm:
+                            kw_ids_str = ids_v
+                            break
 
                 if kw_ids_str:
                     for pg in [1, 2, 3]:
@@ -1880,7 +1773,6 @@ def main(page: ft.Page):
                             processar_itens_busca(res_m, vistos, itens_totais, mtype_padrao="movie")
                         except Exception:
                             pass
-
                     for pg in [1, 2]:
                         try:
                             url_t = f"https://api.themoviedb.org/3/discover/tv?api_key={tmdb_key}&language=pt-BR&sort_by=vote_count.desc&with_keywords={kw_ids_str}&vote_count.gte=10&page={pg}"
@@ -1889,12 +1781,24 @@ def main(page: ft.Page):
                         except Exception:
                             pass
 
+                # 4. Busca por Título Traduzido E Título Original simultaneamente
+                # Só executa se NÃO for país nem gênero, evitando falsos positivos
                 if not genero_id and not pais_info:
+                    # Busca 4A: Em português
                     for pg in [1, 2]:
                         try:
-                            url_multi = f"https://api.themoviedb.org/3/search/multi?api_key={tmdb_key}&query={quote_plus(termo_limpo)}&language=pt-BR&include_adult=false&page={pg}"
-                            res_multi = requests.get(url_multi, timeout=3.0).json().get("results", [])
-                            processar_itens_busca(res_multi, vistos, itens_totais, min_votos=20)
+                            url_multi_pt = f"https://api.themoviedb.org/3/search/multi?api_key={tmdb_key}&query={quote_plus(termo_limpo)}&language=pt-BR&include_adult=false&page={pg}"
+                            res_multi_pt = requests.get(url_multi_pt, timeout=3.0).json().get("results", [])
+                            processar_itens_busca(res_multi_pt, vistos, itens_totais, min_votos=5)
+                        except Exception:
+                            pass
+                    
+                    # Busca 4B: Em idioma neutro/original (permite achar títulos em inglês, francês, japonês, etc.)
+                    for pg in [1, 2]:
+                        try:
+                            url_multi_orig = f"https://api.themoviedb.org/3/search/multi?api_key={tmdb_key}&query={quote_plus(termo_limpo)}&include_adult=false&page={pg}"
+                            res_multi_orig = requests.get(url_multi_orig, timeout=3.0).json().get("results", [])
+                            processar_itens_busca(res_multi_orig, vistos, itens_totais, min_votos=5)
                         except Exception:
                             pass
 
@@ -1913,6 +1817,7 @@ def main(page: ft.Page):
         campo_busca.update()
         abrir_detalhes(mid, mtype, tit, ano, p_url, tela_atual="home")
 
+    # Função de sugestões de busca declarada antes de ao_digitar_busca
     def buscar_sugestoes_api(termo, epoch_disparo):
         if epoch_disparo != versao_busca_atual["epoch"]:
             return
