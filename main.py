@@ -36,91 +36,82 @@ CORES_AVATAR = [
     "#dc2626", "#9333ea", "#c026d3", "#4f46e5"
 ]
 
-# -------------------------------------------------------------
-# MAPEAMENTO DE GÊNEROS OFICIAIS TMDB
-# -------------------------------------------------------------
 MAPA_GENEROS_TMDB = {
-    "acao": 28, "ação": 28, "action": 28,
+    "acao": 28, "action": 28,
     "aventura": 12, "adventure": 12,
-    "animacao": 16, "animação": 16, "animation": 16,
-    "comedia": 35, "comédia": 35, "comedy": 35,
+    "animacao": 16, "animation": 16,
+    "comedia": 35, "comedy": 35,
     "crime": 80,
-    "documentario": 99, "documentário": 99, "documentary": 99,
+    "documentario": 99, "documentary": 99,
     "drama": 18,
-    "familia": 10751, "família": 10751, "family": 10751,
+    "familia": 10751, "family": 10751,
     "fantasia": 14, "fantasy": 14,
-    "historia": 36, "história": 36, "history": 36,
+    "historia": 36, "history": 36,
     "terror": 27, "horror": 27,
-    "musica": 10402, "música": 10402, "musical": 10402,
-    "misterio": 9648, "mistério": 9648, "mystery": 9648,
+    "musica": 10402, "musical": 10402,
+    "misterio": 9648, "mystery": 9648,
     "romance": 10749,
-    "ficcao cientifica": 878, "ficção científica": 878, "sci-fi": 878, "scifi": 878,
+    "ficcao cientifica": 878, "sci-fi": 878, "scifi": 878,
     "suspense": 53, "thriller": 53,
     "guerra": 10752, "war": 10752,
     "faroeste": 37, "western": 37
 }
 
-# -------------------------------------------------------------
-# MAPEAMENTO DE NACIONALIDADES (Filtragem Estrita por Idioma e País)
-# -------------------------------------------------------------
+# Mapeamento com chaves já normalizadas sem acento
 MAPA_PAISES_TMDB = {
-    "brasil": {"iso": "BR", "lang": "pt"},
-    "brasileiro": {"iso": "BR", "lang": "pt"},
-    "brasileiros": {"iso": "BR", "lang": "pt"},
-    "brasileira": {"iso": "BR", "lang": "pt"},
-    "nacional": {"iso": "BR", "lang": "pt"},
+    "brasil": "pt",
+    "brasileiro": "pt",
+    "brasileiros": "pt",
+    "brasileira": "pt",
+    "brasileiras": "pt",
+    "nacional": "pt",
     
-    "italia": {"iso": "IT", "lang": "it"},
-    "itália": {"iso": "IT", "lang": "it"},
-    "italiano": {"iso": "IT", "lang": "it"},
-    "italianos": {"iso": "IT", "lang": "it"},
-    "italiana": {"iso": "IT", "lang": "it"},
+    "italia": "it",
+    "italiano": "it",
+    "italianos": "it",
+    "italiana": "it",
+    "italianas": "it",
     
-    "coreia": {"iso": "KR", "lang": "ko"},
-    "coreano": {"iso": "KR", "lang": "ko"},
-    "coreanos": {"iso": "KR", "lang": "ko"},
-    "coreana": {"iso": "KR", "lang": "ko"},
-    "kdrama": {"iso": "KR", "lang": "ko"},
-    "k-drama": {"iso": "KR", "lang": "ko"},
+    "coreia": "ko",
+    "coreano": "ko",
+    "coreanos": "ko",
+    "coreana": "ko",
+    "kdrama": "ko",
+    "k-drama": "ko",
     
-    "japao": {"iso": "JP", "lang": "ja"},
-    "japão": {"iso": "JP", "lang": "ja"},
-    "japones": {"iso": "JP", "lang": "ja"},
-    "japonês": {"iso": "JP", "lang": "ja"},
-    "japoneses": {"iso": "JP", "lang": "ja"},
-    "anime": {"iso": "JP", "lang": "ja"},
+    "japao": "ja",
+    "japones": "ja",
+    "japoneses": "ja",
+    "japonesa": "ja",
+    "anime": "ja",
     
-    "franca": {"iso": "FR", "lang": "fr"},
-    "frança": {"iso": "FR", "lang": "fr"},
-    "frances": {"iso": "FR", "lang": "fr"},
-    "francês": {"iso": "FR", "lang": "fr"},
-    "franceses": {"iso": "FR", "lang": "fr"},
+    "franca": "fr",
+    "frances": "fr",
+    "franceses": "fr",
+    "francesa": "fr",
     
-    "espanha": {"iso": "ES", "lang": "es"},
-    "espanhol": {"iso": "ES", "lang": "es"},
-    "espanhola": {"iso": "ES", "lang": "es"},
-    "espanhois": {"iso": "ES", "lang": "es"},
-    "espanhóis": {"iso": "ES", "lang": "es"},
+    "espanha": "es",
+    "espanhol": "es",
+    "espanhois": "es",
+    "espanhola": "es",
     
-    "alemanha": {"iso": "DE", "lang": "de"},
-    "alemao": {"iso": "DE", "lang": "de"},
-    "alemão": {"iso": "DE", "lang": "de"},
-    "alemaes": {"iso": "DE", "lang": "de"},
-    "alemães": {"iso": "DE", "lang": "de"},
+    "alemanha": "de",
+    "alemao": "de",
+    "alemaes": "de",
+    "alema": "de",
     
-    "argentina": {"iso": "AR", "lang": "es"},
-    "argentino": {"iso": "AR", "lang": "es"},
-    "argentinos": {"iso": "AR", "lang": "es"},
+    "argentina": "es",
+    "argentino": "es",
+    "argentinos": "es",
     
-    "mexico": {"iso": "MX", "lang": "es"},
-    "méxico": {"iso": "MX", "lang": "es"},
-    "mexicano": {"iso": "MX", "lang": "es"},
-    "mexicanos": {"iso": "MX", "lang": "es"},
+    "mexico": "es",
+    "mexicano": "es",
+    "mexicanos": "es",
     
-    "inglaterra": {"iso": "GB", "lang": "en"},
-    "britanico": {"iso": "GB", "lang": "en"},
-    "britânico": {"iso": "GB", "lang": "en"},
-    "reino unido": {"iso": "GB", "lang": "en"}
+    "inglaterra": "en",
+    "britanico": "en",
+    "britanicos": "en",
+    "reino unido": "en"
 }
 
 MAPA_KEYWORDS_CONHECIDAS = {
@@ -134,30 +125,24 @@ MAPA_KEYWORDS_CONHECIDAS = {
     "nazismo": "238|1956|3618",
     "guerra fria": "1954|2143",
     "vietna": "1955|1959",
-    "vietnã": "1955|1959",
     "guerra do vietna": "1955|1959",
     "zumbi": "12377|186565",
     "zumbis": "12377|186565",
     "viagem no tempo": "4379",
     "espaco": "9882|3801",
-    "espaço": "9882|3801",
     "extraterrestre": "9951|14909",
     "alien": "9951",
     "mafia": "10051|10391",
-    "máfia": "10051|10391",
     "inteligencia artificial": "310",
-    "inteligência artificial": "310",
     "ia": "310",
     "cyberpunk": "12190",
     "apocalipse": "4458",
     "pos-apocaliptico": "4458|2853",
-    "pós-apocalíptico": "4458|2853",
     "serial killer": "10714",
     "vampiro": "3133",
     "vampiros": "3133",
     "espionagem": "470|10085",
     "super heroi": "9715",
-    "super herói": "9715",
     "super-heroi": "9715"
 }
 
@@ -1678,6 +1663,112 @@ def main(page: ft.Page):
     )
 
     # -------------------------------------------------------------
+    # FUNÇÕES DE BUSCA E AUTOCOMPLETE (Declaradas antes de serem usadas)
+    # -------------------------------------------------------------
+    def exibir_filmografia_pessoa(person_id, nome_pessoa):
+        ocultar_sugestoes()
+        campo_busca.value = nome_pessoa
+        paginacao["modo_busca_ativo"] = True
+        paginacao["fim"] = False
+        btn_carregar_mais.visible = False
+        grade_populares.controls.clear()
+        botoes_add_home.clear()
+        
+        contexto_busca["tipo"] = "person"
+        contexto_busca["id"] = person_id
+        contexto_busca["nome"] = nome_pessoa
+        contexto_busca["itens_cache"] = []
+        contexto_busca["offset"] = 0
+        
+        txt_titulo_home.value = nome_pessoa
+        alternar_tela(0)
+        progresso.visible = True
+        page.update()
+
+        c = carregar_config()
+        tmdb_key = c.get("tmdb_key", "").strip()
+
+        def _fetch():
+            try:
+                url = f"https://api.themoviedb.org/3/person/{person_id}/combined_credits?api_key={tmdb_key}&language=pt-BR"
+                res = requests.get(url, timeout=4.5).json()
+                
+                cast_puro = res.get("cast", [])
+                crew_puro = res.get("crew", [])
+                
+                itens_filtrados = []
+                vistos = set()
+
+                for item in cast_puro:
+                    mid = item.get("id")
+                    if not mid or not item.get("poster_path"):
+                        continue
+                    
+                    personagem = (item.get("character") or "").lower().strip()
+                    generos = item.get("genre_ids", [])
+                    
+                    if 99 in generos or "self" in personagem or "himself" in personagem or "herself" in personagem:
+                        continue
+                        
+                    mtype = "tv" if (item.get("media_type") == "tv" or "name" in item or "first_air_date" in item) else "movie"
+                    item["media_type"] = mtype
+                    
+                    chave = f"{mtype}_{mid}"
+                    if chave not in vistos:
+                        vistos.add(chave)
+                        itens_filtrados.append(item)
+
+                for item in crew_puro:
+                    mid = item.get("id")
+                    if not mid or not item.get("poster_path"):
+                        continue
+                        
+                    job = (item.get("job") or "").lower().strip()
+                    generos = item.get("genre_ids", [])
+                    
+                    if job in ["director", "creator", "writer"]:
+                        if 99 in generos:
+                            continue
+                            
+                        mtype = "tv" if (item.get("media_type") == "tv" or "name" in item or "first_air_date" in item) else "movie"
+                        item["media_type"] = mtype
+                        
+                        chave = f"{mtype}_{mid}"
+                        if chave not in vistos:
+                            vistos.add(chave)
+                            itens_filtrados.append(item)
+
+                contexto_busca["itens_cache"] = sorted(
+                    itens_filtrados,
+                    key=lambda x: (x.get("vote_count", 0), x.get("popularity", 0)),
+                    reverse=True
+                )
+            except Exception as ex:
+                print(f"Erro filmografia filtrada: {ex}")
+            finally:
+                progresso.visible = False
+                renderizar_itens_busca_contexto()
+
+        threading.Thread(target=_fetch, daemon=True).start()
+
+    def processar_itens_busca(lista_bruta, vistos, itens_saida, mtype_padrao=None, min_votos=0):
+        for item in lista_bruta:
+            if not item.get("poster_path"):
+                continue
+            if min_votos and item.get("vote_count", 0) < min_votos:
+                continue
+
+            mtype = mtype_padrao or item.get("media_type")
+            if mtype not in ["movie", "tv"]:
+                mtype = "tv" if ("name" in item or "first_air_date" in item) else "movie"
+            item["media_type"] = mtype
+
+            chave = f"{mtype}_{item.get('id')}"
+            if chave not in vistos:
+                vistos.add(chave)
+                itens_saida.append(item)
+
+    # -------------------------------------------------------------
     # BUSCA POR IDIOMA / NACIONALIDADE / GÊNERO / TEMA / TÍTULO ORIGINAL
     # -------------------------------------------------------------
     def executar_pesquisa_tema_ou_termo(termo_busca):
@@ -1731,27 +1822,27 @@ def main(page: ft.Page):
                         except Exception:
                             pass
 
-                # 2. Nacionalidade: Busca estrita por país de origem e idioma nativo
-                pais_info = None
-                for nome_p, info_p in MAPA_PAISES_TMDB.items():
-                    if nome_p in norm:
-                        pais_info = info_p
-                        break
+                # 2. Nacionalidade: Busca direta pelo idioma original (it, ko, ja, pt, etc.)
+                lang_code = MAPA_PAISES_TMDB.get(norm)
+                if not lang_code:
+                    for k_pais, cod in MAPA_PAISES_TMDB.items():
+                        if k_pais in norm:
+                            lang_code = cod
+                            break
 
-                if pais_info:
-                    lang = pais_info["lang"]
-                    country = pais_info["iso"]
+                if lang_code:
+                    # Se for cinema nacional/brasileiro, reforça também o país BR
+                    param_extra = "&with_origin_country=BR" if lang_code == "pt" and norm in ["brasil", "brasileiro", "brasileiros", "brasileira", "nacional"] else ""
                     for pg in [1, 2, 3]:
                         try:
-                            # Filtro estrito: país de origem e idioma original do país
-                            url_m = f"https://api.themoviedb.org/3/discover/movie?api_key={tmdb_key}&language=pt-BR&sort_by=vote_count.desc&with_original_language={lang}&with_origin_country={country}&vote_count.gte=15&page={pg}"
+                            url_m = f"https://api.themoviedb.org/3/discover/movie?api_key={tmdb_key}&language=pt-BR&sort_by=vote_count.desc&with_original_language={lang_code}{param_extra}&page={pg}"
                             res_m = requests.get(url_m, timeout=3.5).json().get("results", [])
                             processar_itens_busca(res_m, vistos, itens_totais, mtype_padrao="movie")
                         except Exception:
                             pass
                     for pg in [1, 2]:
                         try:
-                            url_t = f"https://api.themoviedb.org/3/discover/tv?api_key={tmdb_key}&language=pt-BR&sort_by=vote_count.desc&with_original_language={lang}&with_origin_country={country}&vote_count.gte=10&page={pg}"
+                            url_t = f"https://api.themoviedb.org/3/discover/tv?api_key={tmdb_key}&language=pt-BR&sort_by=vote_count.desc&with_original_language={lang_code}{param_extra}&page={pg}"
                             res_t = requests.get(url_t, timeout=3.5).json().get("results", [])
                             processar_itens_busca(res_t, vistos, itens_totais, mtype_padrao="tv")
                         except Exception:
@@ -1759,7 +1850,7 @@ def main(page: ft.Page):
 
                 # 3. Temas conhecidos (ex: segunda guerra, apocalipse, zumbi)
                 kw_ids_str = ""
-                if not genero_id and not pais_info:
+                if not genero_id and not lang_code:
                     for termo_k, ids_v in MAPA_KEYWORDS_CONHECIDAS.items():
                         if termo_k in norm:
                             kw_ids_str = ids_v
@@ -1783,8 +1874,7 @@ def main(page: ft.Page):
 
                 # 4. Busca por Título Traduzido E Título Original simultaneamente
                 # Só executa se NÃO for país nem gênero, evitando falsos positivos
-                if not genero_id and not pais_info:
-                    # Busca 4A: Em português
+                if not genero_id and not lang_code:
                     for pg in [1, 2]:
                         try:
                             url_multi_pt = f"https://api.themoviedb.org/3/search/multi?api_key={tmdb_key}&query={quote_plus(termo_limpo)}&language=pt-BR&include_adult=false&page={pg}"
@@ -1793,7 +1883,6 @@ def main(page: ft.Page):
                         except Exception:
                             pass
                     
-                    # Busca 4B: Em idioma neutro/original (permite achar títulos em inglês, francês, japonês, etc.)
                     for pg in [1, 2]:
                         try:
                             url_multi_orig = f"https://api.themoviedb.org/3/search/multi?api_key={tmdb_key}&query={quote_plus(termo_limpo)}&include_adult=false&page={pg}"
@@ -1817,7 +1906,6 @@ def main(page: ft.Page):
         campo_busca.update()
         abrir_detalhes(mid, mtype, tit, ano, p_url, tela_atual="home")
 
-    # Função de sugestões de busca declarada antes de ao_digitar_busca
     def buscar_sugestoes_api(termo, epoch_disparo):
         if epoch_disparo != versao_busca_atual["epoch"]:
             return
