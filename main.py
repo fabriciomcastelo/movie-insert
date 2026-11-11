@@ -391,6 +391,9 @@ def main(page: ft.Page):
         content_padding=ft.Padding(12, 0, 8, 0)
     )
 
+    # -------------------------------------------------------------
+    # BIBLIOTECA
+    # -------------------------------------------------------------
     def carregar_biblioteca():
         coluna_biblioteca_itens.controls.clear()
         todos_itens = []
@@ -1834,7 +1837,7 @@ def main(page: ft.Page):
         carregar_populares()
 
     # -------------------------------------------------------------
-    # GESTÃO DE PERFIS (Criação, Senha Simples e Exclusão)
+    # GESTÃO DE PERFIS (Criação, Senha Simples e Exclusão Segura)
     # -------------------------------------------------------------
     txt_novo_perfil_nome = ft.TextField(
         label="Nome do Perfil",
@@ -1986,9 +1989,22 @@ def main(page: ft.Page):
         else:
             entrar_com_perfil(uid, nome, cor)
 
-    # Modal para Confirmação de Exclusão de Perfil
-    perfil_a_excluir = {"id": None, "nome": ""}
+    # Modal para Confirmação de Exclusão de Perfil (com ou sem senha)
+    perfil_a_excluir = {"id": None, "nome": "", "pin": ""}
     modal_confirmar_exclusao_perfil = ft.AlertDialog(modal=False, actions_alignment=ft.MainAxisAlignment.END)
+    txt_exclusao_pin = ft.TextField(
+        label="Senha do Perfil",
+        password=True,
+        can_reveal_password=True,
+        bgcolor=COR_FUNDO,
+        dense=True,
+        border_radius=8,
+        border_color=COR_BORDA,
+        focused_border_color=COR_PETROLEO,
+        width=260
+    )
+    txt_exclusao_erro = ft.Text("", size=12, color="#ef4444")
+    txt_aviso_exclusao = ft.Text("", size=13, color="#cbd5e1")
 
     def fechar_modal_exclusao_perfil(e=None):
         modal_confirmar_exclusao_perfil.open = False
@@ -1996,6 +2012,15 @@ def main(page: ft.Page):
 
     def confirmar_exclusao_perfil_banco(e=None):
         pid = perfil_a_excluir["id"]
+        pin_esperado = perfil_a_excluir["pin"]
+        
+        # Se o perfil tiver senha, valida antes de apagar
+        if pin_esperado and pin_esperado.strip():
+            if txt_exclusao_pin.value.strip() != pin_esperado.strip():
+                txt_exclusao_erro.value = "Senha incorreta. Não foi possível excluir."
+                modal_confirmar_exclusao_perfil.update()
+                return
+
         if pid:
             conn = None
             try:
@@ -2016,34 +2041,50 @@ def main(page: ft.Page):
             carregar_perfis_tela()
             page.update()
 
+    txt_exclusao_pin.on_submit = confirmar_exclusao_perfil_banco
+
     modal_confirmar_exclusao_perfil.title = ft.Text("Excluir Perfil", size=16, weight="bold", color="#ef4444")
-    txt_aviso_exclusao = ft.Text("", size=13, color="#cbd5e1")
-    modal_confirmar_exclusao_perfil.content = txt_aviso_exclusao
     modal_confirmar_exclusao_perfil.actions = [
         ft.Button(content=ft.Text("Cancelar", color="#94a3b8"), on_click=fechar_modal_exclusao_perfil),
         ft.Button(content=ft.Text("Sim, Excluir", color="white"), bgcolor=COR_VERMELHO_PLAY, on_click=confirmar_exclusao_perfil_banco)
     ]
 
-    def pedir_exclusao_perfil(e, uid, nome):
-        e.control.page.update()
+    def pedir_exclusao_perfil(e, uid, nome, pin):
         perfil_a_excluir["id"] = uid
         perfil_a_excluir["nome"] = nome
-        txt_aviso_exclusao.value = f"Tem certeza de que deseja excluir o perfil '{nome}' e toda a sua biblioteca de filmes?"
+        perfil_a_excluir["pin"] = pin
+        txt_exclusao_pin.value = ""
+        txt_exclusao_erro.value = ""
+        
+        tem_pin = bool(pin and pin.strip())
+        txt_aviso_exclusao.value = f"Tem certeza de que deseja excluir '{nome}' e sua biblioteca?"
+        
+        elementos_conteudo = [txt_aviso_exclusao]
+        if tem_pin:
+            elementos_conteudo.extend([
+                ft.Text("Este perfil é protegido. Digite a senha para confirmar:", size=12, color="#94a3b8"),
+                txt_exclusao_erro,
+                txt_exclusao_pin
+            ])
+            
+        modal_confirmar_exclusao_perfil.content = ft.Column(elementos_conteudo, tight=True, spacing=10)
         abrir_dialogo(modal_confirmar_exclusao_perfil)
 
     def criar_card_avatar(uid, nome, cor, pin):
         iniciais = (nome[:2] if len(nome) >= 2 else nome).upper()
         
+        # Ícone de lixeira com cor suave e harmônica (translúcido integrado ao avatar)
         btn_del_perfil = ft.IconButton(
-            icon=ft.Icons.DELETE_OUTLINE,
-            icon_color="#ef4444",
-            icon_size=16,
+            icon=ft.Icons.DELETE_OUTLINE_ROUNDED,
+            icon_color="#ffffffb3",
+            icon_size=15,
             width=26,
             height=26,
             top=4,
             right=4,
+            bgcolor="#00000040",
             tooltip=f"Excluir perfil {nome}",
-            on_click=lambda e, u=uid, n=nome: pedir_exclusao_perfil(e, u, n)
+            on_click=lambda e, u=uid, n=nome, p=pin: pedir_exclusao_perfil(e, u, n, p)
         )
 
         badge_lock = None
