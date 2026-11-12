@@ -741,7 +741,6 @@ def main(page: ft.Page):
                 )
             )
 
-            # Cabeçalho alinhado à esquerda (alinhado com a borda esquerda do primeiro pôster)
             bloco = ft.Container(
                 content=ft.Column([
                     ft.Row(
@@ -1216,7 +1215,6 @@ def main(page: ft.Page):
             on_click=acao_fechar_x
         )
 
-        # Logos dos streamings no modal usando Container com tooltip nativo
         logos_row_controls = []
         st_lower = streamings.lower()
         for nome_st, arq_st in MAPA_LOGOS_STREAMING.items():
@@ -1375,48 +1373,10 @@ def main(page: ft.Page):
         if not uid or chave_id in ids_salvos_usuario:
             return
 
-        str_mid = str(mid)
-        raw_mid = str_mid.split("_")[1] if "_" in str_mid else str_mid
-        mtype_seguro = "tv" if mtype in ["tv", "series"] else "movie"
-        c_cfg = carregar_config()
-        tmdb_key = c_cfg.get("tmdb_key", "").strip()
-        stream_nomes = []
-        if tmdb_key:
-            try:
-                url_wp = f"https://api.themoviedb.org/3/{mtype_seguro}/{raw_mid}/watch/providers?api_key={tmdb_key}"
-                res_wp = requests.get(url_wp, timeout=2.5).json()
-                br_providers = res_wp.get("results", {}).get("BR", {}).get("flatrate", [])
-                stream_nomes = [p.get("provider_name") for p in br_providers]
-            except Exception:
-                pass
-
-        streamings_txt = ", ".join(stream_nomes) if stream_nomes else "Sem streaming no BR"
-
-        conn = None
-        try:
-            conn = obter_conexao()
-            c = conn.cursor()
-            query_sel = "SELECT id FROM filmes WHERE id = %s AND usuario_id = %s" if bool(os.environ.get("DATABASE_URL") and HAS_POSTGRES) else "SELECT id FROM filmes WHERE id = ? AND usuario_id = ?"
-            c.execute(query_sel, (chave_id, uid))
-            if not c.fetchone():
-                query_ins = """
-                    INSERT INTO filmes (id, titulo, ano, diretor, elenco, sinopse, imdb, rotten, metascore, streaming, poster_url, categoria, nota_usuario, trailer_url, generos, usuario_id, tipo)
-                    VALUES (%s, %s, %s, 'N/A', 'N/A', 'Adicionado diretamente da tela inicial.', 'N/A', 'N/A', 'N/A', %s, %s, 'Para Assistir', NULL, NULL, 'Outros', %s, %s)
-                """ if bool(os.environ.get("DATABASE_URL") and HAS_POSTGRES) else """
-                    INSERT INTO filmes (id, titulo, ano, diretor, elenco, sinopse, imdb, rotten, metascore, streaming, poster_url, categoria, nota_usuario, trailer_url, generos, usuario_id, tipo)
-                    VALUES (?, ?, ?, 'N/A', 'N/A', 'Adicionado diretamente da tela inicial.', 'N/A', 'N/A', 'N/A', ?, ?, 'Para Assistir', NULL, NULL, 'Outros', ?, ?)
-                """
-                c.execute(query_ins, (chave_id, titulo, str(ano), streamings_txt, poster_url, uid, mtype_seguro))
-                conn.commit()
-                ids_salvos_usuario.add(chave_id)
-                if titulo:
-                    titulos_salvos_usuario.add(normalizar_texto(titulo))
-                atualizar_contador_biblioteca()
-        except Exception as ex:
-            print(f"Erro add rapido: {ex}")
-        finally:
-            if conn:
-                conn.close()
+        # Marca imediatamente na UI e na memória para feedback instantâneo
+        ids_salvos_usuario.add(chave_id)
+        if titulo:
+            titulos_salvos_usuario.add(normalizar_texto(titulo))
 
         btn_adicionar.icon = ft.Icons.CHECK
         btn_adicionar.icon_color = "#10b981"
@@ -1424,6 +1384,117 @@ def main(page: ft.Page):
         btn_adicionar.disabled = True
         btn_adicionar.tooltip = "Já está na sua biblioteca"
         btn_adicionar.update()
+
+        def _processar_e_salvar():
+            str_mid = str(mid)
+            raw_mid = str_mid.split("_")[1] if "_" in str_mid else str_mid
+            mtype_seguro = "tv" if mtype in ["tv", "series"] else "movie"
+            c_cfg = carregar_config()
+            tmdb_key = c_cfg.get("tmdb_key", "").strip()
+
+            diretor_val = "N/A"
+            elenco_val = "Não informado"
+            sinopse_val = "Sinopse não disponível em português."
+            imdb_val = "N/A"
+            generos_val = "Outros"
+            streamings_val = "Sem streaming no BR"
+            trailer_val = None
+
+            if tmdb_key:
+                try:
+                    url_tmdb = f"https://api.themoviedb.org/3/{mtype_seguro}/{raw_mid}?api_key={tmdb_key}&language=pt-BR&append_to_response=credits,watch/providers,videos,release_dates"
+                    res = requests.get(url_tmdb, timeout=4.0).json()
+
+                    # Gêneros reais
+                    lista_g = [g.get("name") for g in res.get("genres", []) if g.get("name")]
+                    if lista_g:
+                        generos_val = ", ".join(lista_g)
+
+                    # Direção / Criação
+                    if mtype_seguro == "movie":
+                        for cr in res.get("credits", {}).get("crew", []):
+                            if cr.get("job") == "Director":
+                                diretor_val = cr.get("name")
+                                break
+                    else:
+                        criadores = [cr.get("name") for cr in res.get("created_by", [])]
+                        if criadores:
+                            diretor_val = ", ".join(criadores)
+
+                    # Elenco
+                    elenco_list = [a.get("name") for a in res.get("credits", {}).get("cast", [])[:4]]
+                    if elenco_list:
+                        elenco_val = ", ".join(elenco_list)
+
+                    # Sinopse e Nota
+                    if res.get("overview"):
+                        sinopse_val = res.get("overview")
+                    tmdb_vote = res.get("vote_average")
+                    if tmdb_vote and tmdb_vote > 0:
+                        imdb_val = f"{tmdb_vote:.1f}"
+
+                    # Trailer
+                    for v in res.get("videos", {}).get("results", []):
+                        if v.get("site") == "YouTube":
+                            trailer_val = f"https://www.youtube.com/watch?v={v.get('key')}"
+                            if v.get("type") in ["Trailer", "Teaser"]:
+                                break
+
+                    # Streamings e Stremio
+                    br_providers = res.get("watch/providers", {}).get("results", {}).get("BR", {}).get("flatrate", [])
+                    stream_nomes = [p.get("provider_name") for p in br_providers]
+
+                    tem_digital = (mtype_seguro == "tv")
+                    hoje = datetime.now().strftime("%Y-%m-%d")
+                    if not tem_digital:
+                        for pais in res.get("release_dates", {}).get("results", []):
+                            for r_item in pais.get("release_dates", []):
+                                if r_item.get("type") in [4, 5]:
+                                    r_data = (r_item.get("release_date") or "")[:10]
+                                    if r_data and r_data <= hoje:
+                                        tem_digital = True
+                                        break
+                            if tem_digital:
+                                break
+                        if not tem_digital and br_providers:
+                            tem_digital = True
+
+                    if tem_digital and "Stremio" not in stream_nomes:
+                        stream_nomes.append("Stremio")
+
+                    if stream_nomes:
+                        streamings_val = ", ".join(stream_nomes)
+                except Exception as ex_api:
+                    print(f"Erro busca detalhes add rapido: {ex_api}")
+
+            conn = None
+            try:
+                conn = obter_conexao()
+                c = conn.cursor()
+                is_pg = bool(os.environ.get("DATABASE_URL") and HAS_POSTGRES)
+                query_sel = "SELECT id FROM filmes WHERE id = %s AND usuario_id = %s" if is_pg else "SELECT id FROM filmes WHERE id = ? AND usuario_id = ?"
+                c.execute(query_sel, (chave_id, uid))
+                if not c.fetchone():
+                    query_ins = """
+                        INSERT INTO filmes (id, titulo, ano, diretor, elenco, sinopse, imdb, rotten, metascore, streaming, poster_url, categoria, nota_usuario, trailer_url, generos, usuario_id, tipo)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, 'N/A', 'N/A', %s, %s, 'Para Assistir', NULL, %s, %s, %s, %s)
+                    """ if is_pg else """
+                        INSERT INTO filmes (id, titulo, ano, diretor, elenco, sinopse, imdb, rotten, metascore, streaming, poster_url, categoria, nota_usuario, trailer_url, generos, usuario_id, tipo)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, 'N/A', 'N/A', ?, ?, 'Para Assistir', NULL, ?, ?, ?, ?)
+                    """
+                    c.execute(query_ins, (
+                        chave_id, titulo, str(ano), diretor_val, elenco_val, sinopse_val,
+                        imdb_val, streamings_val, poster_url, trailer_val, generos_val, uid, mtype_seguro
+                    ))
+                    conn.commit()
+                    atualizar_contador_biblioteca()
+            except Exception as ex:
+                print(f"Erro add rapido db: {ex}")
+            finally:
+                if conn:
+                    conn.close()
+
+        threading.Thread(target=_processar_e_salvar, daemon=True).start()
 
     def criar_card_filme(mid, mtype, titulo, ano, poster_url, categoria=None, nota=None, no_castelo=False):
         mtype_seguro = "tv" if mtype in ["tv", "series"] else "movie"
