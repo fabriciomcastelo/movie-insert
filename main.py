@@ -36,6 +36,19 @@ CORES_AVATAR = [
     "#dc2626", "#9333ea", "#c026d3", "#4f46e5"
 ]
 
+MAPA_LOGOS_STREAMING = {
+    "CasteloFlix": "castelo.png",
+    "Netflix": "netflix.png",
+    "Max": "max.png",
+    "Amazon Prime Video": "prime.png",
+    "Disney Plus": "Disney.png",
+    "Apple TV Plus": "apple.png",
+    "Globoplay": "globoplay.png",
+    "Paramount Plus": "paramount.png",
+    "Telecine": "telecine.png",
+    "Stremio": "stremio.png"
+}
+
 MAPA_GENEROS_TMDB = {
     "acao": 28, "action": 28,
     "aventura": 12, "adventure": 12,
@@ -57,7 +70,6 @@ MAPA_GENEROS_TMDB = {
     "faroeste": 37, "western": 37
 }
 
-# Mapeamento com chaves já normalizadas sem acento
 MAPA_PAISES_TMDB = {
     "brasil": "pt",
     "brasileiro": "pt",
@@ -473,7 +485,49 @@ def main(page: ft.Page):
     )
 
     # -------------------------------------------------------------
-    # BIBLIOTECA
+    # ALTERNAR DISPONIBILIDADE NO CASTELOFLIX
+    # -------------------------------------------------------------
+    def alternar_castelo_flix(fid):
+        uid = sessao_usuario["id"]
+        if not uid or not fid:
+            return False
+
+        novo_estado = False
+        conn = None
+        try:
+            conn = obter_conexao()
+            c = conn.cursor()
+            is_pg = bool(os.environ.get("DATABASE_URL") and HAS_POSTGRES)
+            q_sel = "SELECT streaming FROM filmes WHERE id = %s AND usuario_id = %s" if is_pg else "SELECT streaming FROM filmes WHERE id = ? AND usuario_id = ?"
+            c.execute(q_sel, (fid, uid))
+            row = c.fetchone()
+            if row is not None:
+                st_atual = row[0] or ""
+                partes = [p.strip() for p in st_atual.split(",") if p.strip() and p.strip() != "Sem streaming no BR"]
+                
+                if "CasteloFlix" in partes:
+                    partes.remove("CasteloFlix")
+                    novo_estado = False
+                else:
+                    partes.insert(0, "CasteloFlix")
+                    novo_estado = True
+
+                nova_str = ", ".join(partes) if partes else "Sem streaming no BR"
+                q_upd = "UPDATE filmes SET streaming = %s WHERE id = %s AND usuario_id = %s" if is_pg else "UPDATE filmes SET streaming = ? WHERE id = ? AND usuario_id = ?"
+                c.execute(q_upd, (nova_str, fid, uid))
+                conn.commit()
+        except Exception as ex:
+            print(f"Erro ao alternar CasteloFlix: {ex}")
+        finally:
+            if conn:
+                conn.close()
+
+        if tela_ativa_atual["indice"] == 1:
+            carregar_biblioteca()
+        return novo_estado
+
+    # -------------------------------------------------------------
+    # BIBLIOTECA (Layout Lado a Lado / Masonry e Logos)
     # -------------------------------------------------------------
     def carregar_biblioteca():
         coluna_biblioteca_itens.controls.clear()
@@ -629,7 +683,7 @@ def main(page: ft.Page):
                 barra_tipo,
                 barra_filtros
             ], spacing=10, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-            width=1000
+            width=1050
         )
 
         coluna_biblioteca_itens.controls.append(topo_biblioteca)
@@ -641,66 +695,111 @@ def main(page: ft.Page):
             coluna_biblioteca_itens.update()
             return
 
-        def renderizar_secao(titulo_secao, icone, cor, lista):
+        # Container flexível para posicionar categorias lado a lado (Masonry / Wrap)
+        grade_categorias_mestre = ft.Row(
+            wrap=True,
+            spacing=28,
+            run_spacing=24,
+            alignment=ft.MainAxisAlignment.CENTER,
+            vertical_alignment=ft.CrossAxisAlignment.START,
+            width=1100
+        )
+
+        mobile_ativo = eh_mobile()
+        largura_unitaria_card = 160 if mobile_ativo else 162
+        espaco_entre_cards = 10
+        max_colunas_por_bloco = 2 if mobile_ativo else 5
+
+        def renderizar_secao(titulo_secao, icone_fallback, cor, lista, logo_arquivo=None):
             if not lista:
                 return
+
+            qtd_itens = len(lista)
+            cols_efetivas = min(qtd_itens, max_colunas_por_bloco)
+            # Calcula a largura exata para abraçar os cards da seção (garante alinhamento lado a lado)
+            largura_bloco = max(180, (cols_efetivas * largura_unitaria_card) + ((cols_efetivas - 1) * espaco_entre_cards) + 8)
+
             grade_cards = ft.Row(
                 wrap=True,
-                spacing=10,
+                spacing=espaco_entre_cards,
                 run_spacing=12,
                 alignment=ft.MainAxisAlignment.CENTER,
                 controls=[
-                    criar_card_filme(mid, tp, tit, ano, p_url, categoria=cat, nota=nota)
-                    for mid, tit, ano, p_url, nota, cat, tp in lista
+                    criar_card_filme(mid, tp, tit, ano, p_url, categoria=cat, nota=nota, no_castelo=no_cast)
+                    for mid, tit, ano, p_url, nota, cat, tp, no_cast in lista
                 ]
             )
+
+            cabecalho_itens = []
+            if logo_arquivo and os.path.exists(os.path.join(DIR_ASSETS, logo_arquivo)):
+                cabecalho_itens.append(
+                    ft.Image(src=logo_arquivo, width=24, height=24, border_radius=6, fit="cover")
+                )
+            else:
+                cabecalho_itens.append(ft.Text(icone_fallback, size=15))
+
+            cabecalho_itens.append(ft.Text(titulo_secao, size=15, weight="bold", color=cor))
+            cabecalho_itens.append(
+                ft.Container(
+                    content=ft.Text(f"{qtd_itens}", size=11, color="white", weight="bold"),
+                    bgcolor=COR_CARD,
+                    border=criar_borda(1, COR_BORDA),
+                    padding=ft.Padding(6, 2, 6, 2),
+                    border_radius=8
+                )
+            )
+
             bloco = ft.Container(
                 content=ft.Column([
-                    ft.Row([
-                        ft.Text(f"{icone} {titulo_secao}", size=15, weight="bold", color=cor),
-                        ft.Container(content=ft.Text(f"{len(lista)}", size=11, color="white", weight="bold"), bgcolor=COR_CARD, border=criar_borda(1, COR_BORDA), padding=ft.Padding(5, 2, 5, 2), border_radius=8)
-                    ], spacing=6, alignment=ft.MainAxisAlignment.CENTER),
+                    ft.Row(cabecalho_itens, spacing=7, alignment=ft.MainAxisAlignment.CENTER, vertical_alignment=ft.CrossAxisAlignment.CENTER),
                     grade_cards
                 ], spacing=10, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-                width=1000
+                width=largura_bloco
             )
-            coluna_biblioteca_itens.controls.append(bloco)
+            grade_categorias_mestre.controls.append(bloco)
 
         if modo_atual == "streaming":
-            ordem_secoes = list(STREAMINGS_PADRAO) + ["Stremio", "Sem streaming no BR"]
+            ordem_secoes = ["CasteloFlix"] + list(STREAMINGS_PADRAO) + ["Stremio", "Sem streaming no BR"]
             mapa = {s: [] for s in ordem_secoes}
 
             for row in itens_filtrados:
                 mid, tit, ano, p_url, nota, cat, streaming_txt, tp = row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[9]
                 st_str = (streaming_txt or "").lower()
+                no_castelo = ("casteloflix" in st_str)
                 alocado_oficial = False
+
+                if no_castelo:
+                    mapa["CasteloFlix"].append((mid, tit, ano, p_url, nota, cat, tp or "movie", no_castelo))
+                    alocado_oficial = True
 
                 for st_nome in STREAMINGS_PADRAO:
                     termo = st_nome.lower().replace(" plus", "").replace("+", "")
                     if termo in st_str:
-                        mapa[st_nome].append((mid, tit, ano, p_url, nota, cat, tp or "movie"))
+                        mapa[st_nome].append((mid, tit, ano, p_url, nota, cat, tp or "movie", no_castelo))
                         alocado_oficial = True
 
                 if not alocado_oficial:
                     if "stremio" in st_str:
-                        mapa["Stremio"].append((mid, tit, ano, p_url, nota, cat, tp or "movie"))
+                        mapa["Stremio"].append((mid, tit, ano, p_url, nota, cat, tp or "movie", no_castelo))
                     else:
-                        mapa["Sem streaming no BR"].append((mid, tit, ano, p_url, nota, cat, tp or "movie"))
+                        mapa["Sem streaming no BR"].append((mid, tit, ano, p_url, nota, cat, tp or "movie", no_castelo))
 
             for servico in ordem_secoes:
-                cor = "#a78bfa" if servico == "Stremio" else ("#94a3b8" if servico == "Sem streaming no BR" else COR_TEXTO_CLARO)
-                ico = "🎬" if servico == "Stremio" else ("❌" if servico == "Sem streaming no BR" else "📺")
-                renderizar_secao(servico, ico, cor, mapa[servico])
+                cor = "#38bdf8" if servico == "CasteloFlix" else ("#a78bfa" if servico == "Stremio" else ("#94a3b8" if servico == "Sem streaming no BR" else COR_TEXTO_CLARO))
+                ico = "🏰" if servico == "CasteloFlix" else ("🎬" if servico == "Stremio" else ("❌" if servico == "Sem streaming no BR" else "📺"))
+                logo_arq = MAPA_LOGOS_STREAMING.get(servico)
+                renderizar_secao(servico, ico, cor, mapa[servico], logo_arquivo=logo_arq)
 
         elif modo_atual == "alfabetico":
             mapa_alfabetico = {}
             itens_ordenados = sorted(itens_filtrados, key=lambda x: normalizar_texto(x[1]))
             for row in itens_ordenados:
-                mid, tit, ano, p_url, nota, cat, tp = row[0], row[1], row[2], row[3], row[4], row[5], row[9]
+                mid, tit, ano, p_url, nota, cat, st_txt, tp = row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[9]
+                no_castelo = ("casteloflix" in (st_txt or "").lower())
                 letra = normalizar_texto(tit)[:1].upper() if tit else "#"
                 if not letra.isalpha():
                     letra = "#"
-                mapa_alfabetico.setdefault(letra, []).append((mid, tit, ano, p_url, nota, cat, tp or "movie"))
+                mapa_alfabetico.setdefault(letra, []).append((mid, tit, ano, p_url, nota, cat, tp or "movie", no_castelo))
 
             letras_ordenadas = sorted([k for k in mapa_alfabetico.keys() if k != "#"])
             if "#" in mapa_alfabetico:
@@ -712,10 +811,11 @@ def main(page: ft.Page):
         elif modo_atual == "genero":
             mapa_generos = {}
             for row in itens_filtrados:
-                mid, tit, ano, p_url, nota, cat, gens, tp = row[0], row[1], row[2], row[3], row[4], row[5], row[7], row[9]
+                mid, tit, ano, p_url, nota, cat, st_txt, gens, tp = row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[9]
+                no_castelo = ("casteloflix" in (st_txt or "").lower())
                 lista_g = [g.strip() for g in gens.split(",")] if gens else ["Outros"]
                 for g in lista_g:
-                    mapa_generos.setdefault(g, []).append((mid, tit, ano, p_url, nota, cat, tp or "movie"))
+                    mapa_generos.setdefault(g, []).append((mid, tit, ano, p_url, nota, cat, tp or "movie", no_castelo))
 
             for g_nome in sorted(mapa_generos.keys()):
                 renderizar_secao(g_nome, "🏷️", "#fbbf24", mapa_generos[g_nome])
@@ -729,7 +829,7 @@ def main(page: ft.Page):
                     return 0.0
 
             itens_ordenados_imdb = sorted(itens_filtrados, key=pegar_imdb_float, reverse=True)
-            lista_cards = [(row[0], row[1], row[2], row[3], row[4], row[5], row[9] or "movie") for row in itens_ordenados_imdb]
+            lista_cards = [(row[0], row[1], row[2], row[3], row[4], row[5], row[9] or "movie", ("casteloflix" in (row[6] or "").lower())) for row in itens_ordenados_imdb]
             renderizar_secao("Ordenado por IMDb", "⭐", COR_TEXTO_CLARO, lista_cards)
 
         elif modo_atual == "nota_pessoal":
@@ -741,9 +841,10 @@ def main(page: ft.Page):
                     return 0.0
 
             itens_ordenados_pessoal = sorted(itens_filtrados, key=pegar_nota_pessoal_float, reverse=True)
-            lista_cards = [(row[0], row[1], row[2], row[3], row[4], row[5], row[9] or "movie") for row in itens_ordenados_pessoal]
+            lista_cards = [(row[0], row[1], row[2], row[3], row[4], row[5], row[9] or "movie", ("casteloflix" in (row[6] or "").lower())) for row in itens_ordenados_pessoal]
             renderizar_secao("Sua Nota Pessoal", "★", COR_TEXTO_CLARO, lista_cards)
 
+        coluna_biblioteca_itens.controls.append(grade_categorias_mestre)
         coluna_biblioteca_itens.update()
 
     def mudar_aba_biblioteca(nova_aba):
@@ -950,8 +1051,9 @@ def main(page: ft.Page):
         tem_digital = (mtype_seguro == "tv")
         titulo_orig = ""
         temporadas_detalhes = []
+        esta_no_castelo = False
 
-        if tela_atual == "biblioteca" and uid:
+        if uid:
             conn = None
             try:
                 conn = obter_conexao()
@@ -970,6 +1072,7 @@ def main(page: ft.Page):
                         generos_txt = row_db[3]
                     if row_db[4]:
                         streamings = row_db[4]
+                        esta_no_castelo = ("casteloflix" in streamings.lower())
                     if row_db[5] and row_db[5] != "N/A":
                         imdb_nota = row_db[5]
                     if row_db[6] and row_db[6] != "N/A":
@@ -1085,6 +1188,9 @@ def main(page: ft.Page):
                 if tem_digital and "Stremio" not in stream_nomes:
                     stream_nomes.append("Stremio")
 
+                if esta_no_castelo and "CasteloFlix" not in stream_nomes:
+                    stream_nomes.insert(0, "CasteloFlix")
+
                 if stream_nomes:
                     streamings = ", ".join(stream_nomes)
             except Exception as ex:
@@ -1112,6 +1218,53 @@ def main(page: ft.Page):
             on_click=acao_fechar_x
         )
 
+        # Logos dos streamings no modal
+        logos_row_controls = []
+        st_lower = streamings.lower()
+        for nome_st, arq_st in MAPA_LOGOS_STREAMING.items():
+            termo_busca_st = nome_st.lower().replace(" plus", "").replace("+", "")
+            if termo_busca_st in st_lower and os.path.exists(os.path.join(DIR_ASSETS, arq_st)):
+                logos_row_controls.append(
+                    ft.Tooltip(
+                        message=nome_st,
+                        content=ft.Image(src=arq_st, width=26, height=26, border_radius=6, fit="cover")
+                    )
+                )
+
+        txt_streamings_modal = ft.Text(f"📺 {streamings}", size=12, color="#10b981", weight="bold", text_align=ft.TextAlign.CENTER)
+
+        ja_esta = (chave_tmdb_calc in ids_salvos_usuario) or (normalizar_texto(titulo) in titulos_salvos_usuario)
+
+        # Botão/Toggle CasteloFlix no modal (visível quando o título está na biblioteca)
+        icone_castelo_btn = ft.Image(src="castelo.png", width=18, height=18, border_radius=4) if os.path.exists(os.path.join(DIR_ASSETS, "castelo.png")) else ft.Icon(ft.Icons.CASTLE, size=16, color="white")
+        txt_castelo_btn = ft.Text("Disponível no CasteloFlix ✓" if esta_no_castelo else "Adicionar ao CasteloFlix", size=11, weight="bold", color="white")
+        
+        btn_castelo_modal = ft.Container(
+            visible=ja_esta,
+            bgcolor=COR_PETROLEO if esta_no_castelo else "#1e293b",
+            border=criar_borda(1.5, COR_ATIVO_BORDA if esta_no_castelo else "#334155"),
+            border_radius=8,
+            padding=ft.Padding(12, 6, 12, 6),
+            content=ft.Row([icone_castelo_btn, txt_castelo_btn], spacing=6, tight=True, alignment=ft.MainAxisAlignment.CENTER)
+        )
+
+        def clicar_toggle_castelo_modal(e):
+            ativo_agora = alternar_castelo_flix(chave_tmdb_calc)
+            btn_castelo_modal.bgcolor = COR_PETROLEO if ativo_agora else "#1e293b"
+            btn_castelo_modal.border = criar_borda(1.5, COR_ATIVO_BORDA if ativo_agora else "#334155")
+            txt_castelo_btn.value = "Disponível no CasteloFlix ✓" if ativo_agora else "Adicionar ao CasteloFlix"
+            
+            partes_st = [p.strip() for p in txt_streamings_modal.value.replace("📺 ", "").split(",") if p.strip() and p.strip() != "Sem streaming no BR"]
+            if ativo_agora and "CasteloFlix" not in partes_st:
+                partes_st.insert(0, "CasteloFlix")
+            elif not ativo_agora and "CasteloFlix" in partes_st:
+                partes_st.remove("CasteloFlix")
+            txt_streamings_modal.value = f"📺 {', '.join(partes_st) if partes_st else 'Sem streaming no BR'}"
+            
+            modal_det.update()
+
+        btn_castelo_modal.on_click = clicar_toggle_castelo_modal
+
         info_col = [
             ft.Row([btn_fechar_estilizado], alignment=ft.MainAxisAlignment.END),
             ft.Container(content=dt_img, alignment=ft.Alignment(0, 0)),
@@ -1128,8 +1281,10 @@ def main(page: ft.Page):
                 border_radius=6,
                 alignment=ft.Alignment(0, 0)
             ),
-            ft.Text(f"📺 {streamings}", size=12, color="#10b981", weight="bold", text_align=ft.TextAlign.CENTER),
-            ft.Container(height=6),
+            ft.Row(logos_row_controls, spacing=8, alignment=ft.MainAxisAlignment.CENTER) if logos_row_controls else ft.Container(),
+            txt_streamings_modal,
+            btn_castelo_modal,
+            ft.Container(height=4),
             ft.Text(f"{titulo} ({ano}) • {tag_tipo}", size=18, weight="bold", color="white", text_align=ft.TextAlign.CENTER),
             ft.Text(f"Original: {titulo_orig}", size=12, italic=True, color="#94a3b8", text_align=ft.TextAlign.CENTER, visible=bool(titulo_orig and normalizar_texto(titulo_orig) != normalizar_texto(titulo))),
             ft.Text(f"Direção: {diretor}\nElenco: {elenco}\nGêneros: {generos_txt}", size=11, color="#94a3b8", text_align=ft.TextAlign.CENTER),
@@ -1138,7 +1293,6 @@ def main(page: ft.Page):
         fallback_trailer = f"https://www.youtube.com/results?search_query={quote_plus('trailer oficial ' + titulo + ' ' + str(ano))}"
         btn_tr = ft.Button(content=ft.Text("▶ Trailer", color="white", size=12, weight="bold"), bgcolor=COR_VERMELHO_PLAY, url=trailer_url if trailer_url else fallback_trailer)
         
-        ja_esta = (chave_tmdb_calc in ids_salvos_usuario) or (normalizar_texto(titulo) in titulos_salvos_usuario)
         btn_slv = ft.Button(content=ft.Text("✓ Na Biblioteca" if ja_esta else "+ Adicionar à Biblioteca", color="white", size=12), bgcolor="#334155" if ja_esta else COR_PETROLEO, disabled=ja_esta)
         btn_ir = ft.Button(content=ft.Text("📁 Ir para Biblioteca", color="white", size=12), bgcolor="#10b981", visible=(ja_esta and tela_atual != "biblioteca"))
 
@@ -1176,6 +1330,7 @@ def main(page: ft.Page):
             btn_slv.bgcolor = "#334155"
             btn_slv.disabled = True
             btn_ir.visible = True
+            btn_castelo_modal.visible = True
 
             marcar_botao_home_como_salvo(chave_tmdb_calc)
             atualizar_contador_biblioteca()
@@ -1273,7 +1428,7 @@ def main(page: ft.Page):
         btn_adicionar.tooltip = "Já está na sua biblioteca"
         btn_adicionar.update()
 
-    def criar_card_filme(mid, mtype, titulo, ano, poster_url, categoria=None, nota=None):
+    def criar_card_filme(mid, mtype, titulo, ano, poster_url, categoria=None, nota=None, no_castelo=False):
         mtype_seguro = "tv" if mtype in ["tv", "series"] else "movie"
         chave_id = mid if isinstance(mid, str) and ("_" in mid or mid.startswith("tt")) else f"{mtype_seguro}_{mid}"
         mobile = eh_mobile()
@@ -1288,14 +1443,42 @@ def main(page: ft.Page):
                     content=ft.Text("✓ Visto", color="white", size=10),
                     bgcolor="#10b981",
                     height=28,
+                    style=ft.ButtonStyle(padding=ft.Padding(8, 0, 8, 0)),
                     on_click=lambda e, cid=chave_id: abrir_modal_avaliacao(cid)
                 )
             )
+            
+            # Atalho rápido do CasteloFlix no card
+            tem_img_castelo = os.path.exists(os.path.join(DIR_ASSETS, "castelo.png"))
+            conteudo_castelo = ft.Image(
+                src="castelo.png",
+                width=16,
+                height=16,
+                border_radius=4,
+                opacity=1.0 if no_castelo else 0.35
+            ) if tem_img_castelo else ft.Icon(ft.Icons.CASTLE, size=14, color="#38bdf8" if no_castelo else "#64748b")
+
+            btn_castelo_card = ft.Container(
+                content=conteudo_castelo,
+                width=26,
+                height=26,
+                border_radius=6,
+                alignment=ft.Alignment(0, 0),
+                bgcolor="#064e3b" if no_castelo else "#1e293b",
+                border=criar_borda(1.2, COR_ATIVO_BORDA if no_castelo else "transparent"),
+                tooltip="Remover do CasteloFlix" if no_castelo else "Marcar no CasteloFlix",
+                on_click=lambda e, cid=chave_id: alternar_castelo_flix(cid)
+            )
+            acoes.append(btn_castelo_card)
+
             acoes.append(
                 ft.IconButton(
                     icon=ft.Icons.CLOSE,
                     icon_color="red400",
-                    icon_size=16,
+                    icon_size=15,
+                    width=26,
+                    height=26,
+                    style=ft.ButtonStyle(padding=0),
                     tooltip="Remover",
                     on_click=lambda e, cid=chave_id: remover_filme_direto(cid)
                 )
@@ -1663,7 +1846,7 @@ def main(page: ft.Page):
     )
 
     # -------------------------------------------------------------
-    # FUNÇÕES DE BUSCA E AUTOCOMPLETE (Declaradas antes de serem usadas)
+    # FUNÇÕES DE BUSCA E AUTOCOMPLETE
     # -------------------------------------------------------------
     def exibir_filmografia_pessoa(person_id, nome_pessoa):
         ocultar_sugestoes()
@@ -1768,9 +1951,6 @@ def main(page: ft.Page):
                 vistos.add(chave)
                 itens_saida.append(item)
 
-    # -------------------------------------------------------------
-    # BUSCA POR IDIOMA / NACIONALIDADE / GÊNERO / TEMA / TÍTULO ORIGINAL
-    # -------------------------------------------------------------
     def executar_pesquisa_tema_ou_termo(termo_busca):
         ocultar_sugestoes()
         termo_limpo = termo_busca.strip()
@@ -1804,7 +1984,6 @@ def main(page: ft.Page):
                 itens_totais = []
                 vistos = set()
 
-                # 1. Gênero oficial TMDb (ex: Faroeste, Western, Terror, Comédia)
                 genero_id = MAPA_GENEROS_TMDB.get(norm)
                 if genero_id:
                     for pg in [1, 2, 3]:
@@ -1822,7 +2001,6 @@ def main(page: ft.Page):
                         except Exception:
                             pass
 
-                # 2. Nacionalidade: Busca direta pelo idioma original (it, ko, ja, pt, etc.)
                 lang_code = MAPA_PAISES_TMDB.get(norm)
                 if not lang_code:
                     for k_pais, cod in MAPA_PAISES_TMDB.items():
@@ -1831,7 +2009,6 @@ def main(page: ft.Page):
                             break
 
                 if lang_code:
-                    # Se for cinema nacional/brasileiro, reforça também o país BR
                     param_extra = "&with_origin_country=BR" if lang_code == "pt" and norm in ["brasil", "brasileiro", "brasileiros", "brasileira", "nacional"] else ""
                     for pg in [1, 2, 3]:
                         try:
@@ -1848,7 +2025,6 @@ def main(page: ft.Page):
                         except Exception:
                             pass
 
-                # 3. Temas conhecidos (ex: segunda guerra, apocalipse, zumbi)
                 kw_ids_str = ""
                 if not genero_id and not lang_code:
                     for termo_k, ids_v in MAPA_KEYWORDS_CONHECIDAS.items():
@@ -1872,8 +2048,6 @@ def main(page: ft.Page):
                         except Exception:
                             pass
 
-                # 4. Busca por Título Traduzido E Título Original simultaneamente
-                # Só executa se NÃO for país nem gênero, evitando falsos positivos
                 if not genero_id and not lang_code:
                     for pg in [1, 2]:
                         try:
