@@ -484,9 +484,6 @@ def main(page: ft.Page):
         content_padding=ft.Padding(12, 0, 8, 0)
     )
 
-    # -------------------------------------------------------------
-    # ALTERNAR DISPONIBILIDADE NO CASTELOFLIX
-    # -------------------------------------------------------------
     def alternar_castelo_flix(fid):
         uid = sessao_usuario["id"]
         if not uid or not fid:
@@ -526,9 +523,6 @@ def main(page: ft.Page):
             carregar_biblioteca()
         return novo_estado
 
-    # -------------------------------------------------------------
-    # BIBLIOTECA (Layout Lado a Lado / Masonry e Logos)
-    # -------------------------------------------------------------
     def carregar_biblioteca():
         coluna_biblioteca_itens.controls.clear()
         todos_itens = []
@@ -695,7 +689,6 @@ def main(page: ft.Page):
             coluna_biblioteca_itens.update()
             return
 
-        # Container flexível para posicionar categorias lado a lado (Masonry / Wrap)
         grade_categorias_mestre = ft.Row(
             wrap=True,
             spacing=28,
@@ -716,14 +709,13 @@ def main(page: ft.Page):
 
             qtd_itens = len(lista)
             cols_efetivas = min(qtd_itens, max_colunas_por_bloco)
-            # Calcula a largura exata para abraçar os cards da seção (garante alinhamento lado a lado)
             largura_bloco = max(180, (cols_efetivas * largura_unitaria_card) + ((cols_efetivas - 1) * espaco_entre_cards) + 8)
 
             grade_cards = ft.Row(
                 wrap=True,
                 spacing=espaco_entre_cards,
                 run_spacing=12,
-                alignment=ft.MainAxisAlignment.CENTER,
+                alignment=ft.MainAxisAlignment.START,
                 controls=[
                     criar_card_filme(mid, tp, tit, ano, p_url, categoria=cat, nota=nota, no_castelo=no_cast)
                     for mid, tit, ano, p_url, nota, cat, tp, no_cast in lista
@@ -749,11 +741,17 @@ def main(page: ft.Page):
                 )
             )
 
+            # Cabeçalho alinhado à esquerda (alinhado com a borda esquerda do primeiro pôster)
             bloco = ft.Container(
                 content=ft.Column([
-                    ft.Row(cabecalho_itens, spacing=7, alignment=ft.MainAxisAlignment.CENTER, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                    ft.Row(
+                        cabecalho_itens,
+                        spacing=7,
+                        alignment=ft.MainAxisAlignment.START,
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER
+                    ),
                     grade_cards
-                ], spacing=10, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                ], spacing=10, horizontal_alignment=ft.CrossAxisAlignment.START),
                 width=largura_bloco
             )
             grade_categorias_mestre.controls.append(bloco)
@@ -1218,16 +1216,16 @@ def main(page: ft.Page):
             on_click=acao_fechar_x
         )
 
-        # Logos dos streamings no modal
+        # Logos dos streamings no modal usando Container com tooltip nativo
         logos_row_controls = []
         st_lower = streamings.lower()
         for nome_st, arq_st in MAPA_LOGOS_STREAMING.items():
             termo_busca_st = nome_st.lower().replace(" plus", "").replace("+", "")
             if termo_busca_st in st_lower and os.path.exists(os.path.join(DIR_ASSETS, arq_st)):
                 logos_row_controls.append(
-                    ft.Tooltip(
-                        message=nome_st,
-                        content=ft.Image(src=arq_st, width=26, height=26, border_radius=6, fit="cover")
+                    ft.Container(
+                        content=ft.Image(src=arq_st, width=26, height=26, border_radius=6, fit="cover"),
+                        tooltip=nome_st
                     )
                 )
 
@@ -1235,7 +1233,6 @@ def main(page: ft.Page):
 
         ja_esta = (chave_tmdb_calc in ids_salvos_usuario) or (normalizar_texto(titulo) in titulos_salvos_usuario)
 
-        # Botão/Toggle CasteloFlix no modal (visível quando o título está na biblioteca)
         icone_castelo_btn = ft.Image(src="castelo.png", width=18, height=18, border_radius=4) if os.path.exists(os.path.join(DIR_ASSETS, "castelo.png")) else ft.Icon(ft.Icons.CASTLE, size=16, color="white")
         txt_castelo_btn = ft.Text("Disponível no CasteloFlix ✓" if esta_no_castelo else "Adicionar ao CasteloFlix", size=11, weight="bold", color="white")
         
@@ -1448,7 +1445,6 @@ def main(page: ft.Page):
                 )
             )
             
-            # Atalho rápido do CasteloFlix no card
             tem_img_castelo = os.path.exists(os.path.join(DIR_ASSETS, "castelo.png"))
             conteudo_castelo = ft.Image(
                 src="castelo.png",
@@ -2450,9 +2446,6 @@ def main(page: ft.Page):
         page.update()
         carregar_populares()
 
-    # -------------------------------------------------------------
-    # GESTÃO DE PERFIS (Criação, Senha e Exclusão com Confirmação)
-    # -------------------------------------------------------------
     txt_novo_perfil_nome = ft.TextField(
         label="Nome do Perfil",
         label_style=ft.TextStyle(color="#94a3b8"),
